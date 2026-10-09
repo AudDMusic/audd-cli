@@ -3,7 +3,7 @@
 # no audd listen). Mount a folder to recognize files in it:
 #   docker run --rm -e AUDD_API_TOKEN -v "$PWD:/work" ghcr.io/auddmusic/audd-cli recognize song.mp3
 
-FROM --platform=$BUILDPLATFORM golang:1.24 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26 AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=0.1.0

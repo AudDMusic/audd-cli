@@ -1,6 +1,6 @@
 # Release configuration for audd. A tag vX.Y.Z runs .github/workflows/release.yml,
 # which runs this. Local check: goreleaser release --snapshot --clean --skip=sign,sbom
-# (the Windows and macOS signing steps stay off without their environment).
+# (Windows and macOS signing stay off without their environment).
 version: 2
 
 project_name: audd
@@ -28,37 +28,14 @@ builds:
       - -X github.com/AudDMusic/audd-cli/internal/app.Commit={{ .FullCommit }}
       - -X github.com/AudDMusic/audd-cli/internal/app.Date={{ .CommitDate }}
     mod_timestamp: "{{ .CommitTimestamp }}"
-    # The release workflow signs the Windows binaries before this runs
-    # (scripts/build-windows.sh builds the same bytes). The hook swaps in the
-    # signed copy only if this build matches the approved sha256, and does
-    # nothing when AUDD_SIGNED_WINDOWS_DIR is unset.
+    # The release workflow signs the Windows and macOS binaries before this
+    # runs (scripts/build-for-signing.sh builds the same bytes). The hook
+    # swaps in each signed copy only if this build matches the sha256 sent for
+    # signing, and does nothing for an OS whose signed directory is unset.
     hooks:
       post:
-        - cmd: sh scripts/use-signed-windows.sh "{{ .Os }}" "{{ .Arch }}" "{{ .Path }}" "{{ .CommitTimestamp }}"
+        - cmd: sh scripts/use-signed.sh "{{ .Os }}" "{{ .Arch }}" "{{ .Path }}" "{{ .CommitTimestamp }}"
           output: true
-
-# Developer ID signing and notarization of the macOS binaries, with quill on
-# Linux. Off unless every MACOS_* secret is set (release environment).
-notarize:
-  macos:
-    # Sign and notarize when every secret is set.
-    - ids: [audd]
-      enabled: '{{ and (ne (envOrDefault "MACOS_SIGN_P12" "") "") (ne (envOrDefault "MACOS_SIGN_PASSWORD" "") "") (ne (envOrDefault "MACOS_NOTARY_ISSUER_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY" "") "") }}'
-      sign:
-        certificate: '{{ envOrDefault "MACOS_SIGN_P12" "" }}'
-        password: '{{ envOrDefault "MACOS_SIGN_PASSWORD" "" }}'
-      notarize:
-        issuer_id: '{{ envOrDefault "MACOS_NOTARY_ISSUER_ID" "" }}'
-        key_id: '{{ envOrDefault "MACOS_NOTARY_KEY_ID" "" }}'
-        key: '{{ envOrDefault "MACOS_NOTARY_KEY_B64" "" }}'
-        wait: true
-        timeout: 20m
-    # Sign only, when the certificate is set but the notary key is not.
-    - ids: [audd]
-      enabled: '{{ and (ne (envOrDefault "MACOS_SIGN_P12" "") "") (ne (envOrDefault "MACOS_SIGN_PASSWORD" "") "") (not (and (ne (envOrDefault "MACOS_NOTARY_ISSUER_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY" "") ""))) }}'
-      sign:
-        certificate: '{{ envOrDefault "MACOS_SIGN_P12" "" }}'
-        password: '{{ envOrDefault "MACOS_SIGN_PASSWORD" "" }}'
 
 # audd update, scripts/install.sh, and internal/update.ArchiveName expect
 # audd_<version>_<os>_<arch>.tar.gz (zip on Windows) with audd at the top.

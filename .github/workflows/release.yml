@@ -43,7 +43,7 @@ jobs:
         id: build
         if: steps.check.outputs.signing == 'true'
         run: |
-          sh scripts/build-windows.sh "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/sums"
+          sh scripts/build-for-signing.sh windows "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/sums"
           while read -r arch sum; do
             echo "sha256-$arch=$sum" >> "$GITHUB_OUTPUT"
           done < "$RUNNER_TEMP/sums"
@@ -63,10 +63,11 @@ jobs:
           retention-days: 7
 
   # Runs (and does nothing) when signing is off, so the jobs after it are
-  # not skipped along with it.
+  # not skipped along with it. Waits for macOS signing, so a failure there
+  # does not cost a Windows approval.
   windows-sign:
     name: Sign audd.exe (${{ matrix.arch }})
-    needs: windows-build
+    needs: [windows-build, macos-sign]
     runs-on: windows-latest
     environment: request-signing
     timeout-minutes: 150
@@ -114,11 +115,170 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # macOS signing: build the darwin binaries with GoReleaser's flags on Linux
+  # (the same host GoReleaser runs on), then sign them with codesign and
+  # notarize them with notarytool on macOS. The GoReleaser hook swaps the
+  # signed copies in after checking its own build has the same sha256.
+  # Without MACOS_SIGN_P12 and MACOS_SIGN_PASSWORD the macOS binaries ship
+  # unsigned; without the MACOS_NOTARY_* secrets they ship signed but not
+  # notarized.
+  macos-build:
+    name: macOS binaries for signing
+    runs-on: ubuntu-latest
+    outputs:
+      sha256-amd64: ${{ steps.build.outputs.sha256-amd64 }}
+      sha256-arm64: ${{ steps.build.outputs.sha256-arm64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build as GoReleaser does
+        id: build
+        run: |
+          sh scripts/build-for-signing.sh darwin "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/sums"
+          while read -r arch sum; do
+            echo "sha256-$arch=$sum" >> "$GITHUB_OUTPUT"
+          done < "$RUNNER_TEMP/sums"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-unsigned
+          path: ${{ runner.temp }}/unsigned/audd-darwin-*
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-sign:
+    name: Sign and notarize audd (macOS)
+    needs: macos-build
+    runs-on: macos-latest
+    # Holds the MACOS_* secrets; restrict it to v* tags.
+    environment: release
+    timeout-minutes: 60
+    outputs:
+      signing: ${{ steps.check.outputs.signing }}
+    env:
+      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+    steps:
+      - name: Check the macOS signing secrets
+        id: check
+        run: |
+          missing=""
+          for v in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
+            [ -n "$(printenv "$v")" ] || missing="${missing:+$missing, }$v"
+          done
+          if [ -z "$MACOS_SIGN_P12" ] || [ -z "$MACOS_SIGN_PASSWORD" ]; then
+            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are not signed or notarized"
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "signing=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$missing" ]; then
+            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are signed but not notarized"
+            echo "NOTARIZE=false" >> "$GITHUB_ENV"
+          else
+            echo "NOTARIZE=true" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.signing == 'true'
+        with:
+          name: macos-unsigned
+          path: ${{ runner.temp }}/bin
+      - name: The downloaded bytes are the ones built
+        if: steps.check.outputs.signing == 'true'
+        env:
+          SUM_AMD64: ${{ needs.macos-build.outputs.sha256-amd64 }}
+          SUM_ARM64: ${{ needs.macos-build.outputs.sha256-arm64 }}
+        run: |
+          cd "$RUNNER_TEMP/bin"
+          printf '%s  audd-darwin-amd64\n%s  audd-darwin-arm64\n' "$SUM_AMD64" "$SUM_ARM64" | shasum -a 256 -c
+      - name: Import the Developer ID certificate
+        if: steps.check.outputs.signing == 'true'
+        run: |
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kp=$(uuidgen)
+          printf '%s' "$MACOS_SIGN_P12" | base64 -D > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$kp" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$kp" "$kc"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_SIGN_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kp" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          id=$(security find-identity -v -p codesigning "$kc" | awk '/Developer ID Application/ {print $2; exit}')
+          if [ -z "$id" ]; then
+            echo "::error::no Developer ID Application identity in MACOS_SIGN_P12"
+            exit 1
+          fi
+          echo "KEYCHAIN=$kc" >> "$GITHUB_ENV"
+          echo "IDENTITY=$id" >> "$GITHUB_ENV"
+      - name: Sign
+        if: steps.check.outputs.signing == 'true'
+        run: |
+          cd "$RUNNER_TEMP/bin"
+          for arch in amd64 arm64; do
+            codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" \
+              --identifier io.audd.cli --options runtime --timestamp "audd-darwin-$arch"
+            codesign --verify --strict --verbose=2 "audd-darwin-$arch"
+          done
+      # MACOS_NOTARY_KEY holds the .p8 file as pasted (PEM text, any line
+      # endings) or its base64.
+      - name: Notarize
+        if: steps.check.outputs.signing == 'true' && env.NOTARIZE == 'true'
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          if printf '%s' "$MACOS_NOTARY_KEY" | grep -q -- '-----BEGIN'; then
+            printf '%s\n' "$MACOS_NOTARY_KEY" | tr -d '\r' > "$key"
+          else
+            printf '%s' "$MACOS_NOTARY_KEY" | tr -d ' \r\n' | base64 -D > "$key"
+          fi
+          cd "$RUNNER_TEMP/bin"
+          for arch in amd64 arm64; do
+            ditto -c -k "audd-darwin-$arch" "$RUNNER_TEMP/audd-darwin-$arch.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/audd-darwin-$arch.zip" \
+              --key "$key" --key-id "$MACOS_NOTARY_KEY_ID" --issuer "$MACOS_NOTARY_ISSUER_ID" \
+              --wait --timeout 30m --output-format json | tee "$RUNNER_TEMP/notary-$arch.json"
+            status=$(plutil -extract status raw -o - "$RUNNER_TEMP/notary-$arch.json" 2>/dev/null || true)
+            if [ "$status" != "Accepted" ]; then
+              id=$(plutil -extract id raw -o - "$RUNNER_TEMP/notary-$arch.json" 2>/dev/null || true)
+              [ -z "$id" ] || xcrun notarytool log "$id" --key "$key" --key-id "$MACOS_NOTARY_KEY_ID" --issuer "$MACOS_NOTARY_ISSUER_ID" || true
+              echo "::error::notarization of audd-darwin-$arch returned '$status'"
+              exit 1
+            fi
+          done
+          rm -f "$key"
+      - name: The signed binaries run
+        if: steps.check.outputs.signing == 'true'
+        run: |
+          cd "$RUNNER_TEMP/bin"
+          chmod +x audd-darwin-*
+          ./audd-darwin-arm64 version
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 ./audd-darwin-amd64 version
+          fi
+          if [ "$NOTARIZE" = true ]; then
+            for arch in amd64 arm64; do
+              spctl --assess --verbose=4 --type install "audd-darwin-$arch"
+            done
+          fi
+      - name: Remove the keychain
+        if: always() && steps.check.outputs.signing == 'true'
+        run: security delete-keychain "$KEYCHAIN" || true
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.signing == 'true'
+        with:
+          name: macos-signed
+          path: ${{ runner.temp }}/bin/audd-darwin-*
+          if-no-files-found: error
+          retention-days: 7
+
   goreleaser:
     name: GitHub release, Homebrew, Scoop, winget
-    needs: [windows-build, windows-sign]
+    needs: [windows-build, windows-sign, macos-build, macos-sign]
     runs-on: ubuntu-latest
-    # Holds the MACOS_* secrets; restrict it to v* tags.
     environment: release
     permissions:
       contents: write # create the release
@@ -128,12 +288,8 @@ jobs:
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
       WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
       WINDOWS_SIGNING: ${{ needs.windows-build.outputs.signing }}
+      MACOS_SIGNING: ${{ needs.macos-sign.outputs.signing }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -161,17 +317,6 @@ jobs:
             [ -n "$WINGET_TOKEN" ] || add winget WINGET_TOKEN
           fi
           echo "args=${skip:+--skip=$skip}" >> "$GITHUB_OUTPUT"
-      - name: Check the macOS signing secrets
-        run: |
-          missing=""
-          for v in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
-            [ -n "$(printenv "$v")" ] || missing="${missing:+$missing, }$v"
-          done
-          if [ -z "$MACOS_SIGN_P12" ] || [ -z "$MACOS_SIGN_PASSWORD" ]; then
-            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are not signed or notarized"
-          elif [ -n "$missing" ]; then
-            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are signed but not notarized"
-          fi
       # Outside the checkout, so the tree stays clean and GoReleaser builds
       # the same bytes that were signed.
       - name: Download the signed Windows binaries
@@ -181,19 +326,12 @@ jobs:
           pattern: windows-signed-*
           merge-multiple: true
           path: ${{ runner.temp }}/signed
-      # MACOS_NOTARY_KEY may hold the .p8 file as pasted (PEM text, any line
-      # endings) or its base64; GoReleaser wants base64.
-      - name: Prepare the notarization key
-        run: |
-          k="$MACOS_NOTARY_KEY"
-          [ -n "$k" ] || exit 0
-          if printf '%s' "$k" | grep -q -- '-----BEGIN'; then
-            enc=$(printf '%s\n' "$k" | tr -d '\r' | base64 -w0)
-          else
-            enc=$(printf '%s' "$k" | tr -d ' \r\n')
-          fi
-          echo "::add-mask::$enc"
-          echo "MACOS_NOTARY_KEY_B64=$enc" >> "$GITHUB_ENV"
+      - name: Download the signed macOS binaries
+        if: env.MACOS_SIGNING == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-signed
+          path: ${{ runner.temp }}/signed-macos
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -201,10 +339,13 @@ jobs:
           args: release --clean ${{ steps.skip.outputs.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Read by scripts/use-signed-windows.sh, the GoReleaser build hook.
+          # Read by scripts/use-signed.sh, the GoReleaser build hook.
           AUDD_SIGNED_WINDOWS_DIR: ${{ env.WINDOWS_SIGNING == 'true' && format('{0}/signed', runner.temp) || '' }}
           AUDD_WINDOWS_AMD64_SHA256: ${{ needs.windows-build.outputs.sha256-amd64 }}
           AUDD_WINDOWS_ARM64_SHA256: ${{ needs.windows-build.outputs.sha256-arm64 }}
+          AUDD_SIGNED_DARWIN_DIR: ${{ env.MACOS_SIGNING == 'true' && format('{0}/signed-macos', runner.temp) || '' }}
+          AUDD_DARWIN_AMD64_SHA256: ${{ needs.macos-build.outputs.sha256-amd64 }}
+          AUDD_DARWIN_ARM64_SHA256: ${{ needs.macos-build.outputs.sha256-arm64 }}
       # GitHub artifact attestations need a public repository (or GitHub
       # Enterprise Cloud); a release cut while private skips them.
       - uses: actions/attest-build-provenance@v2

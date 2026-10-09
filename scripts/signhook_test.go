@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// runHook runs use-signed-windows.sh the way the GoReleaser post-hook does.
+// runHook runs use-signed.sh the way the GoReleaser post-hook does.
 func runHook(t *testing.T, env []string, args ...string) (string, error) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -21,9 +21,10 @@ func runHook(t *testing.T, env []string, args ...string) (string, error) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("no sh")
 	}
-	cmd := exec.Command("sh", append([]string{"use-signed-windows.sh"}, args...)...)
+	cmd := exec.Command("sh", append([]string{"use-signed.sh"}, args...)...)
 	cmd.Env = append(os.Environ(),
-		"AUDD_SIGNED_WINDOWS_DIR=", "AUDD_WINDOWS_AMD64_SHA256=", "AUDD_WINDOWS_ARM64_SHA256=")
+		"AUDD_SIGNED_WINDOWS_DIR=", "AUDD_WINDOWS_AMD64_SHA256=", "AUDD_WINDOWS_ARM64_SHA256=",
+		"AUDD_SIGNED_DARWIN_DIR=", "AUDD_DARWIN_AMD64_SHA256=", "AUDD_DARWIN_ARM64_SHA256=")
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -54,8 +55,10 @@ func newHookFixture(t *testing.T) hookFixture {
 	if err := os.WriteFile(f.built, f.unsigned, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(f.signedDir, "audd-windows-amd64.exe"), f.signed, 0o644); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"audd-windows-amd64.exe", "audd-darwin-arm64"} {
+		if err := os.WriteFile(filepath.Join(f.signedDir, name), f.signed, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return f
 }
@@ -153,5 +156,39 @@ func TestUseSignedWindowsLeavesBuildsAloneWithoutSigning(t *testing.T) {
 	}, "linux", "amd64", f.built, "1700000000")
 	if err != nil || !bytes.Equal(f.builtBytes(t), f.unsigned) {
 		t.Fatalf("a linux build was handled: %v\n%s", err, out)
+	}
+}
+
+func TestUseSignedDarwinReplacesMatchingBuild(t *testing.T) {
+	f := newHookFixture(t)
+	out, err := runHook(t, []string{
+		"AUDD_SIGNED_DARWIN_DIR=" + f.signedDir,
+		"AUDD_DARWIN_ARM64_SHA256=" + f.sum,
+	}, "darwin", "arm64", f.built, "1700000000")
+	if err != nil {
+		t.Fatalf("hook failed: %v\n%s", err, out)
+	}
+	if !bytes.Equal(f.builtBytes(t), f.signed) {
+		t.Fatalf("the build was not replaced with the signed binary\n%s", out)
+	}
+}
+
+func TestUseSignedKeepsEachSystemSeparate(t *testing.T) {
+	f := newHookFixture(t)
+	// Windows signing set up, macOS not: the macOS build ships unsigned.
+	out, err := runHook(t, []string{
+		"AUDD_SIGNED_WINDOWS_DIR=" + f.signedDir,
+		"AUDD_WINDOWS_AMD64_SHA256=" + f.sum,
+	}, "darwin", "arm64", f.built, "1700000000")
+	if err != nil || !bytes.Equal(f.builtBytes(t), f.unsigned) {
+		t.Fatalf("a darwin build was handled with only Windows signing: %v\n%s", err, out)
+	}
+	// The Windows sum never approves a macOS binary.
+	out, err = runHook(t, []string{
+		"AUDD_SIGNED_DARWIN_DIR=" + f.signedDir,
+		"AUDD_WINDOWS_ARM64_SHA256=" + f.sum,
+	}, "darwin", "arm64", f.built, "1700000000")
+	if err == nil || !bytes.Equal(f.builtBytes(t), f.unsigned) {
+		t.Fatalf("a darwin build was replaced using a Windows sum\n%s", out)
 	}
 }

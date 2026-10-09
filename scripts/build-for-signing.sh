@@ -1,20 +1,30 @@
 #!/bin/sh
-# Builds the Windows binaries exactly as .goreleaser.yaml does, so the bytes
-# sent for signing match what GoReleaser builds later in the release job.
-# Keep the flags, ldflags, and env in step with the "audd" build there.
+# Builds the Windows or macOS binaries exactly as .goreleaser.yaml does, so
+# the bytes sent for signing match what GoReleaser builds later in the
+# release job. Keep the flags, ldflags, and env in step with the "audd" build
+# there.
 #
-#   scripts/build-windows.sh <version> <out-dir>
+#   scripts/build-for-signing.sh <windows|darwin> <version> <out-dir>
 #
 # <version> is the tag without the leading v (GoReleaser's .Version).
-# Writes <out-dir>/audd-windows-<arch>.exe and prints "<arch> <sha256>" lines.
+# Writes <out-dir>/audd-<os>-<arch>[.exe] and prints "<arch> <sha256>" lines.
 set -eu
 
-if [ "$#" -ne 2 ]; then
-	echo "usage: $0 <version> <out-dir>" >&2
+if [ "$#" -ne 3 ]; then
+	echo "usage: $0 <windows|darwin> <version> <out-dir>" >&2
 	exit 2
 fi
-version=$1
-out=$2
+os=$1
+version=$2
+out=$3
+case $os in
+windows) ext=.exe ;;
+darwin) ext= ;;
+*)
+	echo "$os binaries are not signed" >&2
+	exit 2
+	;;
+esac
 
 commit=$(git show --format=%H --quiet HEAD)
 # GoReleaser's .CommitDate: the commit date in UTC, RFC 3339.
@@ -38,12 +48,12 @@ sha256() {
 
 mkdir -p "$out"
 for arch in amd64 arm64; do
-	bin="$out/audd-windows-$arch.exe"
+	bin="$out/audd-$os-$arch$ext"
 	case $arch in
 	amd64) level=GOAMD64=v1 ;;
 	arm64) level=GOARM64=v8.0 ;;
 	esac
-	env CGO_ENABLED=0 GOOS=windows GOARCH="$arch" "$level" \
+	env CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" "$level" \
 		go build -trimpath \
 		-ldflags="-s -w -X $pkg.Version=$version -X $pkg.Commit=$commit -X $pkg.Date=$date" \
 		-o "$bin" ./cmd/audd
