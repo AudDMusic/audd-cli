@@ -140,7 +140,7 @@ jobs:
           # Installed AudD CLI versions, by the installer's UpgradeCode.
           $installer = New-Object -ComObject WindowsInstaller.Installer
           function Get-MsiProperty($name, $arguments) { $installer.GetType().InvokeMember($name, 'GetProperty', $null, $installer, $arguments) }
-          function Versions { @(Get-MsiProperty RelatedProducts @('{C62DFFE9-5DE7-4511-9A24-091D8B9685A8}') | ForEach-Object { Get-MsiProperty ProductInfo @($_, 'VersionString') }) }
+          function Versions { @(Get-MsiProperty RelatedProducts @('{C62DFFE9-5DE7-4511-9A24-091D8B9685A8}') | ForEach-Object { Get-MsiProperty ProductInfo @([string]$_, 'VersionString') }) }
 
           Msi "/i out\audd-0.0.1-amd64.msi /qn /l*v msi.log"
           if (-not (Test-Path $exe)) { throw "audd.exe was not installed at $exe" }
