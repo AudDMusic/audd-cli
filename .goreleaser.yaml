@@ -115,7 +115,7 @@ homebrew_casks:
     repository:
       owner: AudDMusic
       name: homebrew-tap
-      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
     directory: Casks
     homepage: https://audd.io
     description: Recognize music in files, URLs, and streams with AudD
@@ -139,7 +139,7 @@ scoops:
     repository:
       owner: AudDMusic
       name: scoop-bucket
-      token: '{{ envOrDefault "SCOOP_BUCKET_TOKEN" "" }}'
+      token: '{{ .Env.SCOOP_BUCKET_TOKEN }}'
     homepage: https://audd.io
     description: Recognize music in files, URLs, and streams with AudD
     license: MIT
@@ -174,7 +174,7 @@ winget:
       owner: AudDMusic
       name: winget-pkgs
       branch: "audd-cli-{{ .Version }}"
-      token: '{{ envOrDefault "WINGET_TOKEN" "" }}'
+      token: '{{ .Env.WINGET_TOKEN }}'
       pull_request:
         enabled: true
         base:
