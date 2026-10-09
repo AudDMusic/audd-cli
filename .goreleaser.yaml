@@ -50,7 +50,7 @@ notarize:
       notarize:
         issuer_id: '{{ envOrDefault "MACOS_NOTARY_ISSUER_ID" "" }}'
         key_id: '{{ envOrDefault "MACOS_NOTARY_KEY_ID" "" }}'
-        key: '{{ envOrDefault "MACOS_NOTARY_KEY" "" }}'
+        key: '{{ envOrDefault "MACOS_NOTARY_KEY_B64" "" }}'
         wait: true
         timeout: 20m
     # Sign only, when the certificate is set but the notary key is not.

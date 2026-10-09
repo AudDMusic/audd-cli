@@ -181,6 +181,19 @@ jobs:
           pattern: windows-signed-*
           merge-multiple: true
           path: ${{ runner.temp }}/signed
+      # MACOS_NOTARY_KEY may hold the .p8 file as pasted (PEM text, any line
+      # endings) or its base64; GoReleaser wants base64.
+      - name: Prepare the notarization key
+        run: |
+          k="$MACOS_NOTARY_KEY"
+          [ -n "$k" ] || exit 0
+          if printf '%s' "$k" | grep -q -- '-----BEGIN'; then
+            enc=$(printf '%s\n' "$k" | tr -d '\r' | base64 -w0)
+          else
+            enc=$(printf '%s' "$k" | tr -d ' \r\n')
+          fi
+          echo "::add-mask::$enc"
+          echo "MACOS_NOTARY_KEY_B64=$enc" >> "$GITHUB_ENV"
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
