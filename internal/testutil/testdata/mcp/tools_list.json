@@ -1,0 +1,524 @@
+[
+ {
+  "name": "make_api_request",
+  "title": "Make an AudD API request",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "status": {
+     "type": "string"
+    },
+    "result": {
+     "description": "endpoint-specific result payload (object, array, or null)"
+    },
+    "error": {
+     "type": "object",
+     "properties": {
+      "error_code": {
+       "type": "integer"
+      },
+      "error_message": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "required": [
+    "status"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": true
+  },
+  "description": "Calls the AudD API (api.audd.io) as this account - music recognition, lyrics, streams management, callbacks, etc. Uses the account plan quota exactly like a direct API call. For repeated or programmatic use, PREFER get_api_token and call https://api.audd.io/ directly from your own code/script - that is more efficient and reliable than routing every call through this tool; use make_api_request for one-off or interactive calls. Read get_api_docs first for endpoints and parameters. Audio must be passed by URL (e.g. params.url); binary file upload is not possible through this tool.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "params": {
+     "type": "object",
+     "description": "Request parameters as key-value strings, e.g. {\"url\": \"https://example.com/a.mp3\", \"return\": \"spotify,apple_music\"} (api_token is added automatically)",
+     "additionalProperties": {
+      "type": [
+       "string",
+       "number",
+       "boolean"
+      ]
+     }
+    },
+    "path": {
+     "type": "string",
+     "description": "API path, default the main endpoint \"/\". E.g. \"setCallbackUrl\"",
+     "default": "/"
+    }
+   },
+   "required": [
+    "params"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_api_docs",
+  "title": "Get AudD API documentation",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "topic": {
+     "type": "string"
+    },
+    "documentation_markdown": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "topic",
+    "documentation_markdown"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "Returns the official AudD API documentation (markdown). Topics: \"api\" (main endpoint: recognition, parameters), \"streams\" (continuous stream recognition and stream management), \"enterprise\", \"file-upload\".",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "topic": {
+     "type": "string",
+     "enum": [
+      "api",
+      "streams",
+      "enterprise",
+      "file-upload"
+     ],
+     "default": "api"
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_account_status",
+  "title": "Get account status",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "status": {
+     "type": "string"
+    },
+    "plan": {
+     "type": [
+      "object",
+      "null"
+     ]
+    },
+    "paid_till": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "bonus_requests": {
+     "type": "integer"
+    },
+    "auto_renew": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "status",
+    "bonus_requests",
+    "auto_renew"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "Current AudD plan, subscription status (active/trial/lapsed), paid-until date, bonus requests, and auto-renew setting.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_usage_stats",
+  "title": "Get usage statistics",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "cycle_start": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "cycle_end": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "used_this_cycle": {
+     "type": "integer"
+    },
+    "allowance": {
+     "type": "integer"
+    },
+    "remaining": {
+     "type": "integer"
+    },
+    "daily": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "date": {
+        "type": "string"
+       },
+       "requests": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   },
+   "required": [
+    "used_this_cycle",
+    "allowance",
+    "remaining",
+    "daily"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "API usage statistics (aggregate daily request counts only): current billing-cycle total, allowance, remaining, and per-day counts. Optional \"days\" returns the last N days instead of the current cycle.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "days": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 366,
+     "description": "Return daily stats for the last N days instead of the current billing cycle"
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_billing_history",
+  "title": "Get billing history",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "payments": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    }
+   },
+   "required": [
+    "payments"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "Recent payments on the account: subscriptions, renewals, extra-request settles, bonus purchases; amount, paid status, dates.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "limit": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 100,
+     "description": "How many records (default 20)"
+    }
+   },
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_amount_owed",
+  "title": "Get amount currently owed",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "owed_requests": {
+     "type": "integer"
+    },
+    "owed_amount_cents": {
+     "type": "integer"
+    },
+    "used_this_cycle": {
+     "type": "integer"
+    },
+    "allowance": {
+     "type": "integer"
+    },
+    "note": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "owed_requests",
+    "owed_amount_cents"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "Settle-aware calculation of over-allowance usage accrued this cycle and the amount (in cents) it will cost at the next renewal or settle.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_api_token",
+  "title": "Get the AudD api_token",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "api_token": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "api_token"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": false
+  },
+  "description": "Returns the account api_token used to call api.audd.io. This is the preferred way to build an integration: save the token and call the API directly from your script rather than proxying each call through make_api_request. Sensitive: only available when the user granted the token:read scope.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "buy_bonus_requests",
+  "title": "Create a payment link for extra requests",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "payment_url": {
+     "type": "string"
+    },
+    "amount_cents": {
+     "type": "integer"
+    },
+    "requests": {
+     "type": "integer"
+    },
+    "human_approval_required": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "payment_url",
+    "amount_cents",
+    "human_approval_required"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
+   "idempotentHint": false,
+   "openWorldHint": false
+  },
+  "description": "Creates a Stripe-backed payment link for buying N extra API requests (multiples of 1000). The link must be opened and approved by the account owner in a browser - this tool never charges a card by itself.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "requests": {
+     "type": "integer",
+     "minimum": 1000,
+     "maximum": 10000000,
+     "description": "Number of requests, multiple of 1000"
+    }
+   },
+   "required": [
+    "requests"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "get_profile",
+  "title": "Get account profile",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "user_id": {
+     "type": "integer"
+    },
+    "email": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "sign_in_methods": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    }
+   },
+   "required": [
+    "user_id",
+    "sign_in_methods"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "The account email address and the connected sign-in methods (Google, GitHub, email, Telegram, ...).",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "list_plans",
+  "title": "List subscription plans",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "plans": {
+     "type": "array",
+     "items": {
+      "type": "object"
+     }
+    }
+   },
+   "required": [
+    "plans"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  },
+  "description": "The publicly available AudD subscription plans with pricing and included requests. Use the \"plan\" value with subscribe_to_plan.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "subscribe_to_plan",
+  "title": "Create a subscription payment link",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "payment_url": {
+     "type": "string"
+    },
+    "amount_cents": {
+     "type": "integer"
+    },
+    "human_approval_required": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "payment_url",
+    "amount_cents",
+    "human_approval_required"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
+   "idempotentHint": false,
+   "openWorldHint": false
+  },
+  "description": "Creates a Stripe-backed payment link to subscribe to (or switch to) a plan from list_plans. The link must be opened and approved by the account owner in a browser - this tool never charges a card by itself.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "plan": {
+     "type": "string",
+     "description": "Plan identifier from list_plans (e.g. indie_plan_outside, startup_plan, pro_plan)"
+    }
+   },
+   "required": [
+    "plan"
+   ],
+   "additionalProperties": false
+  }
+ },
+ {
+  "name": "create_renewal_payment",
+  "title": "Create a subscription renewal payment link",
+  "outputSchema": {
+   "type": "object",
+   "properties": {
+    "payment_url": {
+     "type": "string"
+    },
+    "amount_cents": {
+     "type": "integer"
+    },
+    "includes_extras_cents": {
+     "type": "integer"
+    },
+    "human_approval_required": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "payment_url",
+    "amount_cents",
+    "human_approval_required"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
+   "idempotentHint": false,
+   "openWorldHint": false
+  },
+  "description": "Creates a Stripe-backed payment link to renew the subscription (including any owed extras). The link must be opened and approved by the account owner in a browser - this tool never charges a card by itself.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  }
+ }
+]

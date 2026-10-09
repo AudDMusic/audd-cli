@@ -1,0 +1,30 @@
+ 1 Recent   2 Jobs   3 Streams  [4 Usage]                                                audd browse
+This billing cycle
+
+  Used         1,234
+  Allowance    5,000
+  Remaining    3,766
+  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 25%
+
+Requests per day
+
+  2026-10-06 ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 400
+  2026-10-07 ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ 800
+  2026-10-08 ▇▇ 34
+
+Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+tab next  r refresh  e export  ? help  q quit

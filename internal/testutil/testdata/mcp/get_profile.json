@@ -1,0 +1,50 @@
+{
+ "jsonrpc": "2.0",
+ "id": 10,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n    \"user_id\": 12345,\n    \"email\": \"user@example.com\",\n    \"sign_in_methods\": [\n        {\n            \"provider\": \"auth0\",\n            \"label\": \"user@example.com\"\n        },\n        {\n            \"provider\": \"auth0\",\n            \"label\": \"user@example.com\"\n        },\n        {\n            \"provider\": \"github\",\n            \"label\": \"example-user\"\n        },\n        {\n            \"provider\": \"github\",\n            \"label\": \"example-org-user\"\n        },\n        {\n            \"provider\": \"google-oauth2\",\n            \"label\": \"user@example.com\"\n        },\n        {\n            \"provider\": \"oauth2\",\n            \"label\": \"twitch:example-user\"\n        }\n    ]\n}"
+   }
+  ],
+  "structuredContent": {
+   "user_id": 12345,
+   "email": "user@example.com",
+   "sign_in_methods": [
+    {
+     "provider": "auth0",
+     "label": "user@example.com"
+    },
+    {
+     "provider": "auth0",
+     "label": "user@example.com"
+    },
+    {
+     "provider": "github",
+     "label": "example-user"
+    },
+    {
+     "provider": "github",
+     "label": "example-org-user"
+    },
+    {
+     "provider": "google-oauth2",
+     "label": "user@example.com"
+    },
+    {
+     "provider": "oauth2",
+     "label": "twitch:example-user"
+    }
+   ]
+  },
+  "isError": false,
+  "resultType": "complete",
+  "_meta": {
+   "io.modelcontextprotocol/serverInfo": {
+    "name": "audd-billing",
+    "version": "1.0.0"
+   }
+  }
+ }
+}

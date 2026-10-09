@@ -1,0 +1,33 @@
+{
+ "jsonrpc": "2.0",
+ "id": 11,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n    \"status\": \"active\",\n    \"plan\": {\n        \"id\": 1,\n        \"name\": \"Indie\",\n        \"monthly_price_cents\": 500,\n        \"included_requests\": 1000,\n        \"extra_price_cents_per_1000\": 500\n    },\n    \"paid_till\": \"2028-10-01\",\n    \"bonus_requests\": 3000,\n    \"auto_renew\": true\n}"
+   }
+  ],
+  "structuredContent": {
+   "status": "active",
+   "plan": {
+    "id": 1,
+    "name": "Indie",
+    "monthly_price_cents": 500,
+    "included_requests": 1000,
+    "extra_price_cents_per_1000": 500
+   },
+   "paid_till": "2028-10-01",
+   "bonus_requests": 3000,
+   "auto_renew": true
+  },
+  "isError": false,
+  "resultType": "complete",
+  "_meta": {
+   "io.modelcontextprotocol/serverInfo": {
+    "name": "audd-billing",
+    "version": "1.0.0"
+   }
+  }
+ }
+}

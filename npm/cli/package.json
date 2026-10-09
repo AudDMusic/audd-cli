@@ -1,0 +1,31 @@
+{
+  "name": "@audd/cli",
+  "version": "0.0.0",
+  "description": "Command-line tool for AudD music recognition: files, URLs, folders, streams, and your account",
+  "keywords": [
+    "audd",
+    "music recognition",
+    "audio fingerprinting",
+    "cli"
+  ],
+  "homepage": "https://github.com/AudDMusic/audd-cli#readme",
+  "bugs": "https://github.com/AudDMusic/audd-cli/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AudDMusic/audd-cli.git"
+  },
+  "license": "MIT",
+  "author": "AudD, LLC (https://audd.io)",
+  "bin": {
+    "audd": "bin/audd.js"
+  },
+  "files": [
+    "bin/audd.js",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "optionalDependencies": {}
+}

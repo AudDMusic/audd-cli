@@ -1,0 +1,16 @@
+{
+  "NumericalId": 9123,
+  "StringId": "a1b2c3d4e",
+  "History": {
+    "Elements": [
+      {"radio_id": 7, "timestamp": "2026-10-08 13:58:10", "play_length": 201, "artist": "Third Artist", "title": "Third Song", "album": "Third Album", "label": "Label C", "release_date": "2024-02-02", "song_link": "https://lis.tn/third", "isrc": "USAAA2400003", "upc": "000000000003", "score": "97", "apple_music": {"artwork": {"url": "https://is1-ssl.mzstatic.com/image/{w}x{h}bb.jpg"}}},
+      {"radio_id": 7, "timestamp": "2026-10-08 14:02:00", "play_length": "180", "artist": "Fourth Artist", "title": "Fourth Song", "song_link": "https://lis.tn/fourth", "score": 100},
+      null,
+      {"radio_id": 7, "song_length": "2026-10-08 13:50:00", "artist": "First Artist", "title": "First Song", "label": "Label A", "score": 88, "unexpected": {"nested": true}},
+      {"radio_id": 7, "timestamp": "2026-10-08 13:54:30", "play_length": 240, "artist": "Second Artist", "title": "Second Song", "label": "Label B", "score": null},
+      {"radio_id": 7, "timestamp": "not a time", "artist": "Skipped", "title": "No usable time"},
+      {"radio_id": 7, "timestamp": "2026-10-08 13:40:00"}
+    ],
+    "OldestElement": 2
+  }
+}

@@ -1,0 +1,68 @@
+---
+description: Use the audd CLI to identify music in files, URLs, folders, and long recordings, monitor streams, and check AudD account usage.
+globs:
+alwaysApply: false
+---
+
+# AudD CLI (audd)
+
+Use `audd` to identify music and work with an AudD account. Its output is JSON
+when piped, so read stdout as JSON and errors from stderr.
+
+## Which command
+
+- One file or URL: `audd recognize <file|url>`. The standard endpoint analyzes
+  up to the first 12 seconds; add `--at 1:30` to send a clip from another point.
+- Every song in a long recording (a mix, a show, a video): `audd recognize <file>
+  --enterprise --limit N`. Billed per 12-second chunk; add `--tracklist` for
+  tracks with start and end times.
+- A folder, glob, or list of files: `audd recognize <dir> --max-files N`. One
+  JSON line per file, then a summary line. Resume with `audd jobs resume <id>`.
+- The microphone: `audd listen`.
+- Streams: `audd streams list`, `audd streams add <url> --id N`,
+  `audd now-playing --once`, `audd streams history --since 24h`,
+  `audd streams report --by artist`. A background recorder saves every stream
+  result locally, so history and reports are complete.
+- Custom catalog upload: `audd catalog add <file> --id N` (billed, never retried).
+- Account: `audd usage`, `audd account`, `audd billing plans`.
+- Docs: `audd docs api`, `audd docs streams`, `audd docs enterprise`, `audd docs cli`.
+- Anything else: `audd api <method> key=value...`, and `audd commands --json`
+  for every command and flag.
+
+## Before spending requests
+
+- Run billable work with `--dry-run` first and read the plan (files, estimated
+  requests).
+- Always pass explicit bounds: `--limit N` with `--enterprise`, `--max-files N`
+  for folders and lists, and `--max-requests N` to cap a whole run. Never use
+  `none` unless the user asked for no limit.
+- Without a terminal, confirmations need `--yes`. Only add it after the user
+  agreed to the plan.
+- Results are cached by file contents, so repeating a recognition is free.
+
+## Reading results
+
+- No match is not an error: `"result": null` and exit code 0.
+- Errors on stderr are `{"schema_version":1,"error":{"code","api_code","message","hint","retryable"}}`.
+  `hint` is usually the command that fixes it.
+- Exit codes: 0 ok, 1 unexpected, 2 invalid arguments or missing tool, 3 auth,
+  4 quota or plan, 5 network or server, 6 a missing bound or confirmation
+  (`--limit`, `--max-files`, `--yes`, `--max-requests`) or an unfinished job
+  for the same files (error code `resume_available`: rerun with `--resume` to
+  continue it or `--new` to start over), 7 batch partly failed,
+  8 `usage --check` threshold, 130 stopped with Ctrl-C (resume a batch with
+  `audd jobs resume ID`).
+- `--fields a,b` trims the output; `--format jsonl|csv` changes it.
+
+## Tokens and sign-in
+
+- Never print or log the API token. `audd token show` masks it; do not add
+  `--reveal`.
+- If there is no token, ask the user to set `AUDD_API_TOKEN`, or run
+  `audd login` yourself: without a terminal it prints a `login_pending` JSON
+  line. Relay `verification_uri_complete` and `user_code` to the user (they
+  open the page on any device, check the code, and approve) and keep the
+  command running until it prints the result. Account commands need
+  `audd login`.
+- Payment commands (`audd billing subscribe|renew|buy`) only print a link for
+  the user to open; never open it on their behalf.

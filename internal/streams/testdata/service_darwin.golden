@@ -1,0 +1,35 @@
+Path: /home/me/Library/LaunchAgents/io.audd.recorder.default.plist
+Activate: launchctl load -w /home/me/Library/LaunchAgents/io.audd.recorder.default.plist
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.audd.recorder.default</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/audd</string>
+		<string>streams</string>
+		<string>record</string>
+		<string>--profile</string>
+		<string>default</string>
+		<string>--background-child</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>Umask</key>
+	<integer>63</integer>
+	<key>StandardOutPath</key>
+	<string>/home/me/.local/share/audd/recorder-default.log</string>
+	<key>StandardErrorPath</key>
+	<string>/home/me/.local/share/audd/recorder-default.log</string>
+</dict>
+</plist>

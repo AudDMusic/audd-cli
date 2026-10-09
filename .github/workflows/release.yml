@@ -1,0 +1,475 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Windows signing: build audd.exe with GoReleaser's flags, have it signed
+  # with the EV certificate through Mihonarium/signing (one approval per
+  # architecture there), and let the GoReleaser hook swap the signed copies
+  # in after checking its own build has the approved sha256. Without
+  # SIGNING_REPO_TOKEN the Windows binaries ship unsigned.
+  windows-build:
+    name: Windows binaries for signing
+    runs-on: ubuntu-latest
+    environment: request-signing
+    outputs:
+      signing: ${{ steps.check.outputs.signing }}
+      sha256-amd64: ${{ steps.build.outputs.sha256-amd64 }}
+      sha256-arm64: ${{ steps.build.outputs.sha256-arm64 }}
+    steps:
+      - name: Check for the signing token
+        id: check
+        env:
+          SIGNING_REPO_TOKEN: ${{ secrets.SIGNING_REPO_TOKEN }}
+        run: |
+          if [ -n "$SIGNING_REPO_TOKEN" ]; then
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::SIGNING_REPO_TOKEN is not set in the request-signing environment; the Windows binaries in this release are not code-signed"
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.signing == 'true'
+      - uses: actions/setup-go@v5
+        if: steps.check.outputs.signing == 'true'
+        with:
+          go-version-file: go.mod
+      - name: Build as GoReleaser does
+        id: build
+        if: steps.check.outputs.signing == 'true'
+        run: |
+          sh scripts/build-windows.sh "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/sums"
+          while read -r arch sum; do
+            echo "sha256-$arch=$sum" >> "$GITHUB_OUTPUT"
+          done < "$RUNNER_TEMP/sums"
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.signing == 'true'
+        with:
+          name: windows-unsigned-amd64
+          path: ${{ runner.temp }}/unsigned/audd-windows-amd64.exe
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.signing == 'true'
+        with:
+          name: windows-unsigned-arm64
+          path: ${{ runner.temp }}/unsigned/audd-windows-arm64.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  # Runs (and does nothing) when signing is off, so the jobs after it are
+  # not skipped along with it.
+  windows-sign:
+    name: Sign audd.exe (${{ matrix.arch }})
+    needs: windows-build
+    runs-on: windows-latest
+    environment: request-signing
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read # the action downloads the unsigned artifact to hash it
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    env:
+      SIGNING: ${{ needs.windows-build.outputs.signing }}
+      BUILT_SHA256: ${{ needs.windows-build.outputs[format('sha256-{0}', matrix.arch)] }}
+    steps:
+      - if: env.SIGNING != 'true'
+        run: echo "Windows signing is off for this release"
+      - uses: actions/checkout@v4
+        if: env.SIGNING == 'true'
+      - name: Request the EV signature (approve it in Mihonarium/signing)
+        id: sign
+        if: env.SIGNING == 'true'
+        uses: ./.github/actions/request-signing
+        with:
+          source-run-id: ${{ github.run_id }}
+          source-artifact: windows-unsigned-${{ matrix.arch }}
+          output-name: audd-windows-${{ matrix.arch }}.exe
+          sig-description: AudD CLI
+          token: ${{ secrets.SIGNING_REPO_TOKEN }}
+          wait-minutes: "120"
+      - name: The approved bytes are the ones built
+        if: env.SIGNING == 'true'
+        shell: bash
+        env:
+          APPROVED: ${{ steps.sign.outputs.unsigned-sha256 }}
+        run: |
+          if [ -z "$BUILT_SHA256" ] || [ "$APPROVED" != "$BUILT_SHA256" ]; then
+            echo "::error::approved sha256 $APPROVED does not match the built $BUILT_SHA256"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNING == 'true'
+        with:
+          name: windows-signed-${{ matrix.arch }}
+          path: ${{ steps.sign.outputs.signed-path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  goreleaser:
+    name: GitHub release, Homebrew, Scoop, winget
+    needs: [windows-build, windows-sign]
+    runs-on: ubuntu-latest
+    # Holds the MACOS_* secrets; restrict it to v* tags.
+    environment: release
+    permissions:
+      contents: write # create the release
+      id-token: write # keyless signing and provenance
+      attestations: write
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+      WINDOWS_SIGNING: ${{ needs.windows-build.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
+      - name: Skip channels without a token
+        id: skip
+        env:
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          skip=""
+          add() { skip="${skip:+$skip,}$1"; echo "::warning::$2 is not set; skipping $1 for this release"; }
+          [ -n "$HOMEBREW_TAP_TOKEN" ] || add homebrew HOMEBREW_TAP_TOKEN
+          [ -n "$SCOOP_BUCKET_TOKEN" ] || add scoop SCOOP_BUCKET_TOKEN
+          if [ "$REPO_PRIVATE" = "true" ]; then
+            # winget validates by downloading the installers, which a private
+            # repository does not allow; submit it after the repository is public.
+            skip="${skip:+$skip,}winget"; echo "::notice::repository is private; skipping winget for this release"
+          else
+            [ -n "$WINGET_TOKEN" ] || add winget WINGET_TOKEN
+          fi
+          echo "args=${skip:+--skip=$skip}" >> "$GITHUB_OUTPUT"
+      - name: Check the macOS signing secrets
+        run: |
+          missing=""
+          for v in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
+            [ -n "$(printenv "$v")" ] || missing="${missing:+$missing, }$v"
+          done
+          if [ -z "$MACOS_SIGN_P12" ] || [ -z "$MACOS_SIGN_PASSWORD" ]; then
+            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are not signed or notarized"
+          elif [ -n "$missing" ]; then
+            echo "::warning::$missing not set in the release environment; the macOS binaries in this release are signed but not notarized"
+          fi
+      # Outside the checkout, so the tree stays clean and GoReleaser builds
+      # the same bytes that were signed.
+      - name: Download the signed Windows binaries
+        if: env.WINDOWS_SIGNING == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: windows-signed-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/signed
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean ${{ steps.skip.outputs.args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read by scripts/use-signed-windows.sh, the GoReleaser build hook.
+          AUDD_SIGNED_WINDOWS_DIR: ${{ env.WINDOWS_SIGNING == 'true' && format('{0}/signed', runner.temp) || '' }}
+          AUDD_WINDOWS_AMD64_SHA256: ${{ needs.windows-build.outputs.sha256-amd64 }}
+          AUDD_WINDOWS_ARM64_SHA256: ${{ needs.windows-build.outputs.sha256-arm64 }}
+      # GitHub artifact attestations need a public repository (or GitHub
+      # Enterprise Cloud); a release cut while private skips them.
+      - uses: actions/attest-build-provenance@v2
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+      - name: Keep the build for the npm and PyPI jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/artifacts.json
+            dist/metadata.json
+            dist/audd_*/audd*
+          retention-days: 7
+
+  docker:
+    name: Docker image
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/auddmusic/audd-cli
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - name: Build info
+        id: info
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+      - name: Build for the smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: audd-cli:smoke
+          build-args: |
+            VERSION=${{ steps.info.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.info.outputs.date }}
+      - name: Smoke test
+        run: |
+          docker run --rm audd-cli:smoke version
+          docker run --rm -v "$PWD:/work" audd-cli:smoke recognize LICENSE --enterprise --limit 1 --dry-run
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            VERSION=${{ steps.info.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.info.outputs.date }}
+      # GitHub artifact attestations need a public repository (or GitHub
+      # Enterprise Cloud); a release cut while private skips them.
+      - uses: actions/attest-build-provenance@v2
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-name: ghcr.io/auddmusic/audd-cli
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  npm:
+    name: npm (@audd/cli)
+    needs: [goreleaser, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_ENABLED: ${{ vars.NPM_ENABLED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # npm >= 11.5.1, required for trusted publishing
+          registry-url: https://registry.npmjs.org
+      - run: node --test scripts/npm-pack.test.mjs
+      - run: node scripts/npm-pack.mjs
+      - name: Smoke test the packages
+        run: |
+          v=$(node -p "require('./dist/metadata.json').version")
+          mkdir -p "$RUNNER_TEMP/npm-smoke" && cd "$RUNNER_TEMP/npm-smoke"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE/dist/npm/audd-cli-linux-x64-$v.tgz" "$GITHUB_WORKSPACE/dist/npm/audd-cli-$v.tgz"
+          npx audd version
+          npx audd recognize "$GITHUB_WORKSPACE/LICENSE" --enterprise --limit 1 --dry-run
+      # Trusted publishing (OIDC) needs no secret once each package has this
+      # workflow as its trusted publisher on npmjs.com. NPM_TOKEN, when set, is
+      # used instead (for example for the first publish of new packages).
+      - name: Publish
+        if: env.NPM_ENABLED == 'true' || env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          tag=latest
+          case "$GITHUB_REF_NAME" in *-*) tag=next ;; esac
+          # npm provenance needs a public repository; a release cut while the
+          # repository is still private publishes without it.
+          provenance=--provenance
+          if [ "$REPO_PRIVATE" = "true" ]; then provenance=""; echo "::notice::repository is private; publishing to npm without provenance"; fi
+          v=$(node -p "require('./dist/metadata.json').version")
+          # The system packages first, so @audd/cli never points at missing versions.
+          for f in dist/npm/audd-cli-{linux,darwin,win32}-*-"$v".tgz dist/npm/audd-cli-"$v".tgz; do
+            npm publish "$f" --access public $provenance --tag "$tag"
+          done
+      - if: env.NPM_ENABLED != 'true' && env.NPM_TOKEN == ''
+        run: echo "::warning::npm publishing is off (set the repository variable NPM_ENABLED to true after configuring trusted publishing, or set NPM_TOKEN); skipping npm for this release"
+
+  pypi:
+    name: PyPI (audd-cli)
+    needs: [goreleaser, smoke]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s scripts -p 'test_*.py'
+      - run: python scripts/build_wheels.py --out dist/pypi
+      - name: Smoke test the wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --no-index --find-links dist/pypi audd-cli
+          "$RUNNER_TEMP/venv/bin/audd" version
+          "$RUNNER_TEMP/venv/bin/audd" recognize LICENSE --enterprise --limit 1 --dry-run
+      - name: Publish
+        if: vars.PYPI_ENABLED == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pypi
+      - if: vars.PYPI_ENABLED != 'true'
+        run: echo "::warning::PYPI_ENABLED is not set to true; skipping PyPI for this release"
+
+  smoke:
+    name: Smoke test (${{ matrix.os }})
+    needs: goreleaser
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install with install.sh
+        if: runner.os != 'Windows'
+        env:
+          AUDD_VERSION: ${{ github.ref_name }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # While the repository is private its release files need a token, so
+          # fetch them with gh and let install.sh read them from disk.
+          if [ "$REPO_PRIVATE" = "true" ]; then
+            mkdir -p "$RUNNER_TEMP/rel/$AUDD_VERSION"
+            gh release download "$AUDD_VERSION" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/rel/$AUDD_VERSION"
+            export AUDD_DOWNLOAD_URL="file://$RUNNER_TEMP/rel"
+          fi
+          sh scripts/install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Download the Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = $env:TAG.TrimStart("v")
+          $name = "audd_${v}_windows_amd64.zip"
+          gh release download $env:TAG --repo $env:REPO --pattern $name --pattern checksums.txt
+          $want = (Select-String -Path checksums.txt -Pattern ([regex]::Escape($name))).Line.Split(" ")[0]
+          $got = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          if ($want -ne $got) { throw "checksum mismatch" }
+          Expand-Archive $name -DestinationPath "$env:RUNNER_TEMP\audd"
+          "$env:RUNNER_TEMP\audd" | Out-File -FilePath $env:GITHUB_PATH -Append
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+      - run: audd version
+      - run: audd recognize LICENSE --enterprise --limit 1 --dry-run
+
+  go-install:
+    name: Smoke test (go install)
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: go install from the module proxy
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          cd "$RUNNER_TEMP"
+          # The proxy may need a moment to see a new tag.
+          for i in 1 2 3 4 5 6; do
+            go install "github.com/AudDMusic/audd-cli/cmd/audd@$VERSION" && break
+            [ "$i" = 6 ] && exit 1
+            sleep 20
+          done
+          "$(go env GOPATH)/bin/audd" version | grep -F "${VERSION#v}"
+          "$(go env GOPATH)/bin/audd" recognize "$GITHUB_WORKSPACE/LICENSE" --enterprise --limit 1 --dry-run
+
+  channels:
+    name: Smoke test (${{ matrix.channel }})
+    needs: goreleaser
+    if: ${{ !contains(github.ref_name, '-') }} # prereleases skip Homebrew and Scoop
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: homebrew
+            os: macos-latest
+          - channel: scoop
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - name: Homebrew
+        if: matrix.channel == 'homebrew' && env.HOMEBREW_TAP_TOKEN != ''
+        run: |
+          brew install --cask auddmusic/tap/audd
+          audd version
+          audd version | grep -F "${VERSION#v}"
+      - name: Scoop
+        if: matrix.channel == 'scoop' && env.SCOOP_BUCKET_TOKEN != ''
+        shell: pwsh
+        run: |
+          iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket
+          scoop install auddmusic/audd
+          $out = audd version
+          $out
+          if (-not ($out -match [regex]::Escape($env:VERSION.TrimStart("v")))) { throw "audd version does not report $env:VERSION" }
+      - if: (matrix.channel == 'homebrew' && env.HOMEBREW_TAP_TOKEN == '') || (matrix.channel == 'scoop' && env.SCOOP_BUCKET_TOKEN == '')
+        run: echo "::warning::${{ matrix.channel }} was not published for this release; nothing to smoke-test"

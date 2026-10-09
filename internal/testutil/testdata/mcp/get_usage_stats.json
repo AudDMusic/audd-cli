@@ -1,0 +1,57 @@
+{
+ "jsonrpc": "2.0",
+ "id": 12,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n    \"cycle_start\": \"2028-09-01\",\n    \"cycle_end\": \"2028-10-01\",\n    \"used_this_cycle\": 0,\n    \"allowance\": 4000,\n    \"remaining\": 4000,\n    \"daily\": [\n        {\n            \"date\": \"2026-10-02\",\n            \"requests\": 356\n        },\n        {\n            \"date\": \"2026-10-03\",\n            \"requests\": 295\n        },\n        {\n            \"date\": \"2026-10-04\",\n            \"requests\": 342\n        },\n        {\n            \"date\": \"2026-10-05\",\n            \"requests\": 326\n        },\n        {\n            \"date\": \"2026-10-06\",\n            \"requests\": 350\n        },\n        {\n            \"date\": \"2026-10-07\",\n            \"requests\": 313\n        },\n        {\n            \"date\": \"2026-10-08\",\n            \"requests\": 281\n        }\n    ]\n}"
+   }
+  ],
+  "structuredContent": {
+   "cycle_start": "2028-09-01",
+   "cycle_end": "2028-10-01",
+   "used_this_cycle": 0,
+   "allowance": 4000,
+   "remaining": 4000,
+   "daily": [
+    {
+     "date": "2026-10-02",
+     "requests": 356
+    },
+    {
+     "date": "2026-10-03",
+     "requests": 295
+    },
+    {
+     "date": "2026-10-04",
+     "requests": 342
+    },
+    {
+     "date": "2026-10-05",
+     "requests": 326
+    },
+    {
+     "date": "2026-10-06",
+     "requests": 350
+    },
+    {
+     "date": "2026-10-07",
+     "requests": 313
+    },
+    {
+     "date": "2026-10-08",
+     "requests": 281
+    }
+   ]
+  },
+  "isError": false,
+  "resultType": "complete",
+  "_meta": {
+   "io.modelcontextprotocol/serverInfo": {
+    "name": "audd-billing",
+    "version": "1.0.0"
+   }
+  }
+ }
+}

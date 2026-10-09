@@ -1,0 +1,6 @@
+.git
+dist
+*.test
+*.out
+audd
+audd.exe

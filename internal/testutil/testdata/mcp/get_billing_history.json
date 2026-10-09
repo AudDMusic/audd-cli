@@ -1,0 +1,244 @@
+{
+ "jsonrpc": "2.0",
+ "id": 14,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n    \"payments\": [\n        {\n            \"id\": 34356,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 85000,\n            \"paid\": false,\n            \"created_at\": \"2026-10-08 08:26:34\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-10-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 34295,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2026-10-07 16:08:00\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-10-07\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 33046,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2026-09-19 17:57:02\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-09-19\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 33045,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2026-09-19 17:56:40\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-09-19\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 33044,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 85000,\n            \"paid\": false,\n            \"created_at\": \"2026-09-19 17:47:12\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-09-19\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 32630,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 85000,\n            \"paid\": false,\n            \"created_at\": \"2026-09-13 19:56:59\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-09-13\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 31277,\n            \"kind\": \"bonus_requests_purchase\",\n            \"amount_cents\": 500,\n            \"paid\": false,\n            \"created_at\": \"2026-08-20 15:20:58\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-20\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 1000\n        },\n        {\n            \"id\": 30472,\n            \"kind\": \"streams\",\n            \"amount_cents\": 27000,\n            \"paid\": false,\n            \"created_at\": \"2026-08-08 01:00:18\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 30448,\n            \"kind\": \"streams\",\n            \"amount_cents\": 27000,\n            \"paid\": false,\n            \"created_at\": \"2026-08-07 07:45:10\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 30409,\n            \"kind\": \"streams\",\n            \"amount_cents\": 27000,\n            \"paid\": false,\n            \"created_at\": \"2026-08-07 01:00:08\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 29503,\n            \"kind\": \"bonus_requests_purchase\",\n            \"amount_cents\": 500,\n            \"paid\": false,\n            \"created_at\": \"2026-07-20 16:47:35\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-07-20\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 1000\n        },\n        {\n            \"id\": 27765,\n            \"kind\": \"bonus_requests_purchase\",\n            \"amount_cents\": 500,\n            \"paid\": false,\n            \"created_at\": \"2026-06-26 10:31:09\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-06-26\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 1000\n        },\n        {\n            \"id\": 16915,\n            \"kind\": \"streams\",\n            \"amount_cents\": 100,\n            \"paid\": false,\n            \"created_at\": \"2025-07-16 19:56:10\",\n            \"paid_at\": null,\n            \"billing_month\": \"2025-07-16\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 16883,\n            \"kind\": \"streams\",\n            \"amount_cents\": 27000,\n            \"paid\": false,\n            \"created_at\": \"2025-07-14 16:45:56\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 15773,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 10000,\n            \"paid\": false,\n            \"created_at\": \"2025-05-13 15:20:18\",\n            \"paid_at\": null,\n            \"billing_month\": \"2025-05-13\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 13900,\n            \"kind\": \"streams\",\n            \"amount_cents\": 27000,\n            \"paid\": true,\n            \"created_at\": \"2025-01-08 11:24:45\",\n            \"paid_at\": null,\n            \"billing_month\": \"2026-08-08\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 13809,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2024-12-29 14:04:57\",\n            \"paid_at\": null,\n            \"billing_month\": \"2024-12-29\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 13808,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2024-12-29 13:59:40\",\n            \"paid_at\": null,\n            \"billing_month\": \"2024-12-29\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 13695,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 80000,\n            \"paid\": false,\n            \"created_at\": \"2024-12-20 12:08:30\",\n            \"paid_at\": null,\n            \"billing_month\": \"2024-12-20\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        },\n        {\n            \"id\": 13694,\n            \"kind\": \"subscription_start\",\n            \"amount_cents\": 45000,\n            \"paid\": false,\n            \"created_at\": \"2024-12-20 12:08:19\",\n            \"paid_at\": null,\n            \"billing_month\": \"2024-12-20\",\n            \"extra_requests_billed\": 0,\n            \"bonus_requests_granted\": 0\n        }\n    ]\n}"
+   }
+  ],
+  "structuredContent": {
+   "payments": [
+    {
+     "id": 34356,
+     "kind": "subscription_start",
+     "amount_cents": 85000,
+     "paid": false,
+     "created_at": "2026-10-08 08:26:34",
+     "paid_at": null,
+     "billing_month": "2026-10-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 34295,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2026-10-07 16:08:00",
+     "paid_at": null,
+     "billing_month": "2026-10-07",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 33046,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2026-09-19 17:57:02",
+     "paid_at": null,
+     "billing_month": "2026-09-19",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 33045,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2026-09-19 17:56:40",
+     "paid_at": null,
+     "billing_month": "2026-09-19",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 33044,
+     "kind": "subscription_start",
+     "amount_cents": 85000,
+     "paid": false,
+     "created_at": "2026-09-19 17:47:12",
+     "paid_at": null,
+     "billing_month": "2026-09-19",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 32630,
+     "kind": "subscription_start",
+     "amount_cents": 85000,
+     "paid": false,
+     "created_at": "2026-09-13 19:56:59",
+     "paid_at": null,
+     "billing_month": "2026-09-13",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 31277,
+     "kind": "bonus_requests_purchase",
+     "amount_cents": 500,
+     "paid": false,
+     "created_at": "2026-08-20 15:20:58",
+     "paid_at": null,
+     "billing_month": "2026-08-20",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 1000
+    },
+    {
+     "id": 30472,
+     "kind": "streams",
+     "amount_cents": 27000,
+     "paid": false,
+     "created_at": "2026-08-08 01:00:18",
+     "paid_at": null,
+     "billing_month": "2026-08-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 30448,
+     "kind": "streams",
+     "amount_cents": 27000,
+     "paid": false,
+     "created_at": "2026-08-07 07:45:10",
+     "paid_at": null,
+     "billing_month": "2026-08-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 30409,
+     "kind": "streams",
+     "amount_cents": 27000,
+     "paid": false,
+     "created_at": "2026-08-07 01:00:08",
+     "paid_at": null,
+     "billing_month": "2026-08-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 29503,
+     "kind": "bonus_requests_purchase",
+     "amount_cents": 500,
+     "paid": false,
+     "created_at": "2026-07-20 16:47:35",
+     "paid_at": null,
+     "billing_month": "2026-07-20",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 1000
+    },
+    {
+     "id": 27765,
+     "kind": "bonus_requests_purchase",
+     "amount_cents": 500,
+     "paid": false,
+     "created_at": "2026-06-26 10:31:09",
+     "paid_at": null,
+     "billing_month": "2026-06-26",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 1000
+    },
+    {
+     "id": 16915,
+     "kind": "streams",
+     "amount_cents": 100,
+     "paid": false,
+     "created_at": "2025-07-16 19:56:10",
+     "paid_at": null,
+     "billing_month": "2025-07-16",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 16883,
+     "kind": "streams",
+     "amount_cents": 27000,
+     "paid": false,
+     "created_at": "2025-07-14 16:45:56",
+     "paid_at": null,
+     "billing_month": "2026-08-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 15773,
+     "kind": "subscription_start",
+     "amount_cents": 10000,
+     "paid": false,
+     "created_at": "2025-05-13 15:20:18",
+     "paid_at": null,
+     "billing_month": "2025-05-13",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 13900,
+     "kind": "streams",
+     "amount_cents": 27000,
+     "paid": true,
+     "created_at": "2025-01-08 11:24:45",
+     "paid_at": null,
+     "billing_month": "2026-08-08",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 13809,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2024-12-29 14:04:57",
+     "paid_at": null,
+     "billing_month": "2024-12-29",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 13808,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2024-12-29 13:59:40",
+     "paid_at": null,
+     "billing_month": "2024-12-29",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 13695,
+     "kind": "subscription_start",
+     "amount_cents": 80000,
+     "paid": false,
+     "created_at": "2024-12-20 12:08:30",
+     "paid_at": null,
+     "billing_month": "2024-12-20",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    },
+    {
+     "id": 13694,
+     "kind": "subscription_start",
+     "amount_cents": 45000,
+     "paid": false,
+     "created_at": "2024-12-20 12:08:19",
+     "paid_at": null,
+     "billing_month": "2024-12-20",
+     "extra_requests_billed": 0,
+     "bonus_requests_granted": 0
+    }
+   ]
+  },
+  "isError": false,
+  "resultType": "complete",
+  "_meta": {
+   "io.modelcontextprotocol/serverInfo": {
+    "name": "audd-billing",
+    "version": "1.0.0"
+   }
+  }
+ }
+}

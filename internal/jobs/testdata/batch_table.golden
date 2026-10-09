@@ -1,0 +1,3 @@
+✓ DIR/match-1.mp3  Artist — match-1
+· DIR/none-2.mp3  no match
+✗ DIR/bad-3.mp3  failed: Recognition failed: a problem with fingerprint generation

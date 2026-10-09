@@ -1,0 +1,42 @@
+name: Contract
+
+# Checks the live AudD services against the shapes the CLI reads: the
+# standard endpoint, the recent-results endpoint, and the account tools'
+# output schemas. Each check is skipped when its secret is missing.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test -tags contract
+        env:
+          AUDD_CONTRACT_API_TOKEN: ${{ secrets.AUDD_CONTRACT_API_TOKEN }}
+          AUDD_CONTRACT_RADIO_ID: ${{ secrets.AUDD_CONTRACT_RADIO_ID }}
+          AUDD_CONTRACT_OAUTH_SESSION: ${{ secrets.AUDD_CONTRACT_OAUTH_SESSION }}
+          AUDD_CONTRACT_SESSION_OUT: ${{ runner.temp }}/session.json
+        run: go test -count=1 -tags contract -v ./internal/contract/
+      # Refresh tokens may be single-use, so the refreshed session is saved
+      # back for the next run. Needs a token that can write repository secrets.
+      - name: Save the refreshed session
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.CONTRACT_SECRETS_TOKEN }}
+          SESSION: ${{ runner.temp }}/session.json
+        run: |
+          [ -s "$SESSION" ] || exit 0
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::CONTRACT_SECRETS_TOKEN is not set; the refreshed session was not saved and the next run may need a new AUDD_CONTRACT_OAUTH_SESSION"
+            exit 0
+          fi
+          gh secret set AUDD_CONTRACT_OAUTH_SESSION --repo "$GITHUB_REPOSITORY" < "$SESSION"

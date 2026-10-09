@@ -1,0 +1,183 @@
+# Release configuration for audd. A tag vX.Y.Z runs .github/workflows/release.yml,
+# which runs this. Local check: goreleaser release --snapshot --clean --skip=sign,sbom
+# (the Windows and macOS signing steps stay off without their environment).
+version: 2
+
+project_name: audd
+
+before:
+  hooks:
+    - go mod download
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+builds:
+  - id: audd
+    main: ./cmd/audd
+    binary: audd
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/AudDMusic/audd-cli/internal/app.Version={{ .Version }}
+      - -X github.com/AudDMusic/audd-cli/internal/app.Commit={{ .FullCommit }}
+      - -X github.com/AudDMusic/audd-cli/internal/app.Date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    # The release workflow signs the Windows binaries before this runs
+    # (scripts/build-windows.sh builds the same bytes). The hook swaps in the
+    # signed copy only if this build matches the approved sha256, and does
+    # nothing when AUDD_SIGNED_WINDOWS_DIR is unset.
+    hooks:
+      post:
+        - cmd: sh scripts/use-signed-windows.sh "{{ .Os }}" "{{ .Arch }}" "{{ .Path }}" "{{ .CommitTimestamp }}"
+          output: true
+
+# Developer ID signing and notarization of the macOS binaries, with quill on
+# Linux. Off unless every MACOS_* secret is set (release environment).
+notarize:
+  macos:
+    # Sign and notarize when every secret is set.
+    - ids: [audd]
+      enabled: '{{ and (ne (envOrDefault "MACOS_SIGN_P12" "") "") (ne (envOrDefault "MACOS_SIGN_PASSWORD" "") "") (ne (envOrDefault "MACOS_NOTARY_ISSUER_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY" "") "") }}'
+      sign:
+        certificate: '{{ envOrDefault "MACOS_SIGN_P12" "" }}'
+        password: '{{ envOrDefault "MACOS_SIGN_PASSWORD" "" }}'
+      notarize:
+        issuer_id: '{{ envOrDefault "MACOS_NOTARY_ISSUER_ID" "" }}'
+        key_id: '{{ envOrDefault "MACOS_NOTARY_KEY_ID" "" }}'
+        key: '{{ envOrDefault "MACOS_NOTARY_KEY" "" }}'
+        wait: true
+        timeout: 20m
+    # Sign only, when the certificate is set but the notary key is not.
+    - ids: [audd]
+      enabled: '{{ and (ne (envOrDefault "MACOS_SIGN_P12" "") "") (ne (envOrDefault "MACOS_SIGN_PASSWORD" "") "") (not (and (ne (envOrDefault "MACOS_NOTARY_ISSUER_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY_ID" "") "") (ne (envOrDefault "MACOS_NOTARY_KEY" "") ""))) }}'
+      sign:
+        certificate: '{{ envOrDefault "MACOS_SIGN_P12" "" }}'
+        password: '{{ envOrDefault "MACOS_SIGN_PASSWORD" "" }}'
+
+# audd update, scripts/install.sh, and internal/update.ArchiveName expect
+# audd_<version>_<os>_<arch>.tar.gz (zip on Windows) with audd at the top.
+archives:
+  - id: audd
+    ids: [audd]
+    name_template: "audd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+# Keyless signing in GitHub Actions; the bundle verifies checksums.txt, which
+# covers every archive:
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-identity-regexp 'https://github.com/AudDMusic/audd-cli/' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
+    artifacts: checksum
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+
+release:
+  github:
+    owner: AudDMusic
+    name: audd-cli
+  prerelease: auto
+  extra_files:
+    - glob: ./scripts/install.sh
+
+# skip_upload: auto keeps prereleases (vX.Y.Z-rc.N) out of Homebrew, Scoop,
+# and winget; they ship only on GitHub, npm `next`, and Docker version tags.
+homebrew_casks:
+  - name: audd
+    ids: [audd]
+    skip_upload: auto
+    repository:
+      owner: AudDMusic
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    directory: Casks
+    homepage: https://audd.io
+    description: Recognize music in files, URLs, and streams with AudD
+    license: MIT
+    binaries: [audd]
+    commit_author:
+      name: AudD
+      email: hello@audd.io
+    commit_msg_template: "audd {{ .Tag }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/audd"]
+          end
+
+scoops:
+  - name: audd
+    ids: [audd]
+    skip_upload: auto
+    repository:
+      owner: AudDMusic
+      name: scoop-bucket
+      token: '{{ envOrDefault "SCOOP_BUCKET_TOKEN" "" }}'
+    homepage: https://audd.io
+    description: Recognize music in files, URLs, and streams with AudD
+    license: MIT
+    commit_author:
+      name: AudD
+      email: hello@audd.io
+    commit_msg_template: "audd {{ .Tag }}"
+
+winget:
+  - name: AudD CLI
+    ids: [audd]
+    package_identifier: AudD.CLI
+    skip_upload: auto
+    publisher: AudD, LLC
+    publisher_url: https://audd.io
+    publisher_support_url: https://github.com/AudDMusic/audd-cli/issues
+    homepage: https://github.com/AudDMusic/audd-cli
+    short_description: Recognize music in files, URLs, and streams with AudD
+    description: |
+      audd recognizes music in files, URLs, folders, and long recordings,
+      monitors streams, and manages your AudD account.
+    license: MIT
+    license_url: https://github.com/AudDMusic/audd-cli/blob/main/LICENSE
+    copyright: Copyright (c) 2026 AudD, LLC (https://audd.io)
+    release_notes_url: "https://github.com/AudDMusic/audd-cli/releases/tag/{{ .Tag }}"
+    tags: [audd, music-recognition, cli]
+    commit_author:
+      name: AudD
+      email: hello@audd.io
+    commit_msg_template: "New version: AudD.CLI {{ .Version }}"
+    repository:
+      owner: AudDMusic
+      name: winget-pkgs
+      branch: "audd-cli-{{ .Version }}"
+      token: '{{ envOrDefault "WINGET_TOKEN" "" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master

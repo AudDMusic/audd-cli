@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test (race)
+        if: runner.os != 'Windows'
+        run: go test -race ./...
+      - name: go test
+        if: runner.os == 'Windows'
+        run: go test ./...
+
+  build:
+    name: Cross-build (CGO disabled)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build all targets
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -o /dev/null ./cmd/audd
+            echo "built $target"
+          done
+
+  packaging:
+    name: Release packaging (snapshot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --skip=sign,sbom
+      - name: install.sh against the snapshot
+        run: go test -count=1 -v -run TestInstallSnapshot ./scripts/
+      - name: Package script tests
+        run: |
+          node --test scripts/npm-pack.test.mjs
+          python -m unittest discover -s scripts -p 'test_*.py'
+      - name: npm packages install and run
+        run: |
+          node scripts/npm-pack.mjs
+          v=$(node -p "require('./dist/metadata.json').version")
+          mkdir -p "$RUNNER_TEMP/npm" && cd "$RUNNER_TEMP/npm"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE/dist/npm/audd-cli-linux-x64-$v.tgz" "$GITHUB_WORKSPACE/dist/npm/audd-cli-$v.tgz"
+          npx audd version
+      - name: Wheels install and run
+        run: |
+          python scripts/build_wheels.py
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --no-index --find-links dist/pypi audd-cli
+          "$RUNNER_TEMP/venv/bin/audd" version

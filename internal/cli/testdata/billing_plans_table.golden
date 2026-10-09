@@ -1,0 +1,4 @@
+PLAN                NAME     PRICE          INCLUDED REQUESTS  OVER THE ALLOWANCE
+indie_plan_outside  Indie    $5.00/month    1,000              $5.00 per 1,000
+startup_plan        Startup  $450.00/month  100,000            $4.50 per 1,000
+pro_plan            Pro      $850.00/month  200,000            $4.25 per 1,000

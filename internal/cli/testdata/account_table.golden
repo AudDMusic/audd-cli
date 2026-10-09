@@ -1,0 +1,11 @@
+Account         user@example.com
+Sign-in         auth0: user@example.com
+                auth0: user@example.com
+                github: example-user
+                github: example-org-user
+                google-oauth2: user@example.com
+                oauth2: twitch:example-user
+Plan            Indie, $5.00/month, 1,000 requests included (active)
+Paid until      2028-10-01
+Auto-renew      on
+Bonus requests  3,000

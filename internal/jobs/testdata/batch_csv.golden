@@ -1,0 +1,4 @@
+job_id,index,input,status,cached,artist,title,album,release_date,label,isrc,upc,song_link,timecode,score,start_seconds,end_seconds,error
+JOBID,0,DIR/match-1.mp3,matched,false,Artist,match-1,Album,2020-01-01,Label,,,https://lis.tn/x,00:10,,,,
+JOBID,1,DIR/none-2.mp3,no_match,false,,,,,,,,,,,,,
+JOBID,2,DIR/bad-3.mp3,failed,false,,,,,,,,,,,,,Recognition failed: a problem with fingerprint generation

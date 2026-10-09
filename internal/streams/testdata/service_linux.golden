@@ -1,0 +1,15 @@
+Path: /home/me/.config/systemd/user/audd-recorder-default.service
+Activate: systemctl --user daemon-reload && systemctl --user enable --now audd-recorder-default.service
+
+[Unit]
+Description=AudD stream recorder (profile default)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/audd streams record --profile default --background-child
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

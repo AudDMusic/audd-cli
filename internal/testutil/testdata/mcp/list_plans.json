@@ -1,0 +1,45 @@
+{
+ "jsonrpc": "2.0",
+ "id": 13,
+ "result": {
+  "content": [
+   {
+    "type": "text",
+    "text": "{\n    \"plans\": [\n        {\n            \"plan\": \"indie_plan_outside\",\n            \"name\": \"Indie\",\n            \"monthly_price_cents\": 500,\n            \"included_requests\": 1000,\n            \"extra_price_cents_per_1000\": 500\n        },\n        {\n            \"plan\": \"startup_plan\",\n            \"name\": \"Startup\",\n            \"monthly_price_cents\": 45000,\n            \"included_requests\": 100000,\n            \"extra_price_cents_per_1000\": 450\n        },\n        {\n            \"plan\": \"pro_plan\",\n            \"name\": \"Pro\",\n            \"monthly_price_cents\": 85000,\n            \"included_requests\": 200000,\n            \"extra_price_cents_per_1000\": 425\n        }\n    ]\n}"
+   }
+  ],
+  "structuredContent": {
+   "plans": [
+    {
+     "plan": "indie_plan_outside",
+     "name": "Indie",
+     "monthly_price_cents": 500,
+     "included_requests": 1000,
+     "extra_price_cents_per_1000": 500
+    },
+    {
+     "plan": "startup_plan",
+     "name": "Startup",
+     "monthly_price_cents": 45000,
+     "included_requests": 100000,
+     "extra_price_cents_per_1000": 450
+    },
+    {
+     "plan": "pro_plan",
+     "name": "Pro",
+     "monthly_price_cents": 85000,
+     "included_requests": 200000,
+     "extra_price_cents_per_1000": 425
+    }
+   ]
+  },
+  "isError": false,
+  "resultType": "complete",
+  "_meta": {
+   "io.modelcontextprotocol/serverInfo": {
+    "name": "audd-billing",
+    "version": "1.0.0"
+   }
+  }
+ }
+}
