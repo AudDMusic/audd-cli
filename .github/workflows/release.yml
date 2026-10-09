@@ -439,6 +439,8 @@ jobs:
     name: npm (@audd/cli)
     needs: [goreleaser, smoke]
     runs-on: ubuntu-latest
+    # npm's trusted publisher for each package names this environment.
+    environment: npm
     permissions:
       contents: read
       id-token: write # npm trusted publishing (OIDC) and provenance
