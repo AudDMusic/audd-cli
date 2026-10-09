@@ -9,8 +9,7 @@
 | Any system with Node.js | `npx @audd/cli recognize song.mp3` (no install) or `npm install -g @audd/cli` |
 | Any system with Python | `uvx audd-cli recognize song.mp3` (no install), `pipx install audd-cli`, or `uv tool install audd-cli` |
 | macOS (Homebrew) | `brew install auddmusic/tap/audd` |
-| macOS, Linux (script) | `curl -fsSL https://audd.io/install.sh \| sh` |
-| Windows (winget) | `winget install --id AudD.CLI` |
+| macOS, Linux (script) | `curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket` then `scoop install auddmusic/audd` |
 | Docker | `docker run --rm -e AUDD_API_TOKEN -v "$PWD:/work" ghcr.io/auddmusic/audd-cli recognize song.mp3` |
 | Go | `go install github.com/AudDMusic/audd-cli/cmd/audd@latest` |

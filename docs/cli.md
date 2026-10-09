@@ -11,11 +11,11 @@ Get your API token at https://dashboard.audd.io, or run `audd login`.
 ```sh
 npx @audd/cli recognize song.mp3                 # run without installing (or: uvx audd-cli)
 brew install auddmusic/tap/audd                  # macOS
-curl -fsSL https://audd.io/install.sh | sh       # macOS and Linux, into ~/.local/bin
-winget install --id AudD.CLI                     # Windows
+curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh | sh
+                                                 # macOS and Linux, into ~/.local/bin
 ```
 
-Other ways (Docker, `go install`, pipx, `uv tool`) are listed at
+Other ways (Scoop on Windows, Docker, `go install`, pipx, `uv tool`) are listed at
 https://github.com/AudDMusic/audd-cli#install.
 
 ```sh
