@@ -137,7 +137,10 @@ jobs:
             $p = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
             if ($p.ExitCode -ne 0) { Get-Content msi.log -ErrorAction SilentlyContinue | Select-Object -Last 60; throw "msiexec $msiArgs exited $($p.ExitCode)" }
           }
-          function Entries { @(Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object DisplayName -eq 'AudD CLI') }
+          # Installed AudD CLI versions, by the installer's UpgradeCode.
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          function Get-MsiProperty($name, $arguments) { $installer.GetType().InvokeMember($name, 'GetProperty', $null, $installer, $arguments) }
+          function Versions { @(Get-MsiProperty RelatedProducts @('{C62DFFE9-5DE7-4511-9A24-091D8B9685A8}') | ForEach-Object { Get-MsiProperty ProductInfo @($_, 'VersionString') }) }
 
           Msi "/i out\audd-0.0.1-amd64.msi /qn /l*v msi.log"
           if (-not (Test-Path $exe)) { throw "audd.exe was not installed at $exe" }
@@ -147,15 +150,15 @@ jobs:
           # A new shell finds audd through the user PATH.
           $env:PATH = "$([Environment]::GetEnvironmentVariable('PATH', 'Machine'));$(UserPath)"
           (Get-Command audd).Source
-          if ((Entries).Count -ne 1 -or (Entries)[0].DisplayVersion -ne '0.0.1') { throw 'expected one AudD CLI 0.0.1 in Apps' }
+          if ("$(Versions)" -ne '0.0.1') { throw "expected AudD CLI 0.0.1 to be installed, found: $(Versions)" }
 
           Msi "/i out\audd-0.0.2-amd64.msi /qn /l*v msi.log"
-          if ((Entries).Count -ne 1 -or (Entries)[0].DisplayVersion -ne '0.0.2') { throw "expected one AudD CLI 0.0.2 after the upgrade, found: $((Entries).DisplayVersion)" }
+          if ("$(Versions)" -ne '0.0.2') { throw "expected only AudD CLI 0.0.2 after the upgrade, found: $(Versions)" }
           $count = ((UserPath) -split ';' | Where-Object { $_.TrimEnd('\') -eq $dir.TrimEnd('\') }).Count
           if ($count -ne 1) { throw "the user PATH has $count entries for $dir after the upgrade" }
 
           Msi "/x out\audd-0.0.2-amd64.msi /qn /l*v msi.log"
           if (Test-Path $exe) { throw 'audd.exe is still there after uninstalling' }
           if ((UserPath) -like "*$dir*") { throw "the user PATH still includes $dir after uninstalling" }
-          if ((Entries).Count -ne 0) { throw 'AudD CLI is still listed in Apps after uninstalling' }
+          if ((Versions).Count -ne 0) { throw "AudD CLI is still installed after uninstalling: $(Versions)" }
           'install, upgrade, and uninstall: ok'
