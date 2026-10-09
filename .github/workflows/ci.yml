@@ -102,3 +102,57 @@ jobs:
           python -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --no-index --find-links dist/pypi audd-cli
           "$RUNNER_TEMP/venv/bin/audd" version
+
+  msi:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install WiX
+        run: dotnet tool install --global wix --version 5.0.2
+      - name: Build audd.exe and the installers
+        run: |
+          $env:CGO_ENABLED = '0'
+          foreach ($arch in 'amd64', 'arm64') {
+            $env:GOARCH = $arch
+            go build -trimpath -o "build\$arch\audd.exe" ./cmd/audd
+            if ($LASTEXITCODE -ne 0) { throw "go build $arch failed" }
+          }
+          Remove-Item Env:GOARCH
+          pwsh scripts/build-msi.ps1 build\amd64\audd.exe amd64 0.0.1 out\audd-0.0.1-amd64.msi
+          pwsh scripts/build-msi.ps1 build\amd64\audd.exe amd64 0.0.2 out\audd-0.0.2-amd64.msi
+          pwsh scripts/build-msi.ps1 build\arm64\audd.exe arm64 0.0.2 out\audd-0.0.2-arm64.msi
+      - name: Install, upgrade, and uninstall
+        run: |
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\AudD CLI'
+          $exe = Join-Path $dir 'audd.exe'
+          function UserPath { [Environment]::GetEnvironmentVariable('PATH', 'User') }
+          function Msi($msiArgs) {
+            $p = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+            if ($p.ExitCode -ne 0) { Get-Content msi.log -ErrorAction SilentlyContinue | Select-Object -Last 60; throw "msiexec $msiArgs exited $($p.ExitCode)" }
+          }
+          function Entries { @(Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object DisplayName -eq 'AudD CLI') }
+
+          Msi "/i out\audd-0.0.1-amd64.msi /qn /l*v msi.log"
+          if (-not (Test-Path $exe)) { throw "audd.exe was not installed at $exe" }
+          if ((UserPath) -notlike "*$dir*") { throw "the user PATH does not include $dir`: $(UserPath)" }
+          & $exe version
+          if ($LASTEXITCODE -ne 0) { throw 'audd version failed' }
+          # A new shell finds audd through the user PATH.
+          $env:PATH = "$([Environment]::GetEnvironmentVariable('PATH', 'Machine'));$(UserPath)"
+          (Get-Command audd).Source
+          if ((Entries).Count -ne 1 -or (Entries)[0].DisplayVersion -ne '0.0.1') { throw 'expected one AudD CLI 0.0.1 in Apps' }
+
+          Msi "/i out\audd-0.0.2-amd64.msi /qn /l*v msi.log"
+          if ((Entries).Count -ne 1 -or (Entries)[0].DisplayVersion -ne '0.0.2') { throw "expected one AudD CLI 0.0.2 after the upgrade, found: $((Entries).DisplayVersion)" }
+          $count = ((UserPath) -split ';' | Where-Object { $_.TrimEnd('\') -eq $dir.TrimEnd('\') }).Count
+          if ($count -ne 1) { throw "the user PATH has $count entries for $dir after the upgrade" }
+
+          Msi "/x out\audd-0.0.2-amd64.msi /qn /l*v msi.log"
+          if (Test-Path $exe) { throw 'audd.exe is still there after uninstalling' }
+          if ((UserPath) -like "*$dir*") { throw "the user PATH still includes $dir after uninstalling" }
+          if ((Entries).Count -ne 0) { throw 'AudD CLI is still listed in Apps after uninstalling' }
+          'install, upgrade, and uninstall: ok'

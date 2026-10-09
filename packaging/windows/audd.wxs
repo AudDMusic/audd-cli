@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows installer for audd (WiX Toolset v5). Installs audd.exe for the
+  current user into %LOCALAPPDATA%\Programs\AudD CLI and adds that folder to
+  the user's PATH, so no administrator rights are needed. A newer MSI
+  replaces an older one; uninstalling removes the file and the PATH entry.
+
+  Built by scripts/build-msi.ps1:
+    wix build packaging/windows/audd.wxs -arch x64|arm64
+      -d Version=1.2.3 -d Exe=path\to\audd.exe -o audd.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="AudD CLI"
+      Manufacturer="AudD, LLC"
+      Version="$(Version)"
+      UpgradeCode="c62dffe9-5de7-4511-9a24-091d8b9685a8"
+      Scope="perUser"
+      Compressed="yes"
+      Language="1033">
+
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of AudD CLI is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/AudDMusic/audd-cli" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/AudDMusic/audd-cli/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="AudD CLI" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Files under the user profile need a registry key as their key path. -->
+    <Component Id="AuddExe" Directory="INSTALLFOLDER">
+      <RegistryValue Root="HKCU" Key="Software\AudD\CLI" Name="InstallDir"
+          Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <File Id="AuddExeFile" Name="audd.exe" Source="$(Exe)" />
+      <Environment Id="UserPath" Name="PATH" Value="[INSTALLFOLDER]"
+          Part="last" Action="set" System="no" Permanent="no" />
+      <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      <!-- Removed only when empty. -->
+      <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+    </Component>
+  </Package>
+</Wix>
