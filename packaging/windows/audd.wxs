@@ -35,7 +35,7 @@
     </StandardDirectory>
 
     <!-- Files under the user profile need a registry key as their key path. -->
-    <Component Id="AuddExe" Directory="INSTALLFOLDER">
+    <Component Id="AuddExe" Directory="INSTALLFOLDER" Guid="67cb8d49-4686-4e8f-873f-57496028dc2f">
       <RegistryValue Root="HKCU" Key="Software\AudD\CLI" Name="InstallDir"
           Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
       <File Id="AuddExeFile" Name="audd.exe" Source="$(Exe)" />

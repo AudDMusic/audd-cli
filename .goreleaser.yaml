@@ -54,6 +54,9 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  # The Windows installers, built and signed by the release workflow.
+  extra_files:
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*.msi'
 
 sboms:
   - artifacts: archive
@@ -82,6 +85,7 @@ release:
   prerelease: auto
   extra_files:
     - glob: ./scripts/install.sh
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*.msi'
 
 # skip_upload: auto keeps prereleases (vX.Y.Z-rc.N) out of Homebrew, Scoop,
 # and winget; they ship only on GitHub, npm `next`, and Docker version tags.

@@ -34,28 +34,23 @@ jobs:
             echo "signing=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
-        if: steps.check.outputs.signing == 'true'
       - uses: actions/setup-go@v5
-        if: steps.check.outputs.signing == 'true'
         with:
           go-version-file: go.mod
       - name: Build as GoReleaser does
         id: build
-        if: steps.check.outputs.signing == 'true'
         run: |
           sh scripts/build-for-signing.sh windows "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/unsigned" | tee "$RUNNER_TEMP/sums"
           while read -r arch sum; do
             echo "sha256-$arch=$sum" >> "$GITHUB_OUTPUT"
           done < "$RUNNER_TEMP/sums"
       - uses: actions/upload-artifact@v4
-        if: steps.check.outputs.signing == 'true'
         with:
           name: windows-unsigned-amd64
           path: ${{ runner.temp }}/unsigned/audd-windows-amd64.exe
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
-        if: steps.check.outputs.signing == 'true'
         with:
           name: windows-unsigned-arm64
           path: ${{ runner.temp }}/unsigned/audd-windows-arm64.exe
@@ -112,6 +107,82 @@ jobs:
         with:
           name: windows-signed-${{ matrix.arch }}
           path: ${{ steps.sign.outputs.signed-path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # The Windows installers: one MSI per architecture around audd.exe (the
+  # signed one when Windows signing is on), then signed the same way as
+  # audd.exe (one more approval per architecture in Mihonarium/signing).
+  windows-msi:
+    name: Windows installer (${{ matrix.arch }})
+    needs: [windows-build, windows-sign]
+    runs-on: windows-latest
+    environment: request-signing
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read # the signing action downloads the unsigned installer to hash it
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    env:
+      SIGNING: ${{ needs.windows-build.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.windows-build.outputs.signing == 'true' && format('windows-signed-{0}', matrix.arch) || format('windows-unsigned-{0}', matrix.arch) }}
+          path: ${{ runner.temp }}/exe
+      - name: Install WiX
+        run: dotnet tool install --global wix --version 5.0.2
+      - name: Build the installer
+        id: build
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $name = "audd_${version}_windows_${{ matrix.arch }}.msi"
+          $exe = Get-ChildItem "$env:RUNNER_TEMP\exe" -Filter *.exe | Select-Object -First 1
+          $out = Join-Path "$env:RUNNER_TEMP\msi" $name
+          $output = pwsh scripts/build-msi.ps1 $exe.FullName ${{ matrix.arch }} $version $out
+          if ($LASTEXITCODE -ne 0) { $output; throw 'build-msi.ps1 failed' }
+          $output
+          # The script's last line is "<arch> <sha256>".
+          $line = $output | Select-Object -Last 1
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "sha256=$(($line -split ' ')[1])" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi-unsigned-${{ matrix.arch }}
+          path: ${{ runner.temp }}/msi/${{ steps.build.outputs.name }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Request the EV signature (approve it in Mihonarium/signing)
+        id: sign
+        if: env.SIGNING == 'true'
+        uses: ./.github/actions/request-signing
+        with:
+          source-run-id: ${{ github.run_id }}
+          source-artifact: msi-unsigned-${{ matrix.arch }}
+          output-name: ${{ steps.build.outputs.name }}
+          sig-description: AudD CLI installer
+          token: ${{ secrets.SIGNING_REPO_TOKEN }}
+          wait-minutes: "120"
+      - name: The approved bytes are the ones built
+        if: env.SIGNING == 'true'
+        shell: bash
+        env:
+          APPROVED: ${{ steps.sign.outputs.unsigned-sha256 }}
+          BUILT: ${{ steps.build.outputs.sha256 }}
+        run: |
+          if [ -z "$BUILT" ] || [ "$APPROVED" != "$BUILT" ]; then
+            echo "::error::approved sha256 $APPROVED does not match the built $BUILT"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi-${{ matrix.arch }}
+          path: ${{ env.SIGNING == 'true' && steps.sign.outputs.signed-path || format('{0}/msi/{1}', runner.temp, steps.build.outputs.name) }}
           if-no-files-found: error
           retention-days: 7
 
@@ -277,7 +348,7 @@ jobs:
 
   goreleaser:
     name: GitHub release, Homebrew, Scoop, winget
-    needs: [windows-build, windows-sign, macos-build, macos-sign]
+    needs: [windows-build, windows-sign, windows-msi, macos-build, macos-sign]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -326,6 +397,12 @@ jobs:
           pattern: windows-signed-*
           merge-multiple: true
           path: ${{ runner.temp }}/signed
+      - name: Download the Windows installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: windows-msi-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/msi
       - name: Download the signed macOS binaries
         if: env.MACOS_SIGNING == 'true'
         uses: actions/download-artifact@v4
@@ -343,6 +420,7 @@ jobs:
           AUDD_SIGNED_WINDOWS_DIR: ${{ env.WINDOWS_SIGNING == 'true' && format('{0}/signed', runner.temp) || '' }}
           AUDD_WINDOWS_AMD64_SHA256: ${{ needs.windows-build.outputs.sha256-amd64 }}
           AUDD_WINDOWS_ARM64_SHA256: ${{ needs.windows-build.outputs.sha256-arm64 }}
+          AUDD_MSI_DIR: ${{ runner.temp }}/msi
           AUDD_SIGNED_DARWIN_DIR: ${{ env.MACOS_SIGNING == 'true' && format('{0}/signed-macos', runner.temp) || '' }}
           AUDD_DARWIN_AMD64_SHA256: ${{ needs.macos-build.outputs.sha256-amd64 }}
           AUDD_DARWIN_ARM64_SHA256: ${{ needs.macos-build.outputs.sha256-arm64 }}

@@ -123,8 +123,11 @@ jobs:
           }
           Remove-Item Env:GOARCH
           pwsh scripts/build-msi.ps1 build\amd64\audd.exe amd64 0.0.1 out\audd-0.0.1-amd64.msi
+          if ($LASTEXITCODE -ne 0) { throw 'build-msi.ps1 failed' }
           pwsh scripts/build-msi.ps1 build\amd64\audd.exe amd64 0.0.2 out\audd-0.0.2-amd64.msi
+          if ($LASTEXITCODE -ne 0) { throw 'build-msi.ps1 failed' }
           pwsh scripts/build-msi.ps1 build\arm64\audd.exe arm64 0.0.2 out\audd-0.0.2-arm64.msi
+          if ($LASTEXITCODE -ne 0) { throw 'build-msi.ps1 failed' }
       - name: Install, upgrade, and uninstall
         run: |
           $dir = Join-Path $env:LOCALAPPDATA 'Programs\AudD CLI'
