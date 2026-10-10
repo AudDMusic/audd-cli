@@ -30,7 +30,6 @@
 
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/AudDMusic/audd-cli" />
     <Property Id="ARPHELPLINK" Value="https://github.com/AudDMusic/audd-cli/issues" />
-    <Property Id="ARPNOMODIFY" Value="1" />
 
     <!-- License page, progress, and a last page that says audd is installed. -->
     <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
