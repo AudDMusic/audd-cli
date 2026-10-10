@@ -323,7 +323,14 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 	select {
 	case msg = <-done:
 	case <-time.After(time.Second):
-		return // a tick or a long wait
+		// A tick or a long wait: what it returns later can be read with
+		// pump.
+		go func() {
+			if m := <-done; m != nil {
+				late <- lateMsg{h, m}
+			}
+		}()
+		return
 	}
 	switch m := msg.(type) {
 	case nil:
@@ -335,6 +342,37 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 	default:
 		_, next := h.Update(m)
 		drain(h, next, depth+1)
+	}
+}
+
+// late are messages of commands drain stopped waiting for.
+var late = make(chan lateMsg, 1000)
+
+type lateMsg struct {
+	h   *home
+	msg tea.Msg
+}
+
+// pump applies h's late messages until until reports true (or a few
+// seconds pass).
+func pump(h *home, until func() bool) {
+	deadline := time.After(5 * time.Second)
+	for !until() {
+		select {
+		case m := <-late:
+			if m.h != h {
+				late <- m
+				time.Sleep(time.Millisecond)
+				continue
+			}
+			if _, isTick := m.msg.(clearHomeFlashMsg); isTick {
+				continue
+			}
+			_, next := h.Update(m.msg)
+			drain(h, next, 1)
+		case <-deadline:
+			return
+		}
 	}
 }
 
@@ -371,8 +409,12 @@ func TestHomeShellNavigation(t *testing.T) {
 		t.Fatalf("? shows the keys:\n%s", h.View())
 	}
 	press(h, key("x"))
+	if !h.keysO || !strings.Contains(h.View(), "x does nothing here") {
+		t.Fatal("the keys are a page: other keys say they do nothing")
+	}
+	press(h, key("esc"))
 	if h.keysO {
-		t.Fatal("any key closes the keys")
+		t.Fatal("esc closes the keys")
 	}
 	_, cmd := h.Update(key("q"))
 	if cmd == nil {
@@ -413,7 +455,7 @@ func ctrlK() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlK} }
 func TestLeftReturnsToSidebar(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{}), 120, 40)
 	press(h, key("esc"))
-	for _, id := range []string{"recognize", "now-playing", "history", "streams", "account", "settings", "help"} {
+	for _, id := range []string{"recognize", "now-playing", "recognitions", "streams", "account", "settings", "help"} {
 		h.show(id, false)
 		h.focus = focusSidebar
 		press(h, key("right"))

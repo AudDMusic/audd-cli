@@ -39,6 +39,12 @@ func footerText(v string) string {
 	return lines[len(lines)-2]
 }
 
+// statusText is the status row of a frame (what just happened).
+func statusText(v string) string {
+	lines := strings.Split(ansi.Strip(v), "\n")
+	return lines[len(lines)-3]
+}
+
 // backOut presses k until the keys are on the sidebar (at most n times)
 // and checks that the sidebar shows it.
 func backOut(t *testing.T, h *home, k string, n int, what string) {
@@ -72,23 +78,27 @@ func focusShown(t *testing.T, h *home, what string) {
 	}
 	switch h.focus {
 	case focusSidebar:
-		if !sidebarLit.MatchString(v) || !strings.HasPrefix(crumb, ">"+items[0].text+"<") {
+		if !sidebarLit.MatchString(v) || at != 0 || !strings.HasPrefix(crumb, items[0].text) {
 			t.Fatalf("%s: sidebar focus not shown (crumb %q):\n%s", what, crumb, v)
 		}
-		if h.flash == "" && (!strings.Contains(foot, "↑/↓ move") || !strings.Contains(foot, "→ open")) {
+		if !strings.Contains(foot, "↑/↓ move") || !strings.Contains(foot, "→ open") {
 			t.Fatalf("%s: sidebar footer %q", what, foot)
 		}
 	case focusTabs:
 		tab := items[1].text
-		if !strings.HasSuffix(crumb, ">"+tab+"<") || !strings.Contains(paneRow(v, 2), ">"+tab+"<") {
+		if at != 1 || !strings.HasSuffix(crumb, tab) || !strings.Contains(paneRow(v, 2), ">"+tab+"<") {
 			t.Fatalf("%s: tab bar focus not shown (crumb %q):\n%s", what, crumb, v)
 		}
-		if h.flash == "" && !strings.HasPrefix(foot, "←/→ tabs  ↓ open  esc back") {
+		if !strings.HasPrefix(foot, "←/→ tabs  ↓ open  esc back") {
 			t.Fatalf("%s: tab bar footer %q", what, foot)
 		}
 	default:
-		if at >= 0 && !strings.HasSuffix(crumb, ">"+items[at].text+"<") || at < 0 && strings.Contains(crumb, "<") {
-			t.Fatalf("%s: crumb %q, want %q emphasized", what, crumb, items[max(0, at)].text)
+		var want []string
+		for _, c := range items {
+			want = append(want, c.text)
+		}
+		if at >= 0 && at != len(items)-1 || crumb != strings.Join(want, " › ") {
+			t.Fatalf("%s: crumb %q (at %d)", what, crumb, at)
 		}
 		if !h.showSignin {
 			// The frame's header, then the sidebar's blank first row.
@@ -96,7 +106,7 @@ func focusShown(t *testing.T, h *home, what string) {
 				t.Fatalf("%s: the divider does not mark the content:\n%s", what, v)
 			}
 		}
-		if h.flash == "" && !strings.Contains(foot, "esc") {
+		if !strings.Contains(foot, "esc") {
 			t.Fatalf("%s: the footer does not say how to go back: %q", what, foot)
 		}
 	}
@@ -191,9 +201,8 @@ func TestHierarchy(t *testing.T) {
 				if h.focus != focusTabs || tb.tabIndex() != ti {
 					t.Fatalf("%s: on the tab bar at %d, want %d (focus %v)", what, tb.tabIndex(), ti, h.focus)
 				}
-				h.flash = ""
 				focusShown(t, h, what+" tab bar")
-				if c := crumbText(h.View()); c != title+" › >"+name+"<" {
+				if c := crumbText(h.View()); c != title+" › "+name {
 					t.Fatalf("%s: crumb %q", what, c)
 				}
 				press(h, key("down"))
@@ -222,7 +231,7 @@ func TestHierarchy(t *testing.T) {
 					if tb.tabIndex() != ti+1 || h.focus != focusTabs {
 						t.Fatalf("%s: → opens the next tab", what)
 					}
-				} else if tb.tabIndex() != ti || h.View() == v0 || !strings.Contains(h.View(), "last tab") {
+				} else if tb.tabIndex() != ti || h.View() == v0 || !strings.Contains(statusText(h.View()), "last tab") {
 					t.Fatalf("%s: → on the last tab stays and says so:\n%s", what, h.View())
 				}
 			}
@@ -249,18 +258,17 @@ func TestEscClimbsFromDeepLevels(t *testing.T) {
 		keys  []string
 		crumb string // the breadcrumb at the deepest level
 	}{
-		{"help command details", homeOpts{start: "help"}, []string{"]", "]", "down", "down", "right"}, "Help › Commands › >audd docs<"},
-		{"help guide search", homeOpts{start: "help"}, []string{"]", "down", "/"}, "Help › Guide › >Search<"},
-		{"streams add", homeOpts{start: "streams"}, []string{"a"}, "Streams › Streams › >Add a stream<"},
-		{"streams plays", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › Streams › >Stream 1 · recent plays<"},
-		{"history details", homeOpts{start: "history"}, []string{"down", "right"}, "History › Recent › >Details<"},
-		{"history job", homeOpts{start: "history"}, []string{"]", "down", "right"}, "History › Jobs › >Job k3x9<"},
-		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › >token<"},
-		{"settings unset", homeOpts{start: "settings"}, []string{"u"}, "Settings › >Unset token?<"},
-		{"recognize file picker", homeOpts{start: "recognize"}, []string{"ctrl+o"}, "Recognize › File › >Pick a file<"},
-		{"recognize microphone", homeOpts{start: "listen"}, nil, "Recognize › >Microphone<"},
-		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "h"}, "Now playing › Stream 1 › >History<"},
-		{"sign-in paste", homeOpts{signedOut: true}, []string{"down", "enter"}, "Sign in › >Paste an API token<"},
+		{"help command details", homeOpts{start: "help"}, []string{"]", "]", "down", "down", "right"}, "Help › Commands › audd docs"},
+		{"help guide search", homeOpts{start: "help"}, []string{"]", "down", "/"}, "Help › Guide › Search"},
+		{"streams add", homeOpts{start: "streams"}, []string{"a"}, "Streams › List › Add a stream"},
+		{"streams plays", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › List › Stream 1 · recent plays"},
+		{"recognitions details", homeOpts{start: "recognitions"}, []string{"down", "right"}, "Recognitions › Recent › Details"},
+		{"recognitions job", homeOpts{start: "recognitions"}, []string{"]", "down", "right"}, "Recognitions › Jobs › Job k3x9"},
+		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › token"},
+		{"recognize file picker", homeOpts{start: "recognize"}, []string{"ctrl+o"}, "Recognize › File › Pick a file"},
+		{"recognize microphone", homeOpts{start: "listen"}, nil, "Recognize › Microphone"},
+		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "h"}, "Now playing › Stream 1 › History"},
+		{"sign-in paste", homeOpts{signedOut: true}, []string{"down", "enter"}, "Sign in › Paste an API token"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -281,7 +289,7 @@ func TestEscClimbsFromDeepLevels(t *testing.T) {
 // click on the page puts the keys there, and a click on the section's
 // name in the breadcrumb goes back to the sidebar.
 func TestMouseLevels(t *testing.T) {
-	for _, id := range []string{"streams", "history", "account", "help"} {
+	for _, id := range []string{"streams", "recognitions", "account", "help"} {
 		h := navHome(t, homeOpts{})
 		for i, s := range HomeSections {
 			if s == id {
@@ -420,19 +428,21 @@ func TestBracketsSwitchTabs(t *testing.T) {
 		t.Fatalf("] from the page: page %d focus %v", s.page, h.focus)
 	}
 	press(h, key("["), key("["))
-	if s.page != 0 || !strings.Contains(h.View(), "first tab") {
+	if s.page != 0 || !strings.Contains(statusText(h.View()), "first tab") {
 		t.Fatalf("[ stops at the first tab:\n%s", h.View())
 	}
 	// In the Commands filter, [ and ] are typed once it has text.
 	h = navHome(t, homeOpts{start: "help"})
 	hs := h.subs["help"].(*helpSection)
-	// Typing on the Commands tab bar goes into its filter.
+	// Typing on the Commands tab bar goes nowhere: letters only go into
+	// a field that has the keys.
 	press(h, key("]"), key("]"))
-	h.View()
 	press(h, typeText("st")...)
-	if h.focus != focusContent || hs.picker.filter.Value() != "st" {
+	if h.focus != focusTabs || hs.picker.filter.Value() != "" || !strings.Contains(statusText(h.View()), "t does nothing here") {
 		t.Fatalf("typing on the tab bar: focus %v filter %q", h.focus, hs.picker.filter.Value())
 	}
+	press(h, key("down"))
+	press(h, typeText("st")...)
 	press(h, key("]"))
 	if hs.page != 2 || hs.picker.filter.Value() != "st]" {
 		t.Fatalf("] typed in the filter: page %d filter %q", hs.page, hs.picker.filter.Value())
@@ -486,18 +496,29 @@ func TestMouse(t *testing.T) {
 		t.Fatal("click ticks a box")
 	}
 	click(t, h, "File, URL, or folder")
-	if !s.mic() {
-		t.Fatal("click on Source switches it")
+	if s.mic() || s.form.current().name != "source" {
+		t.Fatal("click on a choice selects it without changing it")
 	}
-	click(t, h, "‹ Microphone")
+	x, y := at(t, h.View(), "folder ›")
+	_, cmd := h.Update(tea.MouseMsg{X: x + len("folder "), Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	drain(h, cmd, 0)
+	if !s.mic() {
+		t.Fatal("click on › changes the choice")
+	}
+	x, y = at(t, h.View(), "‹ Microphone")
+	_, cmd = h.Update(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	drain(h, cmd, 0)
+	if s.mic() {
+		t.Fatal("click on ‹ changes the choice back")
+	}
 	click(t, h, "Show the plan")
 	f.waitFor(t, "recognize song.mp3 --return spotify --dry-run")
 
 	// List rows: the first click selects, the second opens.
-	click(t, h, "4 History")
+	click(t, h, "4 Recognitions")
 	drain(h, h.activate(), 0)
 	click(t, h, "No match")
-	ex := h.subs["history"].(*historySection).pane.ex
+	ex := h.subs["recognitions"].(*historySection).pane.ex
 	if l := ex.top(); l.cursor != 1 || l.detail || h.focus != focusContent {
 		t.Fatalf("click selects the row: cursor %d", l.cursor)
 	}
@@ -529,7 +550,7 @@ func TestMouse(t *testing.T) {
 	}
 	click(t, h, "Guide")
 	h.View()
-	_, cmd := h.Update(tea.MouseMsg{X: 40, Y: 10, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	_, cmd = h.Update(tea.MouseMsg{X: 40, Y: 10, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
 	drain(h, cmd, 0)
 	if hs.page != 1 || hs.scroll.off != 3 {
 		t.Fatalf("the wheel scrolls the guide: page %d off %d", hs.page, hs.scroll.off)
@@ -648,7 +669,7 @@ func TestUnknownKeyFlash(t *testing.T) {
 		v0 := h.View()
 		press(h, key("z"))
 		v := h.View()
-		if v == v0 || !strings.Contains(footerText(v), "z does nothing here · ? shows the keys") {
+		if v == v0 || !strings.Contains(statusText(v), "z does nothing here · ? shows the keys") || strings.Contains(footerText(v), "does nothing") {
 			t.Fatalf("%s: no feedback for z:\n%s", c.start, v)
 		}
 	}
@@ -714,7 +735,8 @@ func TestDisabledButtonSaysWhy(t *testing.T) {
 		t.Fatalf("the disabled button gives no reason:\n%s", v)
 	}
 	press(h, key("enter"))
-	if len(f.commands()) != 0 || s.form.err != "Enter a file, URL, or folder first" {
+	// Pressing it puts the cursor on the field to fill in, with why.
+	if len(f.commands()) != 0 || s.form.current().name != "input" || !strings.Contains(h.View(), "Enter a file, URL, or folder (ctrl+o picks a file)") {
 		t.Fatalf("pressing it ran %q:\n%s", f.commands(), h.View())
 	}
 }

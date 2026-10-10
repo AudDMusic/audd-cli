@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Help › >Getting started<
+                 │ Help › Getting started
  1 Recognize     │ >Getting started< Guide  Commands  Keys  Exit codes  Links 
  2 Now playing   │ Getting started
  3 Streams       │ 
- 4 History       │ · 1. Sign in
+ 4 Recognitions  │ · 1. Sign in  ✓ done
  5 Account       │      Sign in to your AudD account (or paste an API token) so
  6 Settings      │      audd can recognize music and show your account.
 *7 Help          >      $ audd login
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │      In Recognize, set Source to Microphone to record a few
                  │      seconds and identify the song.
                  │      $ audd listen
-                 │ 
- ctrl+k commands │   4. Add a stream
- ? keys  q quit  │      Have AudD monitor a radio or other live stream, then
+ ctrl+k commands │ 
+ ? keys  q quit  │   4. Add a stream
+
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login                                                              y copy

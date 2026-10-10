@@ -231,7 +231,7 @@ func interactiveTarget(path string) string {
 	case "now-playing", "streams watch":
 		return "now-playing"
 	case "browse", "jobs browse":
-		return "history"
+		return "recognitions"
 	case "login", "auth login":
 		return "signin"
 	case "listen":
@@ -437,6 +437,11 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		return p.picker.filter.Focus()
 	}
 	if mine, done := p.panel.handle(msg); mine {
+		if done && p.panel.res.err != nil && p.panel.res.err.Code == "declined" {
+			// Cancelled at the confirmation: back to the form, as it was.
+			p.phase = "form"
+			return p.h.setFlash("Cancelled. Nothing was sent.")
+		}
 		if done {
 			p.phase = "result"
 			p.tree = nil
@@ -458,6 +463,9 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 	_, ht := p.h.contentSize()
 	switch p.phase {
 	case "list":
+		if k.String() == "enter" && p.picker.selected() == nil {
+			return p.h.setFlash("No command matches; keep typing or esc")
+		}
 		picked, cmd := p.picker.update(k)
 		if picked {
 			return p.openForm(p.picker.selected().value)
@@ -466,6 +474,16 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 	case "form":
 		act, cmd := p.cf.form.update(k)
 		if act == "run" {
+			if c, ok := destructive[p.cf.info.path]; ok {
+				return p.h.askFirst(&confirmState{
+					owner:    "palette",
+					question: c[0],
+					notes:    []string{c[1]},
+					command:  displayCommand(p.cf.argv()),
+					cancel:   "Cancelled. Nothing was changed.",
+					yes:      p.run,
+				})
+			}
 			return p.run()
 		}
 		return cmd
@@ -489,6 +507,16 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return p.panel.key(k, ht)
+}
+
+// destructive are the commands the palette asks about first, with what
+// they do; commands that ask on their own (spending, rotating the
+// token) ask through their own confirmation.
+var destructive = map[string][2]string{
+	"cache clear":          {"Clear the cache?", "Every cached result is deleted; recognizing the same files again uses requests."},
+	"streams callback set": {"Change the callback URL?", "AudD sends every result of every stream on your account to the new address."},
+	"auth logout":          {"Sign out?", "The saved sign-in and API token of this profile are removed from this computer."},
+	"config unset":         {"Unset the setting?", "It goes back to its default."},
 }
 
 func (p *palette) run() tea.Cmd {
@@ -621,7 +649,7 @@ func (p *palette) keys() []keyHelp {
 	case "list":
 		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, {"esc", "close"}}
 	case "form":
-		return []keyHelp{{"↑/↓", "field"}, {"enter", "next / run"}, {"space", "tick"}}
+		return p.cf.form.rowKeys("run")
 	}
 	if p.panel.running {
 		return []keyHelp{{"↑/↓", "scroll"}, {"s", "stop"}}

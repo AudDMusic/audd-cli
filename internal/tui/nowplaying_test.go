@@ -508,7 +508,7 @@ func TestNowPlayingScreenHealthDown(t *testing.T) {
 	m := npTestModel(t, sampleFeed(), []int{3}, true)
 	view := runModel(t, m, "Roads")
 	testutil.Golden(t, "nowplaying_down", []byte(view))
-	if !strings.Contains(view, "Last heard: Portishead — Roads · 3 h ago") {
+	if !strings.Contains(view, "Last heard: Portishead — Roads · at 09:00") {
 		t.Fatalf("down view:\n%s", view)
 	}
 }

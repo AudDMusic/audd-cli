@@ -192,7 +192,7 @@ func TestExplorerStreamsTab(t *testing.T) {
 	m := explorerModel(t, "streams", api)
 	view := runModel(t, m, "Feeling Good")
 	testutil.Golden(t, "explorer_streams", []byte(view))
-	if !strings.Contains(view, "Can't connect (650)") {
+	if !strings.Contains(view, "No connection") {
 		t.Fatalf("health column:\n%s", view)
 	}
 

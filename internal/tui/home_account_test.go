@@ -25,7 +25,7 @@ func TestAccountSignedOutPanel(t *testing.T) {
 func TestAccountPages(t *testing.T) {
 	f := accountFake()
 	snap(t, "account_overview", func() *home { return newTestHome(t, f, homeOpts{start: "account", loggedIn: true}) }, "Paid until")
-	snap(t, "account_billing", func() *home { return newTestHome(t, f, homeOpts{start: "account", loggedIn: true}) }, "Paid until", key("]"), key("]"), "pro_plan", "Amount owed")
+	snap(t, "account_billing", func() *home { return newTestHome(t, f, homeOpts{start: "account", loggedIn: true}) }, "Paid until", key("]"), key("]"), "$900.00", "Amount owed")
 }
 
 // A payment link is shown and opened only on a keypress; nothing passes
@@ -37,13 +37,13 @@ func TestAccountBillingLink(t *testing.T) {
 	openURL = func(u string) error { opened = append(opened, u); return nil }
 	t.Cleanup(func() { openURL = old })
 	h := newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "pro_plan", key("down"), key("down"),
-		"audd billing subscribe pro_plan", key("s"), "https://checkout.stripe.example/c/pay_123")
+	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "$900.00", key("down"), key("down"),
+		"audd billing subscribe pro_plan", key("enter"), "https://checkout.stripe.example/c/pay_123")
 	if !strings.Contains(v, "nothing is charged until you confirm there") || len(opened) != 0 {
 		t.Fatalf("link:\n%s\nopened %v", v, opened)
 	}
 	h = newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "pro_plan", key("s"), "checkout.stripe.example", key("enter"), "Opened the payment page")
+	drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "$900.00", key("down"), key("down"), key("enter"), "checkout.stripe.example", key("enter"), "Opened the payment page")
 	if len(opened) != 1 || opened[0] != "https://checkout.stripe.example/c/pay_123" {
 		t.Fatalf("enter opens the link: %v", opened)
 	}
@@ -77,11 +77,11 @@ func TestAccountTokenRevealAndRotate(t *testing.T) {
 	}
 	h = newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
 	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), key("]"), "0123…cdef", key("v"), "0123456789abcdef0123456789abcdef",
-		key("R"), "Type rotate", typeText("rota"), key("enter"), "That does not match", typeText("te"), key("enter"), "fedc…3210")
+		key("T"), "Type rotate", typeText("rota"), key("enter"), "That does not match", typeText("te"), key("enter"), "fedc…3210", "Rotated")
 	if ok := <-answered; !ok {
 		t.Fatal("typing rotate confirms")
 	}
-	if !strings.Contains(v, "Rotated") {
+	if !strings.Contains(v, "fedc…3210") {
 		t.Fatalf("rotate:\n%s", v)
 	}
 }

@@ -178,7 +178,7 @@ func TestHelpPages(t *testing.T) {
 		for range i {
 			steps = append(steps, key("]"))
 		}
-		steps = append(steps, []string{"Getting started", "AUDD CLI", "streams add", "Everywhere", "Exit codes", "Report a problem"}[i])
+		steps = append(steps, []string{"Getting started", "Using interactive mode", "streams add", "Moving around", "Exit codes", "Report a problem"}[i])
 		snap(t, "help_"+name, func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "help"}) }, steps...)
 	}
 }

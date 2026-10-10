@@ -1,24 +1,24 @@
 AudD  ·  profile default
-                 │ Help › >Keys<
+                 │ Help › Keys
  1 Recognize     │  Getting started  Guide  Commands >Keys< Exit codes  Links 
  2 Now playing   │ Moving around
  3 Streams       │   Menu on the left, page on the right. Arrows move, Enter
- 4 History       │   goes in, Esc comes back.
- 5 Account       │   The menu is the sidebar; Help, Streams, History, and
- 6 Settings      │   Account have a tab bar above their page. A key that does
-*7 Help          >   nothing where you press it says so at the bottom.
+ 4 Recognitions  │   goes in, Esc comes back.
+ 5 Account       │   The menu is the sidebar; Help, Streams, Recognitions, and
+ 6 Settings      │   Account have a tab bar above their page. On a choice ‹ like
+*7 Help          >   this ›, ←/→ change it and ← on its first option goes back.
+                 │   While you type in a field, letters and digits go into it:
+                 │   esc leaves the field, ctrl+u clears it, and 1-7, q, and ?
+                 │   work again once you are out. A key that does nothing where
+                 │   you press it says so at the bottom.
                  │ 
                  │   ↑/↓            move in the menu, a list, or a form
-                 │   → or enter     go in: open the section, the page, the sele…
-                 │   ← or esc       come back one level (in typed text ← moves …
-                 │   ←/→            on a tab bar: switch tabs
-                 │   ↑              from the top of a page: back to its tab bar
-                 │   [ ]            previous or next tab, from anywhere in the …
-                 │   → space enter  change a choice ‹ like this ›; ← still goes…
-                 │ 
-                 │ Everywhere
-                 │   1-7            jump to a section
- ctrl+k commands │   ctrl+k or :    run any command
- ? keys  q quit  │   y              copy the command shown at the bottom
+                 │   → or enter     go in: open the section, the page, the
+                 │                  selected item
+                 │   ← or esc       come back one level (in typed text ← moves
+                 │                  the cursor)
+ ctrl+k commands │   ←/→            on a tab bar: switch tabs; on a choice:
+ ? keys  q quit  │ ↓ 131 more lines below
+
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

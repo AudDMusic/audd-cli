@@ -42,7 +42,11 @@ func (m *explorer) usageView() string {
 		b.WriteString(dayChart(u.Days, m.w-4, m.h-16, m.st))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n" + m.st.Dim.Render("Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"))
+	if m.embedded {
+		b.WriteString("\n" + m.st.Dim.Render("Plans, payments, and more requests: → or enter opens the Billing tab."))
+	} else {
+		b.WriteString("\n" + m.st.Dim.Render("Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"))
+	}
 	return b.String()
 }
 

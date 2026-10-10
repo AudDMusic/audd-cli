@@ -34,8 +34,8 @@ func TestNowPlayingSection(t *testing.T) {
 }
 
 func TestHistorySection(t *testing.T) {
-	snap(t, "history", func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "history"}) }, "Warriors")
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "history"}), 120, 40)
+	snap(t, "history", func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}) }, "Warriors")
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}), 120, 40)
 	drain(h, h.activate(), 0)
 	if h.command() != "audd browse --tab recent" {
 		t.Fatalf("command: %s", h.command())
@@ -52,8 +52,8 @@ func TestHistoryResumesJob(t *testing.T) {
 	f.reply("jobs resume k3x9 --retry-failed",
 		`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"matched","result":{"artist":"Portishead","title":"Roads"}}`+"\n"+
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
-	h := newTestHome(t, f, homeOpts{start: "history"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("R"), "Job k3x9: 3 recognized")
+	h := newTestHome(t, f, homeOpts{start: "recognitions"})
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("F"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -102,7 +102,8 @@ func TestStreamsExportWritesFile(t *testing.T) {
 	s.dataForm.get("kind").setValue("export")
 	s.dataForm.get("since").setValue("all")
 	s.syncData()
-	if h.command() != "audd streams export --since all --format jsonl > plays.jsonl" {
+	// The command names the very file that is written.
+	if want := "audd streams export --since all --format jsonl > " + shellQuote(s.exportPath()); h.command() != want || filepath.Dir(s.exportPath()) != dir {
 		t.Fatalf("command: %s", h.command())
 	}
 	press(h, key("enter"))
@@ -143,7 +144,7 @@ func TestStreamsAddAndRemove(t *testing.T) {
 		t.Fatalf("after adding:\n%s", h.View())
 	}
 	press(h, key("d"))
-	if !strings.Contains(h.View(), "Remove stream 1?") || h.command() != "audd streams remove 1" {
+	if v := h.View(); !strings.Contains(v, "Remove stream 1?") || !strings.Contains(v, "AudD stops monitoring it") || h.command() != "audd streams remove 1" || strings.Contains(v, "y copy") {
 		t.Fatalf("remove asks:\n%s", h.View())
 	}
 	press(h, key("y"))
@@ -155,7 +156,7 @@ func TestStreamsAddAndRemove(t *testing.T) {
 }
 
 func TestExplorerPaneError(t *testing.T) {
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "history"}), 100, 30)
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}), 100, 30)
 	NewExplorerData = func(a *app.App) (ExplorerData, error) {
 		return ExplorerData{}, output.Errf(3, "no_token", "audd login", "no API token is set")
 	}

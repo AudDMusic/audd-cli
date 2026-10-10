@@ -281,12 +281,12 @@ func playStatus(p Play, now time.Time) (head, detail string, bar bool) {
 		}
 		return "Now playing · " + clock(p.Elapsed(now)), "", false
 	case StateJustPlayed:
-		head = "Just played · ended " + ago(p.Ago(now))
+		head = "Just played · ended " + agoAt(p.Ago(now), now)
 	default:
 		if _, ok := p.Ended(); !ok {
-			return "Last recognized " + ago(p.Ago(now)), "", false
+			return "Last recognized " + agoAt(p.Ago(now), now), "", false
 		}
-		head = "Last played · ended " + ago(p.Ago(now))
+		head = "Last played · ended " + agoAt(p.Ago(now), now)
 	}
 	detail = "played " + clock(p.Played())
 	if p.TrackLength > 0 {

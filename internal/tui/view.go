@@ -205,5 +205,18 @@ func ago(d time.Duration) string {
 	return fmt.Sprintf("%d days ago", int(d/(24*time.Hour)))
 }
 
+// agoAt is an age like ago within the hour, then the clock time, and the
+// date too when it was not today.
+func agoAt(d time.Duration, now time.Time) string {
+	if d < time.Hour {
+		return ago(d)
+	}
+	t, n := now.Add(-d).In(localZone), now.In(localZone)
+	if t.YearDay() == n.YearDay() && t.Year() == n.Year() {
+		return "at " + t.Format("15:04")
+	}
+	return "on " + t.Format("Jan 02 15:04")
+}
+
 // localZone is the zone clock times are shown in (tests use UTC).
 var localZone = time.Local

@@ -100,7 +100,7 @@ func (s *signinSection) keys() []keyHelp {
 		}
 		return nil
 	case "paste":
-		return []keyHelp{{"type", "paste"}, {"enter", "save"}}
+		return s.paste.rowKeys("save")
 	}
 	return []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}}
 }
@@ -117,7 +117,7 @@ func (s *signinSection) keysFor(p *cmdPanel) []keyHelp {
 // choices is how many choices the screen offers: the Account section
 // only offers the sign-in (a token alone does not reach the account).
 func (s *signinSection) choices() int {
-	if s.heading != "" {
+	if s.heading != "" && !s.h.signedOut {
 		return 1
 	}
 	return len(signinChoices)
@@ -128,9 +128,13 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 		if done {
 			if s.panel.res.ok() {
 				switch s.panel.args[0] {
-				case "login", "config":
+				case "login":
 					s.step = ""
 					return s.h.signedIn(false)
+				case "config":
+					s.step = ""
+					s.paste.get("token").setValue("")
+					return tea.Batch(s.h.signedIn(false), s.h.setFlash("Token saved for profile "+s.h.profileName()))
 				}
 			}
 			if s.step == "paste" && s.panel.res.err != nil {
@@ -204,9 +208,12 @@ func (s *signinSection) view(w, h int) string {
 	if s.heading != "" {
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
 		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
+		if s.choices() > 1 {
+			b.WriteString(output.Wrap("To only recognize music, an API token is enough:", w) + "\n\n")
+		}
 	} else {
 		b.WriteString(st.Bold.Render("Welcome to AudD") + "\n\n")
-		b.WriteString(output.Wrap("audd recognizes music in files, URLs, and from the microphone, monitors streams, and manages your account. To start, choose how audd gets your API token:", w) + "\n\n")
+		b.WriteString(output.Wrap("Recognize music in files, URLs, and from the microphone, and monitor streams. Choose how audd gets your API token:", w) + "\n\n")
 	}
 	for i, c := range signinChoices[:s.choices()] {
 		item := s.h.listRow(c.title, i == s.choice) + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))

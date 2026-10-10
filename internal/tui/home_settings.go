@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -28,8 +29,9 @@ type settingsSection struct {
 	err     error
 	profile string
 	path    string
-	// confirm is the key u asked to unset, while asking.
-	confirm string
+	// orig is the value the editor started with: enter without a change
+	// saves nothing.
+	orig string
 }
 
 func newSettingsSection(h *home) section { return &settingsSection{h: h, panel: newPanel(h)} }
@@ -81,11 +83,11 @@ func (s *settingsSection) selected() *settingRow {
 func (s *settingsSection) editor(r settingRow) *field {
 	switch r.key {
 	case "format":
-		f := enumField("value", "format", "→ or space to choose, enter to save", []string{"table", "json", "jsonl", "csv"})
+		f := enumField("value", "format", "←/→ to choose, enter to save. auto: a table on a terminal, JSON when piped", []string{"auto", "table", "json", "jsonl", "csv"})
 		f.setValue(r.value)
 		return f
 	case "streams.background_recorder":
-		f := enumField("value", r.key, "→ or space to choose, enter to save", []string{"true", "false"})
+		f := enumField("value", r.key, "←/→ to choose, enter to save", []string{"true", "false"})
 		f.setValue(r.value)
 		return f
 	case "token":
@@ -96,12 +98,46 @@ func (s *settingsSection) editor(r settingRow) *field {
 		f.input.Focus()
 		return f
 	}
-	f := textField("value", r.key, "A whole number, then enter")
-	if r.source == config.SettingFile {
+	f := &field{kind: fInt, name: "value", label: r.key, help: "A whole number, then enter", input: newInput()}
+	if _, err := strconv.Atoi(r.value); err == nil {
+		// The value in effect, from the file, the environment, or the
+		// default.
 		f.setValue(r.value)
 	}
 	f.input.Focus()
 	return f
+}
+
+// startEdit opens the editor on the selected setting.
+func (s *settingsSection) startEdit() {
+	if r := s.selected(); r != nil {
+		s.edit = s.editor(*r)
+		s.orig = s.edit.value()
+	}
+}
+
+// askUnset asks before unsetting the selected setting, and says what
+// that does.
+func (s *settingsSection) askUnset() tea.Cmd {
+	r := s.selected()
+	if r == nil {
+		return nil
+	}
+	what := "It goes back to its default."
+	if r.key == "token" {
+		what = "audd then has no API token for this profile until you set one or sign in."
+	}
+	key := r.key
+	return s.h.askFirst(&confirmState{
+		owner:    "settings",
+		question: fmt.Sprintf("Unset %s in profile %s?", key, s.profile),
+		notes:    []string{what},
+		command:  "audd config unset " + key,
+		cancel:   "Kept " + key,
+		yes: func() tea.Cmd {
+			return s.panel.start(runReq{args: []string{"config", "unset", key}})
+		},
+	})
 }
 
 func (s *settingsSection) setArgs() []string {
@@ -124,12 +160,19 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		if done {
 			s.load()
 			if s.panel.res.ok() {
-				what := "Removed " + s.panel.args[2]
-				if s.panel.args[1] == "set" {
-					what = "Set " + s.panel.args[2]
-					if s.panel.args[2] == "token" {
-						s.h.signedOut = s.h.noToken()
-					}
+				key := s.panel.args[2]
+				what := key + " is back to its default"
+				switch {
+				case key == "token" && s.panel.args[1] == "unset":
+					what = "API token removed from profile " + s.profile
+				case key == "token":
+					what = "Token saved for profile " + s.profile
+				case s.panel.args[1] == "set":
+					what = strings.ToUpper(key[:1]) + key[1:] + " set to " + s.panel.args[3]
+				}
+				if key == "token" {
+					s.h.signedOut = s.h.noToken()
+					return tea.Batch(s.h.setFlash(what), s.h.loadHeader())
 				}
 				return s.h.setFlash(what)
 			}
@@ -141,14 +184,6 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	ks := k.String()
-	if s.confirm != "" {
-		key := s.confirm
-		s.confirm = ""
-		if ks == "y" || ks == "Y" {
-			return s.panel.start(runReq{args: []string{"config", "unset", key}})
-		}
-		return s.h.setFlash("Kept " + key)
-	}
 	if s.edit != nil {
 		switch ks {
 		case "esc":
@@ -157,15 +192,31 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		case "enter":
 			args := s.setArgs()
 			v := s.edit.value()
-			if v == "" {
+			switch {
+			case v == s.orig:
+				s.edit = nil
+				return s.h.setFlash("No change")
+			case v == "":
 				return s.h.setFlash("Enter a value, or esc to cancel")
+			case s.edit.check() != "":
+				s.edit.problem = s.edit.check()
+				return nil
 			}
 			s.edit = nil
+			if args[2] == "format" && v == "auto" {
+				return s.panel.start(runReq{args: []string{"config", "unset", "format"}})
+			}
 			req := runReq{args: args}
 			if args[2] == "token" {
 				req.stdin = v
 			}
 			return s.panel.start(req)
+		case "ctrl+u":
+			if s.edit.isText() {
+				s.edit.input.SetValue("")
+				s.edit.problem = ""
+			}
+			return nil
 		}
 		switch s.edit.kind {
 		case fEnum:
@@ -175,6 +226,8 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		}
 		var cmd tea.Cmd
 		s.edit.input, cmd = s.edit.input.Update(k)
+		// A number is checked as it is typed.
+		s.edit.problem = s.edit.formatProblem()
 		return cmd
 	}
 	switch ks {
@@ -183,13 +236,9 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 	case "up", "k":
 		s.cur = max(0, s.cur-1)
 	case "enter", "e", "right":
-		if r := s.selected(); r != nil {
-			s.edit = s.editor(*r)
-		}
-	case "u", "delete", "backspace":
-		if r := s.selected(); r != nil {
-			s.confirm = r.key
-		}
+		s.startEdit()
+	case "d", "delete", "backspace":
+		return s.askUnset()
 	case "r":
 		s.load()
 	}
@@ -223,13 +272,17 @@ func (s *settingsSection) view(w, h int) string {
 			line += "  " + st.Dim.Render("("+r.source+")")
 		}
 		line = s.h.listRow(line, i == s.cur)
-		row := truncate(line, w) + "\n" + truncate("    "+st.Dim.Render(r.desc), w)
+		desc := st.Dim.Render(r.desc)
+		if s.edit != nil && i == s.cur && s.edit.problem != "" {
+			desc = st.Warn.Render(s.edit.problem)
+		}
+		row := truncate(line, w) + "\n" + truncate("    "+desc, w)
 		b.WriteString(s.h.mark(row, func() tea.Cmd {
 			if s.edit != nil && s.cur == i {
 				return nil
 			}
 			if s.cur == i {
-				s.edit = s.editor(r)
+				s.startEdit()
 				return nil
 			}
 			s.cur, s.edit = i, nil
@@ -239,9 +292,6 @@ func (s *settingsSection) view(w, h int) string {
 	if s.edit != nil {
 		b.WriteString("\n" + styleLines(st.Dim, output.Wrap(s.edit.help+"; esc cancels.", w)) + "\n")
 	}
-	if s.confirm != "" {
-		b.WriteString("\n" + styleLines(st.Warn, output.Wrap(s.unsetQuestion(), w)) + "\n")
-	}
 	if s.panel.res != nil && s.panel.res.err != nil {
 		b.WriteString("\n" + errorText(st, s.panel.res.err, w) + "\n")
 	}
@@ -249,33 +299,19 @@ func (s *settingsSection) view(w, h int) string {
 	return b.String()
 }
 
-// unsetQuestion names what unsetting the selected setting does.
-func (s *settingsSection) unsetQuestion() string {
-	what := "it goes back to its default"
-	if s.confirm == "token" {
-		what = "audd then has no API token for this profile until you set one or sign in"
-	}
-	return fmt.Sprintf("Unset %s in profile %s? %s. [y/N]", s.confirm, s.profile, strings.ToUpper(what[:1])+what[1:])
-}
-
 func (s *settingsSection) keys() []keyHelp {
 	switch {
-	case s.confirm != "":
-		return []keyHelp{{"y", "unset"}, {"n", "keep it"}}
 	case s.edit != nil && s.edit.kind == fEnum:
-		return []keyHelp{{"→/space", "change"}, {"enter", "save"}, {"esc", "cancel"}}
+		return []keyHelp{{"←/→", "change"}, {"enter", "save"}, {"esc", "cancel"}}
 	case s.edit != nil:
 		return []keyHelp{{"type", "the value"}, {"enter", "save"}, {"esc", "cancel"}}
 	}
-	return []keyHelp{{"↑/↓", "move"}, {"→/enter", "change"}, {"u", "unset"}, {"r", "reload"}}
+	return []keyHelp{{"↑/↓", "move"}, {"→/enter/e", "change"}, {"d", "unset"}, {"r", "reload"}}
 }
 
 func (s *settingsSection) crumbs() []string {
-	switch {
-	case s.edit != nil:
+	if s.edit != nil {
 		return []string{s.selected().key}
-	case s.confirm != "":
-		return []string{"Unset " + s.confirm + "?"}
 	}
 	return nil
 }
@@ -283,9 +319,6 @@ func (s *settingsSection) crumbs() []string {
 func (s *settingsSection) command() string {
 	if s.edit != nil {
 		return displayCommand(s.setArgs())
-	}
-	if s.confirm != "" {
-		return "audd config unset " + s.confirm
 	}
 	if s.panel.args != nil && s.panel.running {
 		return displayCommand(s.panel.args)
@@ -296,16 +329,16 @@ func (s *settingsSection) command() string {
 	return "audd config list"
 }
 
-func (s *settingsSection) capturing() bool { return s.edit != nil || s.confirm != "" }
+func (s *settingsSection) capturing() bool { return s.edit != nil && s.edit.isText() }
 
 // leftExits: left goes back: from an edit it cancels (in typed text once
 // the cursor is at the start).
 func (s *settingsSection) leftExits() bool {
 	switch {
-	case s.confirm != "":
-		return false
 	case s.edit != nil && s.edit.isText():
 		return s.edit.input.Position() == 0
+	case s.edit != nil && s.edit.kind == fEnum:
+		return s.edit.choice == 0
 	}
 	return true
 }
@@ -318,11 +351,7 @@ func (s *settingsSection) wheel(dir int) tea.Cmd {
 }
 
 func (s *settingsSection) back() bool {
-	switch {
-	case s.confirm != "":
-		s.confirm = ""
-		return true
-	case s.edit != nil:
+	if s.edit != nil {
 		s.edit = nil
 		return true
 	}

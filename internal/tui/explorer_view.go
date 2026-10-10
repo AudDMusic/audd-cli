@@ -119,6 +119,10 @@ func (m *explorer) statusLine() string {
 		return truncate(m.st.Dim.Render(m.flash), m.w)
 	}
 	if l := m.top(); l != nil && m.tab != tabUsage && !m.help {
+		if r := l.selected(); r != nil && r.hint != "" && !l.detail {
+			// What to do about the selected row (a stream that is down).
+			return truncate(m.st.Warn.Render(r.hint), m.w)
+		}
 		n := len(l.visible())
 		s := fmt.Sprintf("%s · %d", l.title, n)
 		if l.filter != "" {
@@ -170,20 +174,20 @@ func (m *explorer) embeddedKeys() []string {
 	l := m.top()
 	switch {
 	case m.tab == tabUsage:
-		return []string{"r refresh", "e export"}
+		return []string{"→/enter plans and payments", "r refresh", "x export"}
 	case l == nil:
 		return nil
 	case l.detail:
-		return []string{"↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC"}
+		return []string{"↑/↓ scroll", "o open link", "c copy link", "i copy ISRC", "u copy UPC"}
 	}
 	keys := []string{"↑/↓ move", "→ open"}
 	switch l.kind {
 	case "streams":
-		keys = append(keys, "a add", "d remove", "u set URL")
+		keys = append(keys, "a add", "d remove", "e change URL")
 	case "jobs", "items":
-		keys = append(keys, "r resume", "R retry failed")
+		keys = append(keys, "R resume", "F retry failed")
 	}
-	keys = append(keys, "/ filter", "o open", "c copy", "e export")
+	keys = append(keys, "o open link", "c copy link", "/ filter", "x export", "r refresh", "i copy ISRC", "u copy UPC")
 	if len(m.allowed) > 1 {
 		keys = append(keys, "tab next tab")
 	}
@@ -255,9 +259,13 @@ func (m *explorer) levelView(l *level, h int) string {
 		}
 		return m.st.Dim.Render("Nothing here yet.")
 	}
-	widths := colWidths(l.cols, m.w)
+	cols := l.cols
+	if l.kind == "streams" {
+		cols = streamColsFor(m.w)
+	}
+	widths := colWidths(cols, m.w)
 	var b strings.Builder
-	head := cellsLine(colTitles(l.cols), widths)
+	head := cellsLine(colTitles(cols), widths)
 	if !m.color {
 		head = "  " + head
 	}
@@ -270,7 +278,14 @@ func (m *explorer) levelView(l *level, h int) string {
 		l.offset = l.cursor - listH + 1
 	}
 	for i := l.offset; i < len(rows) && i < l.offset+listH; i++ {
-		line := cellsLine(rows[i].cells, widths)
+		cells := rows[i].cells
+		for c, col := range cols {
+			if col.mid && c < len(cells) && c < len(widths) {
+				cells = append([]string(nil), cells...)
+				cells[c] = truncMiddle(cells[c], widths[c])
+			}
+		}
+		line := cellsLine(cells, widths)
 		if i == l.cursor {
 			switch {
 			case m.color && m.blur:
@@ -360,4 +375,21 @@ func padRight(s string, w int) string {
 		return s + strings.Repeat(" ", n)
 	}
 	return s
+}
+
+// truncMiddle shortens s to w cells keeping its start and its end
+// (https://radio.example…/stream.mp3).
+func truncMiddle(s string, w int) string {
+	r := []rune(s)
+	if len(r) <= w || w < 8 {
+		return truncate(s, w)
+	}
+	// Keep the scheme and host when there is room, then the end.
+	head := (w - 1) * 3 / 5
+	if i := strings.Index(s, "://"); i >= 0 {
+		host := i + 3 + strings.IndexByte(s[i+3:]+"/", '/')
+		head = max(head, min(len([]rune(s[:host])), w-1-8))
+	}
+	tail := w - 1 - head
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }

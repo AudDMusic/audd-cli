@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ >Commands<
+                 │ Commands
  1 Recognize     > Run a command
  2 Now playing   │ >                                                           
  3 Streams       │ 
- 4 History       │ > completion      Print a shell completion script
+ 4 Recognitions  │ > completion      Print a shell completion script
  5 Account       │   docs            Print AudD documentation as markdown
  6 Settings      │   now-playing     Show the latest songs on your streams
  7 Help          │   recognize       Identify music in files, URLs, and folders
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-type filter  ↑/↓ move  enter open  ←/esc close
+
+type filter  ↑/↓ move  enter open  esc close  ctrl+u clear
 $ audd completion                                                         y copy

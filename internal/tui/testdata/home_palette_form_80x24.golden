@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Commands › >audd streams add<
+                 │ Commands › audd streams add
  1 Recognize     > audd streams add  Add a stream to monitor
  2 Now playing   │ 
  3 Streams       │ › url*                                                      
- 4 History       │   --id*   ·
+ 4 Recognitions  │   --id*   ·
  5 Account       │   [ ] --start
  6 Settings      │ 
  7 Help          │   [ Run ]
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ field  enter next / run  ←/esc back  space tick
+
+↑/↓ field  enter run  esc leave the field  ctrl+u clear
 $ audd streams add '<url>'                                                y copy

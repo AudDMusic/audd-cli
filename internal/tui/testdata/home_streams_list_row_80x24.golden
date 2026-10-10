@@ -1,10 +1,10 @@
 AudD  ·  profile default
-                 │ Streams › Streams
- 1 Recognize     │ [Streams] Callback  Recorder  History & reports 
- 2 Now playing   │   ID    Health     Latest …  When      URL
-*3 Streams       >   1     Live       Imagine…  ended 1…  https://ra…
- 4 History       │ > 2     Live       Nina Si…  ended 2…  https://ra…
- 5 Account       │   3     Can't co…  Portish…  ended 3…  https://ra…
+                 │ Streams › List
+ 1 Recognize     │ [List] Callback  Recorder  History & reports 
+ 2 Now playing   │   ID    Health         Latest song        When
+*3 Streams       >   1     Live           Imagine Dragons …  ended 1 min ago
+ 4 Recognitions  │ > 2     Live           Nina Simone — Fe…  ended 21 min ago
+ 5 Account       │   3     No connection  Portishead — Roa…  ended at 09:00
  6 Settings      │ 
  7 Help          │ 
                  │ 
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ Streams · 3
+
 ↑/↓ move  → open  ←/esc back  a add  d remove  ? keys
 $ audd streams list                                                       y copy

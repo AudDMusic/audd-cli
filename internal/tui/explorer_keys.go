@@ -271,6 +271,14 @@ func (m *explorer) startInput(p inputPurpose, prompt, value string) tea.Cmd {
 
 func (m *explorer) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
+	case "ctrl+u":
+		m.input.SetValue("")
+		if m.purpose == inputFilter {
+			if l := m.top(); l != nil {
+				l.filter, l.cursor = "", 0
+			}
+		}
+		return m, nil
 	case "esc", "ctrl+c":
 		if m.purpose == inputFilter {
 			if l := m.top(); l != nil {

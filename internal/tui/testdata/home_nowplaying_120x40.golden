@@ -3,7 +3,7 @@ AudD  ·  profile default
  1 Recognize     │ Now playing                                                                             stream 1 of 3
 *2 Now playing   > 
  3 Streams       │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
- 4 History       │ ┃ Stream 1                                       ┃│ Stream 2                                       │
+ 4 Recognitions  │ ┃ Stream 1                                       ┃│ Stream 2                                       │
  5 Account       │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
  6 Settings      │ ┃ Warriors                                       ┃│ Feeling Good                                   │
  7 Help          │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
@@ -13,7 +13,7 @@ AudD  ·  profile default
                  │ ╭────────────────────────────────────────────────╮
                  │ │ Stream 3                                       │
                  │ │ Can't connect to the stream (650)              │
-                 │ │ Last heard: Portishead — Roads · 3 h ago       │
+                 │ │ Last heard: Portishead — Roads · at 09:00      │
                  │ │                                                │
                  │ │                                                │
                  │ │                                                │
@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/→/↑/↓ select  enter zoom  ←/esc back  o open  c copy link  ? keys
+
+←/→/↑/↓ select  enter zoom  ←/esc back  h history  o open link  ? keys
 $ audd now-playing                                                                                                y copy

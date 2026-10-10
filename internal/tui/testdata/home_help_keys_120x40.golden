@@ -1,40 +1,40 @@
 AudD  ·  profile default
-                 │ Help › >Keys<
+                 │ Help › Keys
  1 Recognize     │  Getting started  Guide  Commands >Keys< Exit codes  Links 
  2 Now playing   │ Moving around
  3 Streams       │   Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
- 4 History       │   The menu is the sidebar; Help, Streams, History, and Account have a tab bar above their page. A key
- 5 Account       │   that does nothing where you press it says so at the bottom.
- 6 Settings      │ 
-*7 Help          >   ↑/↓            move in the menu, a list, or a form
+ 4 Recognitions  │   The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page.
+ 5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a
+ 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it, and 1-7, q, and ?
+*7 Help          >   work again once you are out. A key that does nothing where you press it says so at the bottom.
+                 │ 
+                 │   ↑/↓            move in the menu, a list, or a form
                  │   → or enter     go in: open the section, the page, the selected item
                  │   ← or esc       come back one level (in typed text ← moves the cursor)
-                 │   ←/→            on a tab bar: switch tabs
+                 │   ←/→            on a tab bar: switch tabs; on a choice: change it
                  │   ↑              from the top of a page: back to its tab bar
                  │   [ ]            previous or next tab, from anywhere in the section
-                 │   → space enter  change a choice ‹ like this ›; ← still goes back
                  │ 
                  │ Everywhere
-                 │   1-7            jump to a section
-                 │   ctrl+k or :    run any command
+                 │   1-7            jump to a section (not while typing in a field)
+                 │   ctrl+k or :    run any command; ctrl+k again closes it
                  │   y              copy the command shown at the bottom
                  │   ?              keys for this screen
                  │   F1             help
                  │   q              quit; not while typing, and it asks while a command runs
                  │   ctrl+c         quit, also while typing (it asks while a command runs)
+                 │   ctrl+u         clear the field being typed in
                  │   click, wheel   select or press; scroll
                  │ 
-                 │ Mouse
-                 │   Click a section, a tab, a row, a field, or a button; click a selected row again to open it. A click
-                 │   on a part of the path at the top goes back to it. The wheel scrolls. To select text with the mouse,
-                 │   hold Shift (Option in iTerm2). AUDD_NO_MOUSE=1 turns the mouse off.
-                 │ 
-                 │ Recognize
-                 │   ↑/↓            move between fields
-                 │   enter          in Input: recognize (the plan comes first); on a button: press it
-                 │   → space enter  Source: a file or the microphone
-                 │   space, x       tick a box
- ctrl+k commands │   ctrl+o         pick a file or folder (← goes to the parent folder, s picks the folder)
- ? keys  q quit  │   s              stop a batch or a recording
+                 │ Letters
+                 │   a              add
+                 │   b              buy requests
+                 │   c              copy (a link, a path, the token)
+                 │   d              remove or unset, after asking
+                 │   e              edit
+                 │   h              history
+ ctrl+k commands │   i, u           copy the ISRC, the UPC
+ ? keys  q quit  │ ↓ 88 more lines below
+
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

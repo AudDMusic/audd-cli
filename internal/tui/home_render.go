@@ -104,6 +104,77 @@ type batchState struct {
 	total   int
 	results []map[string]any
 	summary map[string]any
+
+	// selectable: when done, the results are a list to move through;
+	// detail shows the selected one.
+	selectable  bool
+	cursor, off int
+	detail      bool
+}
+
+// selected is the result under the cursor.
+func (b *batchState) selected() map[string]any {
+	if b == nil || b.cursor < 0 || b.cursor >= len(b.results) {
+		return nil
+	}
+	return b.results[b.cursor]
+}
+
+func (b *batchState) move(d int) {
+	b.cursor = max(0, min(len(b.results)-1, b.cursor+d))
+}
+
+// batchLink is the song link of a batch result line ("" for none).
+func batchLink(m map[string]any) string {
+	if m == nil {
+		return ""
+	}
+	if o, ok := m["result"].(map[string]any); ok {
+		return str(o["song_link"])
+	}
+	if arr, ok := m["result"].([]any); ok {
+		for _, c := range arr {
+			o, _ := c.(map[string]any)
+			if songs, ok := o["songs"].([]any); ok && len(songs) > 0 {
+				o, _ = songs[0].(map[string]any)
+			}
+			if l := str(o["song_link"]); l != "" {
+				return l
+			}
+		}
+	}
+	return ""
+}
+
+// listView is a finished batch: the summary, then a row per file with
+// the cursor (row draws a row, selected or not).
+func (b *batchState) listView(st output.Styles, w, ht int, row func(label string, sel bool) string) string {
+	var out strings.Builder
+	head := b.view(st, w, 0, false)
+	if head != "" {
+		out.WriteString(head + "\n")
+	}
+	room := max(1, ht-strings.Count(out.String(), "\n"))
+	if b.cursor < b.off {
+		b.off = b.cursor
+	}
+	if b.cursor >= b.off+room {
+		b.off = b.cursor - room + 1
+	}
+	inW := min(32, w/2)
+	for i := b.off; i < len(b.results) && i < b.off+room; i++ {
+		m := b.results[i]
+		out.WriteString(truncate(row(padRight(truncate(fileName(str(m["input"])), inW-1), inW)+resultSong(m), i == b.cursor), w) + "\n")
+	}
+	return strings.TrimRight(out.String(), "\n")
+}
+
+// fileName is the last part of a path (URLs stay whole).
+func fileName(name string) string {
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 && !strings.Contains(name, "://") {
+		return name[i+1:]
+	}
+	return name
 }
 
 func (b *batchState) add(line string) {
@@ -199,9 +270,13 @@ func (b *batchState) view(st output.Styles, w, ht int, running bool) string {
 		out.WriteString(st.Bold.Render(fmt.Sprintf("Job %s: %d recognized, %d no match, %d failed",
 			b.jobID, int(num(s["recognized"])), int(num(s["no_match"])), int(num(s["failed"])))) + "\n")
 		if n := int(num(s["requests_spent_this_run"])); n > 0 || s["requests_spent_this_run"] != nil {
-			out.WriteString(st.Dim.Render(fmt.Sprintf("%s used in this run. The job is in History.", output.Plural(n, "request"))) + "\n")
+			out.WriteString(st.Dim.Render(fmt.Sprintf("%s used in this run. The job is in Recognitions › Jobs.", output.Plural(n, "request"))) + "\n")
 		}
 		out.WriteString("\n")
+	}
+	if ht == 0 {
+		// The heading alone (listView draws the rows).
+		return strings.TrimRight(out.String(), "\n")
 	}
 	rows := b.results
 	room := max(1, ht-strings.Count(out.String(), "\n")-1)

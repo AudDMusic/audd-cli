@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
@@ -24,6 +25,9 @@ import (
 
 // tipText is the first-run line: the whole model in one sentence.
 const tipText = "Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back."
+
+// tipKeysMax is how many keys the tip stays for (esc hides it sooner).
+const tipKeysMax = 12
 
 // tabbedSection is a section with tabs: a tab bar above its page.
 type tabbedSection interface {
@@ -96,7 +100,13 @@ func (h *home) pageHasKeys() bool {
 // overlay reports whether something is shown over the section: the
 // palette, the keys, a confirmation.
 func (h *home) overlay() bool {
-	return h.paletteO || h.keysO || h.ask != nil || h.quitAsk
+	return h.paletteO || h.keysO || h.prompt()
+}
+
+// prompt reports whether a question waits for an answer: a command's
+// confirmation, one of the screen's own, or quitting.
+func (h *home) prompt() bool {
+	return h.ask != nil || h.confirm != nil || h.quitAsk
 }
 
 // hasKeys reports whether a list or form has the keys: one in the
@@ -107,15 +117,26 @@ func (h *home) hasKeys(inPalette bool) bool {
 		return true
 	}
 	if inPalette {
-		return h.paletteO && h.ask == nil && !h.quitAsk
+		return h.paletteO && !h.prompt()
 	}
 	return h.pageHasKeys()
 }
 
 func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
+	// Messages in the status line last until the next key.
+	h.flash = ""
+	if h.tip {
+		// The tip goes once the keys are in use.
+		if h.tipKeys++; h.tipKeys >= tipKeysMax {
+			h.seenTip()
+		}
+	}
 	if h.ask != nil {
 		return h.askKey(k)
+	}
+	if h.confirm != nil {
+		return h.confirmKey(s)
 	}
 	if h.quitAsk {
 		return h.quitKey(s)
@@ -124,11 +145,7 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 		return h.quit()
 	}
 	if h.keysO {
-		h.keysO = false
-		if s == "f1" || s == "enter" {
-			return h.navigate("help")
-		}
-		return nil
+		return h.keysKey(s)
 	}
 	if h.paletteO {
 		if s == "esc" || s == "left" && h.palette.leftExits() {
@@ -139,6 +156,8 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 		if s == "ctrl+k" {
+			// ctrl+k closes the palette as it opened it; the keys are
+			// back where they were.
 			h.paletteO = false
 			return nil
 		}
@@ -170,6 +189,7 @@ func (h *home) globalKey(s string) (tea.Cmd, bool) {
 		return h.openPalette(""), true
 	case "?":
 		h.keysO = true
+		h.keysScroll.off = 0
 		return nil, true
 	case "q":
 		return h.quit(), true
@@ -259,14 +279,28 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 	case "up", "k":
 		return h.setFlash("This is the tab bar · ↓ opens the page, esc goes back")
 	}
-	if h.sectionKnows(s) || k.Type == tea.KeyRunes && h.active().capturing() {
-		// A section's own key (a to add a stream) works from its tab bar
-		// too, on the page; so does typing into a page that takes text
-		// (the filter of Commands).
+	if h.pageKeyHere(s) {
+		// A key the page's hints name (a to add a stream) works from its
+		// tab bar too. Nothing typed here ever goes into a text field.
 		h.focus = focusContent
 		return h.send(h.activeID(), k)
 	}
 	return h.noop(s)
+}
+
+// pageKeyHere reports whether s is one of the current page's own keys
+// (named in its hints), and the page is not on a text field.
+func (h *home) pageKeyHere(s string) bool {
+	cur := h.active()
+	if cur.capturing() || navKeys[s] {
+		return false
+	}
+	for _, k := range cur.keys() {
+		if keyMatches(k.key, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // pageKey handles a key on the section's page (level 3 and deeper).
@@ -346,26 +380,16 @@ var navKeys = map[string]bool{
 	"j": true, "k": true, "g": true, "G": true,
 }
 
-// sectionKnows reports whether the active section does something with
-// s: a key for moving around, or one its hints or the Keys page name.
+// sectionKnows reports whether the page does something with s: a key
+// for moving around, or one of the keys it lists (the footer shows the
+// first of them; ? shows them all).
 func (h *home) sectionKnows(s string) bool {
 	if navKeys[s] {
 		return true
 	}
-	cur := h.active()
-	for _, k := range cur.keys() {
+	for _, k := range h.active().keys() {
 		if keyMatches(k.key, s) {
 			return true
-		}
-	}
-	for _, d := range sectionKeyDocs {
-		if d.section != cur.title() {
-			continue
-		}
-		for _, k := range d.keys {
-			if keyMatches(k.key, s) {
-				return true
-			}
 		}
 	}
 	return false
@@ -478,7 +502,7 @@ type crumb struct {
 // has the keys (-1: the page itself, which has no name of its own).
 func (h *home) crumbs() ([]crumb, int) {
 	switch {
-	case h.ask != nil:
+	case h.ask != nil, h.confirm != nil:
 		return []crumb{{text: "Confirm"}}, 0
 	case h.quitAsk:
 		return []crumb{{text: "Quit?"}}, 0
@@ -542,8 +566,9 @@ func (h *home) crumbLine(w int) string {
 		switch {
 		case i == at && h.color:
 			label = h.st.Bold.Inherit(h.st.Accent).Render(label)
-		case i == at:
-			label = ">" + label + "<"
+		case !h.color:
+			// Without color the focused item has its own marker (the
+			// sidebar item, the tab, the row); the path stays plain.
 		case h.color:
 			label = h.st.Dim.Render(label)
 		}
@@ -599,10 +624,12 @@ func (h *home) headRowsNow() int {
 // move, open, back, the section's own keys, then ? for the rest.
 func (h *home) footer() []keyHelp {
 	switch {
-	case h.ask != nil, h.quitAsk:
-		return nil
+	case h.ask != nil && h.ask.typed != "":
+		return []keyHelp{{"type", h.ask.typed}, {"enter", "confirm"}, {"esc", "cancel"}}
+	case h.prompt():
+		return []keyHelp{{"y/enter", "confirm"}, {"n/esc", "cancel"}}
 	case h.keysO:
-		return []keyHelp{{"any key", "close"}, {"F1", "full help"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
 		return composeKeys(h.palette.keys(), h.palette.leftExits(), h.palette.capturing())
 	case h.focus == focusSidebar:
@@ -615,6 +642,25 @@ func (h *home) footer() []keyHelp {
 	}
 	cur := h.active()
 	return composeKeys(cur.keys(), leftExits(cur), cur.capturing())
+}
+
+// fitKeys lays out hints in w columns: the ones that do not fit are
+// left out from the end, but ? keys always stays.
+func fitKeys(keys []keyHelp, w int) string {
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k.key+" "+k.help)
+	}
+	for len(parts) > 1 && ansi.StringWidth(strings.Join(parts, "  ")) > w {
+		last := len(parts) - 1
+		if keys[last].key == "?" && len(parts) > 2 {
+			parts = append(parts[:last-1], parts[last])
+			keys = append(keys[:last-1], keys[last])
+			continue
+		}
+		parts, keys = parts[:last], keys[:last]
+	}
+	return strings.Join(parts, "  ")
 }
 
 // sortKeys splits a section's hints into moving, opening, going back,
@@ -640,13 +686,19 @@ func sortKeys(keys []keyHelp) (move, open, back, acts []keyHelp) {
 func composeKeys(keys []keyHelp, left, typing bool) []keyHelp {
 	move, open, back, acts := sortKeys(keys)
 	b := keyHelp{"esc", "back"}
+	if typing {
+		b.help = "leave the field"
+	}
 	if len(back) > 0 {
 		b = back[0]
 	}
-	if left && b.key == "esc" {
+	if left && b.key == "esc" && !typing {
 		b.key = "←/esc"
 	}
 	out := append(append(append([]keyHelp{}, move...), open...), b)
+	if typing {
+		out = append(out, keyHelp{"ctrl+u", "clear"})
+	}
 	out = append(out, acts...)
 	if len(out) > 5 {
 		out = out[:5]
@@ -668,4 +720,77 @@ func (h *home) listRow(label string, selected bool) string {
 		return h.st.Accent.Render("›") + " " + h.st.Bold.Render(label)
 	}
 	return h.st.Dim.Render("·") + " " + label
+}
+
+// confirmState is a question the screen asks before something that
+// spends requests or cannot be undone. It takes every key until it is
+// answered.
+type confirmState struct {
+	owner    string   // the section the answer goes to
+	question string   // "Remove stream 3?"
+	notes    []string // what happens, in plain words
+	command  string   // the command it runs
+	yes      func() tea.Cmd
+	cancel   string // said when the answer is no
+}
+
+// ask opens a confirmation.
+func (h *home) askFirst(c *confirmState) tea.Cmd {
+	h.confirm = c
+	return nil
+}
+
+func (h *home) confirmKey(s string) tea.Cmd {
+	c := h.confirm
+	switch s {
+	case "y", "Y", "enter":
+		h.confirm = nil
+		return h.wrap(c.owner, c.yes())
+	case "n", "N", "esc":
+		h.confirm = nil
+		msg := c.cancel
+		if msg == "" {
+			msg = "Cancelled. Nothing was changed."
+		}
+		return h.setFlash(msg)
+	case "ctrl+c":
+		h.confirm = nil
+		return h.quit()
+	}
+	return h.setFlash("y or enter confirms, n or esc cancels")
+}
+
+func (h *home) confirmView(w int) string {
+	c := h.confirm
+	var b strings.Builder
+	b.WriteString(h.st.Bold.Render("Confirm") + "\n\n")
+	b.WriteString(styleLines(h.st.Warn, output.Wrap(c.question, w)) + "\n\n")
+	for _, n := range c.notes {
+		b.WriteString(output.Wrap(n, w) + "\n")
+	}
+	if len(c.notes) > 0 {
+		b.WriteString("\n")
+	}
+	if c.command != "" {
+		b.WriteString(h.st.Dim.Render(truncate("$ "+c.command, w)) + "\n\n")
+	}
+	b.WriteString("Press y or enter to confirm, n or esc to cancel.")
+	return b.String()
+}
+
+// keysKey: the keys overlay is a page: it scrolls, and esc closes it.
+func (h *home) keysKey(s string) tea.Cmd {
+	_, ht := h.contentSize()
+	switch s {
+	case "esc", "?", "q", "left":
+		h.keysO = false
+		return nil
+	case "f1":
+		h.keysO = false
+		return h.navigate("help")
+	}
+	if !h.keysScroll.key(s, ht) {
+		return h.noop(s)
+	}
+	return nil
 }

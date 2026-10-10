@@ -57,6 +57,8 @@ type npModel struct {
 
 	// embedded: part of interactive mode (see explorer.embedded).
 	embedded bool
+	// mark, when set, makes the stations clickable (interactive mode).
+	mark func(s string, fn func() tea.Cmd) string
 }
 
 // newEmbeddedNowPlaying is the now-playing screen for interactive mode,

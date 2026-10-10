@@ -50,6 +50,14 @@ type field struct {
 	// problem is what is wrong with the value, shown under the field
 	// once the cursor has left it.
 	problem string
+	// need is what a required field says while it is empty ("Enter a
+	// file, URL, or folder"); the default names the field.
+	need string
+	// lockable fields hold an existing value: they are read-only (locked)
+	// until enter or e, so a stray key does not change them.
+	lockable, locked bool
+	// novalidate: a button that works whatever the fields say.
+	novalidate bool
 }
 
 func newInput() textinput.Model {
@@ -129,6 +137,9 @@ func (f *field) formatProblem() string {
 func (f *field) check() string {
 	v := f.value()
 	if v == "" {
+		if f.required && f.need != "" {
+			return f.need
+		}
 		if f.required {
 			return f.label + " is required"
 		}
@@ -137,7 +148,7 @@ func (f *field) check() string {
 	switch f.kind {
 	case fInt:
 		if _, err := strconv.Atoi(v); err != nil {
-			return f.label + " must be a whole number"
+			return fmt.Sprintf("%s is not a whole number", v)
 		}
 	case fDuration:
 		if _, err := parseDurationLoose(v); err != nil {
@@ -159,8 +170,9 @@ type form struct {
 	inPalette bool
 }
 
-// click is what a click on visible field i does: the cursor moves there,
-// and a box, choice, or button is pressed as with enter.
+// click is what a click on visible field i does: the cursor moves there;
+// a box is ticked and a button pressed as with enter. A choice changes
+// only with a click on its arrows.
 func (f *form) click(i int) func() tea.Cmd {
 	if f.h == nil {
 		return nil
@@ -168,10 +180,31 @@ func (f *form) click(i int) func() tea.Cmd {
 	return func() tea.Cmd {
 		f.cursor = i
 		f.focus()
-		if c := f.current(); c == nil || c.isText() {
-			return nil
+		switch c := f.current(); {
+		case c == nil:
+		case c.kind == fBool:
+			return f.h.sendKey(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+		case c.kind == fButton:
+			return f.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
 		}
-		return f.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
+		return nil
+	}
+}
+
+// arrowClick is a click on the ‹ or › of choice i: the cursor moves there
+// and the choice changes one step.
+func (f *form) arrowClick(i, d int) func() tea.Cmd {
+	if f.h == nil {
+		return nil
+	}
+	return func() tea.Cmd {
+		f.cursor = i
+		f.focus()
+		k := tea.KeyMsg{Type: tea.KeyRight}
+		if d < 0 {
+			k = tea.KeyMsg{Type: tea.KeyLeft}
+		}
+		return f.h.sendKey(k)
 	}
 }
 
@@ -237,6 +270,8 @@ func (f *form) focusName(name string) {
 	f.focus()
 }
 
+// move moves the cursor d fields. The field it leaves is checked, and a
+// field that holds an existing value is read-only again.
 func (f *form) move(d int) {
 	n := len(f.visible())
 	if n == 0 {
@@ -244,24 +279,37 @@ func (f *form) move(d int) {
 	}
 	if c := f.current(); c != nil && c.isText() {
 		c.problem = c.formatProblem()
+		if c.lockable {
+			c.locked = true
+		}
 	}
 	f.cursor = (f.cursor + d + n) % n
 	f.focus()
 }
 
-// ready reports whether every required field shown has a value and no
-// field has a problem: enter in a text field then presses the first
-// button.
-func (f *form) ready() bool {
-	for _, x := range f.visible() {
-		if x.isText() && x.check() != "" {
-			return false
+// validate checks every field shown; on the first that is wrong it puts
+// the cursor there with the problem next to it, and returns it.
+func (f *form) validate() string {
+	for i, x := range f.visible() {
+		if e := x.check(); e != "" {
+			f.cursor = i
+			f.focus()
+			x.problem = e
+			return e
 		}
 	}
-	return true
+	return ""
 }
 
-// firstButton is the first button shown ("" for none).
+// fail puts the cursor on a field with a problem next to it.
+func (f *form) fail(name, problem string) {
+	f.focusName(name)
+	if x := f.get(name); x != nil {
+		x.problem = problem
+	}
+}
+
+// firstButton is the form's main action: its first button.
 func (f *form) firstButton() *field {
 	for _, x := range f.visible() {
 		if x.kind == fButton {
@@ -271,26 +319,38 @@ func (f *form) firstButton() *field {
 	return nil
 }
 
-// press is a button press: its action, or, while it is disabled, the
-// reason in the form's error line.
+// press is a button press: its action once the fields are right (or the
+// cursor goes to the first that is not), or, while the button is
+// disabled for another reason, that reason.
 func (f *form) press(b *field) string {
+	if !b.novalidate && f.validate() != "" {
+		return ""
+	}
 	if b.disabled != nil {
 		if why := b.disabled(); why != "" {
 			f.err = why
 			return ""
 		}
 	}
+	f.err = ""
 	return b.name
 }
 
-// capturing reports whether the cursor is on a text field.
+// capturing reports whether the cursor is on a text field being typed
+// in (not one that is read-only until enter).
 func (f *form) capturing() bool {
 	c := f.current()
-	return c != nil && c.isText()
+	return c != nil && c.isText() && !c.locked
+}
+
+// buttonAt reports whether visible field i is a button.
+func (f *form) buttonAt(i int) bool {
+	v := f.visible()
+	return i >= 0 && i < len(v) && v[i].kind == fButton
 }
 
 // update handles a key. It returns the button's action when one is
-// pressed (or "submit" for enter on the last text field).
+// pressed; enter in a text field presses the form's main button.
 func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 	c := f.current()
 	if c == nil {
@@ -308,7 +368,7 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 	switch c.kind {
 	case fBool:
 		switch s {
-		case " ", "enter", "x":
+		case " ", "enter":
 			c.on = !c.on
 		case "j":
 			f.move(1)
@@ -317,12 +377,21 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		}
 		return "", nil
 	case fEnum:
-		// A choice changes forward with →, space, or enter; ← keeps
-		// meaning back.
+		// ←/→ change the choice without wrapping (← on the first one goes
+		// back, see leftExits); space and enter step through it.
+		n := len(c.options)
 		switch s {
-		case "right", "l", " ", "enter":
-			if len(c.options) > 0 {
-				c.choice = (c.choice + 1) % len(c.options)
+		case "right", "l":
+			if c.choice < n-1 {
+				c.choice++
+			}
+		case "left", "h":
+			if c.choice > 0 {
+				c.choice--
+			}
+		case " ", "enter":
+			if n > 0 {
+				c.choice = (c.choice + 1) % n
 			}
 		case "j":
 			f.move(1)
@@ -334,6 +403,14 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		switch s {
 		case "enter", " ":
 			return f.press(c), nil
+		case "right", "l":
+			if f.buttonAt(f.cursor + 1) {
+				f.move(1)
+			}
+		case "left", "h":
+			if f.buttonAt(f.cursor - 1) {
+				f.move(-1)
+			}
 		case "j":
 			f.move(1)
 		case "k":
@@ -341,18 +418,30 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		}
 		return "", nil
 	}
-	if s == "enter" {
-		// Enter on a text field presses the first button once everything
-		// required is filled in (or when the buttons come next);
-		// otherwise it moves on.
+	if c.locked {
+		// An existing value is changed only on purpose.
+		switch s {
+		case "enter", "e":
+			c.locked = false
+			c.input.CursorEnd()
+			return "", c.input.Focus()
+		}
+		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
+			return "", f.h.setFlash("Press enter or e to change " + c.label)
+		}
+		return "", nil
+	}
+	switch s {
+	case "enter":
 		c.problem = c.formatProblem()
-		b := f.firstButton()
-		v := f.visible()
-		next := f.cursor+1 < len(v) && v[f.cursor+1].kind == fButton
-		if b != nil && (next || f.ready()) {
+		if b := f.firstButton(); b != nil {
 			return f.press(b), nil
 		}
 		f.move(1)
+		return "", nil
+	case "ctrl+u":
+		c.input.SetValue("")
+		c.problem = ""
 		return "", nil
 	}
 	var cmd tea.Cmd
@@ -362,6 +451,30 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		c.problem = c.formatProblem()
 	}
 	return "", cmd
+}
+
+// rowKeys are the hints for the field under the cursor; primary names
+// what enter in a text field does.
+func (f *form) rowKeys(primary string) []keyHelp {
+	k := []keyHelp{{"↑/↓", "field"}}
+	c := f.current()
+	switch {
+	case c == nil:
+	case c.kind == fBool:
+		k = append(k, keyHelp{"space/enter", "toggle"})
+	case c.kind == fEnum:
+		k = append(k, keyHelp{"←/→", "change"})
+	case c.kind == fButton:
+		k = append(k, keyHelp{"enter", strings.ToLower(c.label)})
+		if f.buttonAt(f.cursor-1) || f.buttonAt(f.cursor+1) {
+			k = append(k, keyHelp{"←/→", "buttons"})
+		}
+	case c.locked:
+		k = append(k, keyHelp{"enter/e", "change it"})
+	default:
+		k = append(k, keyHelp{"enter", primary})
+	}
+	return k
 }
 
 // check validates every visible field.
@@ -384,6 +497,10 @@ func (f *form) labelWidth() int {
 	return min(w, 24)
 }
 
+// formHelpRows is the height of the help line under a form: the same
+// for every field, so moving the cursor never moves the form.
+const formHelpRows = 2
+
 // view draws the form; st styles it, color says whether reverse video
 // is available for the cursor.
 func (f *form) view(w int, st output.Styles, color bool) string {
@@ -393,13 +510,14 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 	var buttons []string
 	// The cursor shows only while the form has the keys.
 	focused := f.h == nil || f.h.hasKeys(f.inPalette)
-	var why string
+	var why, help string
 	for i, x := range vis {
 		var b strings.Builder
 		cur := i == f.cursor && focused
 		mark := "  "
 		if cur {
 			mark = "› "
+			help = x.help
 		}
 		req := " "
 		if x.required {
@@ -436,7 +554,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 		case fEnum:
 			val := ""
 			if len(x.options) > 0 {
-				val = "‹ " + x.options[x.choice] + " ›"
+				val = f.h.mark("‹", f.arrowClick(i, -1)) + " " + x.options[x.choice] + " " + f.h.mark("›", f.arrowClick(i, 1))
 			}
 			if cur {
 				val = st.Bold.Render(val)
@@ -450,12 +568,12 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			}
 			val := x.input.View()
 			label := padRight(x.label+req, lw)
-			if cur && color {
+			if cur && color && !x.locked {
 				// The field being typed in: its label in the accent color,
 				// and the cursor in the value.
 				label = st.Bold.Inherit(st.Accent).Render(label)
 			}
-			if !cur {
+			if !cur || x.locked {
 				val = x.input.Value()
 				if x.masked && val != "" {
 					val = strings.Repeat("•", min(len(val), 12))
@@ -463,21 +581,15 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				if val == "" {
 					val = st.Dim.Render("·")
 				}
+				if cur {
+					val += st.Dim.Render("  (enter or e to change)")
+				}
 			}
 			b.WriteString(truncate(mark+label+val, w))
 		}
 		b.WriteString("\n")
 		if x.problem != "" {
 			b.WriteString(truncate(strings.Repeat(" ", lw+2)+st.Warn.Render(x.problem), w) + "\n")
-		}
-		if cur && x.help != "" {
-			pad := strings.Repeat(" ", lw+2)
-			if x.kind == fBool {
-				pad = "      "
-			}
-			for _, l := range strings.Split(output.Wrap(x.help, max(10, w-len(pad))), "\n") {
-				b.WriteString(truncate(pad+st.Dim.Render(l), w) + "\n")
-			}
 		}
 		row := strings.TrimSuffix(b.String(), "\n")
 		out.WriteString(f.h.mark(row, f.click(i)) + "\n")
@@ -491,6 +603,19 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 	}
 	if f.err != "" {
 		b.WriteString("\n" + styleLines(st.Warn, output.Wrap(f.err, w)) + "\n")
+	}
+	// The help of the field under the cursor, always in the same place.
+	lines := strings.Split(output.Wrap(help, max(10, w-2)), "\n")
+	if help == "" {
+		lines = nil
+	}
+	b.WriteString("\n")
+	for i := 0; i < formHelpRows; i++ {
+		l := ""
+		if i < len(lines) {
+			l = "  " + st.Dim.Render(lines[i])
+		}
+		b.WriteString(truncate(l, w) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -528,20 +653,42 @@ func (s *scrollView) key(k string, h int) bool {
 }
 
 func (s *scrollView) clamp(h int) {
-	if s.off > len(s.lines)-h {
-		s.off = len(s.lines) - h
+	room := h
+	if len(s.lines) > h && h > 2 {
+		room-- // the row that says there is more
+	}
+	if s.off > len(s.lines)-room {
+		s.off = len(s.lines) - room
 	}
 	if s.off < 0 {
 		s.off = 0
 	}
 }
 
+// view shows the lines from the scroll position. When they do not all
+// fit, the last row says how much more there is.
 func (s *scrollView) view(w, h int) string {
 	s.clamp(h)
 	end := min(len(s.lines), s.off+h)
+	more := len(s.lines) > h && h > 2
+	if more {
+		end = min(len(s.lines), s.off+h-1)
+	}
 	out := make([]string, 0, h)
 	for _, l := range s.lines[s.off:end] {
 		out = append(out, truncate(l, w))
+	}
+	if more {
+		var ind string
+		switch below := len(s.lines) - end; {
+		case below > 0 && s.off > 0:
+			ind = fmt.Sprintf("↑↓ %d more lines below", below)
+		case below > 0:
+			ind = fmt.Sprintf("↓ %d more lines below", below)
+		default:
+			ind = "↑ end"
+		}
+		out = append(out, ind)
 	}
 	return strings.Join(out, "\n")
 }
@@ -812,6 +959,10 @@ func (p *picker) update(k tea.KeyMsg) (bool, tea.Cmd) {
 		return false, nil
 	case "enter":
 		return p.selected() != nil, nil
+	case "ctrl+u":
+		p.filter.SetValue("")
+		p.cursor = 0
+		return false, nil
 	}
 	var cmd tea.Cmd
 	p.filter, cmd = p.filter.Update(k)
@@ -910,9 +1061,20 @@ func fuzzyScore(q, s string) (int, bool) {
 	return score - len(sr), true
 }
 
-// leftExits reports whether left goes back from the form: anywhere but
-// inside typed text, where it moves the cursor until the start.
+// leftExits reports whether left goes back from the form: inside typed
+// text only from its start, on a choice only from its first option, on
+// a button only from the first of a row.
 func (f *form) leftExits() bool {
 	c := f.current()
-	return c == nil || !c.isText() || c.input.Position() == 0
+	switch {
+	case c == nil:
+		return true
+	case c.isText():
+		return c.locked || c.input.Position() == 0
+	case c.kind == fEnum:
+		return c.choice == 0
+	case c.kind == fButton:
+		return !f.buttonAt(f.cursor - 1)
+	}
+	return true
 }

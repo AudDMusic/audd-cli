@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type recognizeSection struct {
 	phase   string // "form", "running", "result"
 	wantRun bool   // the plan runs first; then the recognition
 	plan    string
+	planFor string // the dry run the plan is for: it shows while the form still matches
 	batch   bool
 	bs      *batchState
 	rec     recognition
@@ -36,9 +38,10 @@ type recognizeSection struct {
 
 func newRecognizeSection(h *home) section {
 	s := &recognizeSection{h: h, panel: newPanel(h), phase: "form"}
-	src := enumField("source", "Source", "→, space, or enter switches between a file and the microphone", []string{sourceFile, sourceMic})
-	in := textField("input", "Input", "A file, URL, folder, or glob. ctrl+o picks a file.")
+	src := enumField("source", "Source", "←/→ switch between a file and the microphone", []string{sourceFile, sourceMic})
+	in := textField("input", "Input", "A file, URL, folder, or glob; enter recognizes it. ctrl+o picks a file.")
 	in.required = true
+	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
 	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
 	sec.setValue("10")
 	fields := []*field{src, in, sec, textField("device", "Device", "Input device; empty for the system default")}
@@ -66,6 +69,16 @@ func newRecognizeSection(h *home) section {
 	}
 	s.form.get("recognize").disabled = needInput
 	s.form.get("plan").disabled = needInput
+	// The plan works with the options as they are.
+	s.form.get("plan").novalidate = true
+	s.form.get("limit").need = "Enterprise recognition is billed per 12-second chunk: set a limit (chunks per file), or type none to scan whole files"
+	s.form.get("max-files").need = "Folders, globs, and lists need a file limit: a number, or type none"
+	s.form.get("listen").disabled = func() string {
+		if t := s.m.tools; t != nil && t.FFmpeg == "" && t.Sox == "" {
+			return "Listening needs ffmpeg or sox: install one (see below), then come back"
+		}
+		return ""
+	}
 	s.sync()
 	s.form.focusName("input")
 	return s
@@ -97,6 +110,9 @@ func (s *recognizeSection) sync() {
 	s.form.get("limit").hidden = !ent
 	s.form.get("limit").required = ent
 	s.form.get("tracklist").hidden = !ent
+	// Max files is needed (and marked) as soon as the input is a folder,
+	// a glob, or a list.
+	s.form.get("max-files").required = !mic && s.isBatch()
 	// The cursor stays on its field when fields above it come and go.
 	if cur != nil && !cur.hidden {
 		s.form.focusName(cur.name)
@@ -130,8 +146,16 @@ func (s *recognizeSection) back() bool {
 	case s.browser != nil:
 		s.browser = nil
 		return true
+	case s.phase == "result" && s.bs != nil && s.bs.detail:
+		s.bs.detail = false
+		return true
+	case s.phase == "result" && s.details:
+		s.details = false
+		return true
 	case s.phase == "result":
+		// Back on the form, as it was; the old plan is gone.
 		s.phase = "form"
+		s.plan = ""
 		return true
 	case s.phase == "running" && s.mic():
 		s.panel.stop()
@@ -157,6 +181,9 @@ func (s *recognizeSection) crumbs() []string {
 		out = append(out, "Running")
 	case s.phase == "result":
 		out = append(out, "Result")
+		if s.details || s.bs != nil && s.bs.detail {
+			out = append(out, "Details")
+		}
 	}
 	return out
 }
@@ -168,7 +195,12 @@ func (s *recognizeSection) prefill(input string) {
 }
 
 // args is the command for the form as it is.
-func (s *recognizeSection) args(dry bool) []string {
+func (s *recognizeSection) args(dry bool) []string { return s.argsFor(dry, false) }
+
+// argsFor is the command; shown, it names what is still missing
+// (<limit>, <max files>), so the bottom line never shows a command that
+// cannot run.
+func (s *recognizeSection) argsFor(dry, shown bool) []string {
 	f := s.form
 	args := []string{"recognize"}
 	in := f.value("input")
@@ -181,6 +213,8 @@ func (s *recognizeSection) args(dry bool) []string {
 		args = append(args, "--enterprise")
 		if v := f.value("limit"); v != "" {
 			args = append(args, "--limit", v)
+		} else if shown {
+			args = append(args, "--limit", "<limit>")
 		}
 		if f.get("tracklist").on {
 			args = append(args, "--tracklist")
@@ -190,6 +224,8 @@ func (s *recognizeSection) args(dry bool) []string {
 	}
 	if v := f.value("max-files"); v != "" {
 		args = append(args, "--max-files", v)
+	} else if shown && f.get("max-files").required {
+		args = append(args, "--max-files", "<max files>")
 	}
 	if v := f.value("at"); v != "" {
 		args = append(args, "--at", v)
@@ -210,7 +246,7 @@ func (s *recognizeSection) command() string {
 	if s.mic() {
 		return displayCommand(s.micArgs())
 	}
-	return displayCommand(s.args(false))
+	return displayCommand(s.argsFor(false, true))
 }
 
 func (s *recognizeSection) keys() []keyHelp {
@@ -222,17 +258,25 @@ func (s *recognizeSection) keys() []keyHelp {
 		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "open or pick"}, {"s", "pick the folder"}, {"esc", "close"}}
 	case s.phase == "running":
 		return []keyHelp{{"s", "stop"}}
+	case s.phase == "result" && s.bs != nil && s.bs.detail:
+		return []keyHelp{{"o", "open link"}, {"c", "copy link"}, {"esc", "back to the list"}}
+	case s.phase == "result" && s.bs != nil:
+		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "details"}, {"o", "open link"}, {"c", "copy link"}, {"esc", "back to the form"}}
 	case s.phase == "result":
-		k := []keyHelp{{"esc", "back to the form"}, {"r", "run again"}}
-		if s.rec.link != "" {
-			k = append(k, keyHelp{"o", "open the link"}, keyHelp{"c", "copy it"})
-		}
+		k := []keyHelp{}
 		if s.rec.view != nil {
-			k = append(k, keyHelp{"d", "details"})
+			k = append(k, keyHelp{"→/enter", "details"})
 		}
-		return k
+		if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+			k = []keyHelp{{"enter", "open " + res.err.Hint}}
+		}
+		if s.rec.link != "" {
+			k = append(k, keyHelp{"o", "open link"}, keyHelp{"c", "copy link"})
+		}
+		return append(k, keyHelp{"esc", "back to the form"})
 	}
-	return []keyHelp{{"↑/↓", "field"}, {"enter", "recognize"}, {"ctrl+o", "pick a file"}, {"space", "tick"}}
+	k := s.form.rowKeys("recognize")
+	return append(k, keyHelp{"ctrl+o", "pick a file"})
 }
 
 // validLimit accepts a whole number or the typed word none.
@@ -244,34 +288,39 @@ func validLimit(v string) bool {
 	return err == nil && n > 0
 }
 
-// check says what is missing before anything runs.
-func (s *recognizeSection) check(forRun bool) string {
+// check says what is missing before anything runs: the field, and the
+// problem.
+func (s *recognizeSection) check(forRun bool) (string, string) {
 	f := s.form
 	if f.value("input") == "" {
-		return "Choose a file, URL, folder, or glob (ctrl+o picks a file)."
+		return "input", f.get("input").need
 	}
 	if f.get("enterprise").on {
 		v := f.value("limit")
 		if v == "" && forRun {
-			return "Enterprise recognition is billed per 12-second chunk: set a limit (chunks per file), or type none to scan whole files."
+			return "limit", f.get("limit").need
 		}
 		if v != "" && !validLimit(v) {
-			return "The limit is a number of chunks, or the word none."
+			return "limit", "The limit is a number of chunks, or the word none."
 		}
 	}
 	if v := f.value("max-files"); v != "" && !validLimit(v) {
-		return "Max files is a number, or the word none."
+		return "max-files", "Max files is a number, or the word none."
 	}
 	if forRun && s.isBatch() && f.value("max-files") == "" {
-		return "Folders, globs, and lists need a file limit: set Max files to a number, or type none."
+		return "max-files", f.get("max-files").need
 	}
-	return ""
+	return "", ""
 }
 
 // isBatch reports whether the input is a batch (folder, glob), the way
 // audd recognize decides.
 func (s *recognizeSection) isBatch() bool {
-	inputs, batch, err := media.ExpandInputs([]string{s.form.value("input")}, strings.NewReader(""))
+	in := s.form.value("input")
+	if in == "" || strings.Contains(in, "://") {
+		return false
+	}
+	inputs, batch, err := media.ExpandInputs([]string{in}, strings.NewReader(""))
 	for _, in := range inputs {
 		in.Cleanup()
 	}
@@ -280,13 +329,13 @@ func (s *recognizeSection) isBatch() bool {
 
 // startPlan runs the dry run; with run set the recognition follows.
 func (s *recognizeSection) startPlan(run bool) tea.Cmd {
-	if e := s.check(run); e != "" {
-		s.form.err = e
+	if name, e := s.check(run); e != "" {
+		s.form.fail(name, e)
 		return nil
 	}
 	s.form.err = ""
 	s.wantRun = run
-	s.plan = ""
+	s.plan, s.planFor = "", ""
 	s.batch = s.isBatch()
 	s.runArgs = s.args(true)
 	return s.panel.start(runReq{args: s.runArgs, format: "table", tag: "plan"})
@@ -296,8 +345,10 @@ func (s *recognizeSection) startRun() tea.Cmd {
 	s.runArgs = s.args(false)
 	s.phase = "running"
 	s.rec = recognition{}
+	s.bs = nil
+	s.details = false
 	if s.batch {
-		s.bs = &batchState{}
+		s.bs = &batchState{selectable: true}
 		return s.panel.start(runReq{args: s.runArgs, format: "jsonl", stream: true, spends: true, tag: "run"})
 	}
 	return s.panel.start(runReq{args: s.runArgs, spends: true, tag: "run"})
@@ -347,36 +398,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	case "result":
-		switch ks {
-		case "enter":
-			if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
-				return s.h.openPaletteLine(res.err.Hint)
-			}
-			if s.mic() {
-				return s.startListen()
-			}
-		case "r":
-			if s.mic() {
-				return s.startListen()
-			}
-			return s.startPlan(true)
-		case "o":
-			if s.rec.link != "" {
-				if err := openURL(s.rec.link); err != nil {
-					return s.h.setFlash("Could not open the browser: " + err.Error())
-				}
-				return s.h.setFlash("Opened in your browser: " + s.rec.link)
-			}
-		case "c":
-			if s.rec.link != "" {
-				return s.h.copy(s.rec.link, s.rec.link)
-			}
-		case "d":
-			s.details = !s.details
-		case "backspace":
-			s.phase = "form"
-		}
-		return nil
+		return s.resultKey(ks)
 	}
 	if ks == "ctrl+o" && !s.mic() {
 		s.browser = newFileBrowser(s.form.value("input"))
@@ -408,13 +430,27 @@ func (s *recognizeSection) finished() tea.Cmd {
 			return nil
 		}
 		s.plan = strings.TrimSpace(res.stdout)
+		s.planFor = displayCommand(s.args(true))
 		if s.wantRun {
 			return s.startRun()
 		}
 		return nil
 	}
 	s.phase = "result"
-	if res.err != nil || s.batch {
+	if res.err != nil && res.err.Code == "declined" {
+		// Cancelling is not an error: back to the form, as it was.
+		s.phase = "form"
+		return s.h.setFlash("Cancelled. Nothing was sent.")
+	}
+	if res.err != nil {
+		return nil
+	}
+	if s.mic() {
+		s.h.listened = true
+	} else {
+		s.h.recognized = true
+	}
+	if s.batch {
 		return nil
 	}
 	s.rec = parseRecognition(parseDoc(res.stdout))
@@ -450,17 +486,21 @@ func (s *recognizeSection) view(w, h int) string {
 			return ""
 		}
 		if res.err != nil && s.mic() {
-			return errorText(st, res.err, w) + "\n\n" + st.Dim.Render("Press r to try again.")
+			out := errorText(st, res.err, w)
+			if res.err.Code != "missing_tool" {
+				out += "\n\n" + st.Dim.Render("Press enter to listen again.")
+			}
+			return out
 		}
 		if res.err != nil {
 			if s.batch && s.bs != nil && len(s.bs.results) > 0 {
-				b.WriteString(s.bs.view(st, w, h-4, false) + "\n\n")
+				b.WriteString(s.batchView(w, h-4) + "\n\n")
 			}
 			b.WriteString(errorText(st, res.err, w))
 			return b.String()
 		}
 		if s.batch && s.bs != nil {
-			return s.bs.view(st, w, h, false)
+			return s.batchView(w, h)
 		}
 		if !s.mic() {
 			b.WriteString(st.Dim.Render(truncate(s.form.value("input"), w)) + "\n\n")
@@ -489,17 +529,91 @@ func (s *recognizeSection) view(w, h int) string {
 	b.WriteString(s.form.view(w, st, s.h.color))
 	if s.panel.running && s.panel.run != nil && s.panel.run.req.tag == "plan" {
 		b.WriteString("\n\n" + st.Dim.Render("Working out the plan…"))
-	} else if s.plan != "" {
+	} else if s.plan != "" && s.planFor == displayCommand(s.args(true)) {
+		// A plan only for the options it was made for.
 		b.WriteString("\n\n" + s.planBlock(w))
 	}
 	return b.String()
 }
 
+// planBlock is the plan, without the dry run's own "nothing was sent".
 func (s *recognizeSection) planBlock(w int) string {
 	if s.plan == "" {
 		return ""
 	}
-	return styleLines(s.h.st.Dim, output.Wrap(s.plan, w)) + "\n\n"
+	var keep []string
+	for _, l := range strings.Split(s.plan, "\n") {
+		if strings.Contains(l, "Nothing was sent") || strings.Contains(l, "--dry-run") {
+			continue
+		}
+		keep = append(keep, l)
+	}
+	if len(keep) == 0 {
+		return ""
+	}
+	return styleLines(s.h.st.Dim, output.Wrap(strings.Join(keep, "\n"), w)) + "\n\n"
+}
+
+// batchView is a batch's results: a list to move through, or the
+// details of one.
+func (s *recognizeSection) batchView(w, h int) string {
+	st := s.h.st
+	if s.bs.detail {
+		if m := s.bs.selected(); m != nil {
+			ds := detailStyles{title: st.Title.Inherit(st.Accent), dim: st.Dim, key: st.Key}
+			raw, _ := json.Marshal(m["result"])
+			out := st.Dim.Render(truncate(str(m["input"]), w)) + "\n\n" + resultSong(m)
+			if m["result"] != nil {
+				out += "\n\n" + resultDetail(raw, ds)
+			}
+			return out
+		}
+	}
+	return s.bs.listView(st, w, h, func(label string, sel bool) string { return s.h.listRow(label, sel) })
+}
+
+// resultKey handles a key on a result.
+func (s *recognizeSection) resultKey(ks string) tea.Cmd {
+	link := s.rec.link
+	if s.bs != nil {
+		link = batchLink(s.bs.selected())
+	}
+	switch ks {
+	case "up", "k", "down", "j":
+		if s.bs != nil && !s.bs.detail {
+			s.bs.move(map[string]int{"up": -1, "k": -1, "down": 1, "j": 1}[ks])
+		}
+		return nil
+	case "enter", "right":
+		if res := s.panel.res; ks == "enter" && res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+			return s.h.openPaletteLine(res.err.Hint)
+		}
+		switch {
+		case s.bs != nil:
+			s.bs.detail = s.bs.selected() != nil
+		case s.mic() && ks == "enter" && s.rec.view == nil:
+			return s.startListen()
+		case s.rec.view != nil:
+			s.details = true
+		}
+		return nil
+	case "o":
+		if link == "" {
+			return s.h.setFlash("No link to open")
+		}
+		if err := openURL(link); err != nil {
+			return s.h.setFlash("Could not open the browser: " + err.Error())
+		}
+		return s.h.setFlash("Opened in your browser: " + link)
+	case "c":
+		if link == "" {
+			return s.h.setFlash("No link to copy")
+		}
+		return s.h.copy(link, link)
+	case "backspace":
+		s.back()
+	}
+	return nil
 }
 
 // leftExits: left goes back (from a result to the form, too), except

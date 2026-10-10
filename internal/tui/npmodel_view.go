@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -93,9 +94,9 @@ func (m *npModel) keyList() []string {
 		if len(m.stations) > 1 {
 			keys = append(keys, "←/→ stream", "enter grid")
 		}
-		keys = append(keys, "o open", "c copy link", "h history", "r refresh", "? help", "q quit")
+		keys = append(keys, "h history", "o open link", "c copy link", "r refresh", "? help", "q quit")
 	default:
-		keys = []string{"←/→/↑/↓ select", "enter zoom", "o open", "c copy link", "h history", "? help", "q quit"}
+		keys = []string{"←/→/↑/↓ select", "enter zoom", "h history", "o open link", "c copy link", "r refresh", "? help", "q quit"}
 	}
 	if m.embedded {
 		keys = slices.DeleteFunc(keys, func(k string) bool { return k == "? help" || k == "q quit" })
@@ -200,7 +201,7 @@ func (m *npModel) infoBlock(d stationData, w int, big bool) string {
 	}
 	p := d.Plays[0]
 	if d.Down() {
-		lines = append(lines, m.st.Dim.Render("Last heard: "+songLine(p.ResultView)+" · "+ago(p.Ago(now))))
+		lines = append(lines, m.st.Dim.Render("Last heard: "+songLine(p.ResultView)+" · "+agoAt(p.Ago(now), now)))
 		return clip(lines, w)
 	}
 	head, detail, bar := playStatus(p, now)
@@ -373,7 +374,23 @@ func (m *npModel) gridCard(i, w int) string {
 	} else if m.color {
 		style = style.BorderForeground(lipgloss.Color("240"))
 	}
-	return style.Render(content)
+	card := style.Render(content)
+	if m.mark == nil {
+		return card
+	}
+	// A click selects the stream; on the selected one it zooms in.
+	click := func() tea.Cmd {
+		if m.sel == i {
+			m.zoom = true
+		}
+		m.sel = i
+		return nil
+	}
+	lines := strings.Split(card, "\n")
+	for j, l := range lines {
+		lines[j] = m.mark(l, click)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *npModel) cardAccent(d stationData) lipgloss.Color {

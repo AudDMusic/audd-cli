@@ -238,8 +238,9 @@ func TestUIBillingLink(t *testing.T) {
 	s := e.ui("ui", "--section", "account")
 	s.wait("Paid until")
 	s.press("]", "]")
-	s.wait("startup_plan")
-	s.press(kDown, "s")
+	s.wait("$450.00/month")
+	// Into the plans (Indie is the account's own), down to Startup.
+	s.press(kDown, kDown, kEnter)
 	s.wait("nothing is charged")
 	s.wait(testutil.FakePaymentURL)
 	if n := len(e.mcp.CallsTo("subscribe_to_plan")); n != 1 {
@@ -254,7 +255,7 @@ func TestUIRotateToken(t *testing.T) {
 	s.wait("Paid until")
 	s.press("]", "]", "]")
 	s.wait("0123…cdef")
-	s.press("R")
+	s.press("T")
 	s.wait("Type rotate")
 	s.typeText("rotate")
 	s.press(kEnter)
@@ -268,10 +269,10 @@ func TestUIEditSetting(t *testing.T) {
 	e := uiEnv(t)
 	s := e.ui("ui", "--section", "settings")
 	s.wait("background_recorder")
-	s.press(kDown, kEnter, kRight)
+	s.press(kDown, kEnter, kRight, kRight)
 	s.wait("audd config set format json")
 	s.press(kEnter)
-	s.wait("Set format")
+	s.wait("Format set to json")
 	s.quit()
 	r := e.ok("config", "get", "format")
 	if d := doc(t, r.Stdout); d["value"] != "json" {

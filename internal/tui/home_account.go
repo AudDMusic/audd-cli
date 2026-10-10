@@ -43,7 +43,6 @@ type accountSection struct {
 	// Profiles
 	profCur  int
 	prof     *cmdPanel
-	confirm  string // "logout" while asking
 	switchTo string
 }
 
@@ -104,10 +103,6 @@ func (s *accountSection) crumbs() []string {
 		case s.showHist:
 			return []string{"Payments"}
 		}
-	case 4:
-		if s.confirm != "" {
-			return []string{"Sign out?"}
-		}
 	}
 	return nil
 }
@@ -130,7 +125,6 @@ func (s *accountSection) init() tea.Cmd {
 func (s *accountSection) openPage(p int) tea.Cmd {
 	s.page = max(0, min(len(accountPages)-1, p))
 	s.checkLogin()
-	s.confirm = ""
 	if s.needsLogin() {
 		return nil
 	}
@@ -255,6 +249,9 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		}
 		return s.overview.key(k, ht)
 	case 1:
+		if ks == "enter" || ks == "right" {
+			return s.openPage(2)
+		}
 		return s.usage.update(msg)
 	case 2:
 		return s.billingKey(k)
@@ -264,15 +261,13 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		}
 		switch ks {
 		case "v":
-			return s.showToken(true)
+			return s.showToken(!s.revealed)
 		case "c":
 			return s.token.start(runReq{args: []string{"token", "show", "--reveal"}, tag: "copy"})
-		case "R":
+		case "T":
 			return s.token.start(runReq{args: []string{"token", "rotate"}, typed: "rotate", tag: "rotate"})
-		case "f":
+		case "r":
 			return s.token.start(runReq{args: []string{"token", "refresh-local"}, tag: "refresh"})
-		case "h":
-			return s.showToken(false)
 		}
 		return nil
 	case 4:
@@ -311,7 +306,7 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 			return s.h.setFlash("Opened the payment page in your browser")
 		case "c":
 			return s.h.copy(s.payLink, "the payment link")
-		case "backspace", "x":
+		case "backspace":
 			s.payLink = ""
 			s.pay.res = nil
 			return nil
@@ -322,12 +317,14 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 		s.planCur = min(len(s.plans)-1, s.planCur+1)
 	case "up", "k":
 		s.planCur = max(0, s.planCur-1)
-	case "s":
+	case "enter":
+		// Enter on the current plan renews it; on another, subscribes.
+		if s.planCur == s.currentPlan() {
+			return s.startPay([]string{"billing", "renew"})
+		}
 		if p := s.selectedPlan(); p != "" {
 			return s.startPay([]string{"billing", "subscribe", p})
 		}
-	case "n":
-		return s.startPay([]string{"billing", "renew"})
 	case "b":
 		s.buying = true
 		s.buyIn.focusName("requests")
@@ -371,14 +368,51 @@ func (s *accountSection) profiles() []string {
 	return names
 }
 
-func (s *accountSection) profilesKey(ks string) tea.Cmd {
-	if s.confirm != "" {
-		s.confirm = ""
-		if ks == "y" || ks == "Y" {
-			return s.prof.start(runReq{args: []string{"auth", "logout"}, tag: "logout"})
-		}
-		return s.h.setFlash("Cancelled")
+// currentPlan is the index of the plan the account is on (-1: not
+// known).
+func (s *accountSection) currentPlan() int {
+	cur := strings.ToLower(s.h.hdr.plan)
+	if cur == "" {
+		return -1
 	}
+	for i, p := range s.plans {
+		if strings.ToLower(str(p["name"])) == cur || strings.ToLower(str(p["plan"])) == cur {
+			return i
+		}
+	}
+	return -1
+}
+
+// extraPrice is the price of 1,000 extra requests on the account's plan,
+// in cents (0 when not known).
+func (s *accountSection) extraPrice() float64 {
+	if i := s.currentPlan(); i >= 0 {
+		return num(s.plans[i]["extra_price_cents_per_1000"])
+	}
+	return 0
+}
+
+// canSignOut reports whether the profile has anything to sign out of.
+func (s *accountSection) canSignOut() bool { return !s.h.signedOut || s.loggedIn }
+
+func (s *accountSection) askSignOut() tea.Cmd {
+	cur := "default"
+	if s.h.a.Profile != nil {
+		cur = s.h.a.Profile.Name
+	}
+	return s.h.askFirst(&confirmState{
+		owner:    "account",
+		question: fmt.Sprintf("Sign out of profile %s?", cur),
+		notes:    []string{"Its saved sign-in and API token are removed from this computer. audd cannot recognize music with this profile until you sign in or set a token again."},
+		command:  "audd auth logout",
+		cancel:   "Still signed in",
+		yes: func() tea.Cmd {
+			return s.prof.start(runReq{args: []string{"auth", "logout"}, tag: "logout"})
+		},
+	})
+}
+
+func (s *accountSection) profilesKey(ks string) tea.Cmd {
 	names := s.profiles()
 	switch ks {
 	case "down", "j":
@@ -391,7 +425,10 @@ func (s *accountSection) profilesKey(ks string) tea.Cmd {
 			return s.prof.start(runReq{args: []string{"auth", "switch", s.switchTo}, tag: "switch"})
 		}
 	case "L":
-		s.confirm = "logout"
+		if s.canSignOut() {
+			return s.askSignOut()
+		}
+		return s.h.setFlash("This profile is signed out already")
 	}
 	return nil
 }
@@ -402,7 +439,7 @@ func (s *accountSection) atTop() bool {
 	if s.needsLogin() {
 		return s.signin.step == ""
 	}
-	if s.capturing() || s.confirm != "" {
+	if s.capturing() {
 		return false
 	}
 	switch s.page {
@@ -477,9 +514,6 @@ func (s *accountSection) view(w, h int) string {
 		b.WriteString(s.h.listRow(label, i == s.profCur) + "\n")
 	}
 	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Enter switches to a profile. To add one, sign in with it: audd login --profile NAME.", w)))
-	if s.confirm != "" {
-		b.WriteString("\n\n" + st.Warn.Render(fmt.Sprintf("Sign out of profile %s? Its saved sign-in and API token are removed. [y/N]", cur)))
-	}
 	if s.prof.res != nil && s.prof.res.err != nil {
 		b.WriteString("\n\n" + errorText(st, s.prof.res.err, w))
 	}
@@ -507,7 +541,11 @@ func (s *accountSection) billingView(w, h int) string {
 		return b.String()
 	}
 	if s.buying {
-		b.WriteString(st.Bold.Render("Buy extra requests") + "\n\n" + s.buyIn.view(w, st, s.h.color))
+		b.WriteString(st.Bold.Render("Buy extra requests") + "\n\n")
+		if c := s.extraPrice(); c > 0 {
+			b.WriteString(fmt.Sprintf("Extra requests cost %s per 1,000 on your plan.\n\n", money(c)))
+		}
+		b.WriteString(s.buyIn.view(w, st, s.h.color))
 		return b.String()
 	}
 	if s.showHist {
@@ -526,12 +564,16 @@ func (s *accountSection) billingView(w, h int) string {
 	case len(s.plans) == 0:
 		b.WriteString(st.Dim.Render("No plans available."))
 	}
+	cur := s.currentPlan()
 	for i, p := range s.plans {
-		line := fmt.Sprintf("%-16s %-14s %s/month  %s requests", str(p["plan"]), str(p["name"]),
+		line := fmt.Sprintf("%-10s %s/month  %s requests", str(p["name"]),
 			money(num(p["monthly_price_cents"])), fmtInt(int(num(p["included_requests"]))))
+		if i == cur {
+			line += "  (your plan)"
+		}
 		b.WriteString(truncate(s.h.listRow(line, i == s.planCur), w) + "\n")
 	}
-	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Payment links never charge anything: you review and pay in the browser.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Enter gets a payment link for the selected plan (on your plan: renews it). Payment links never charge anything: you review and pay in the browser.", w)))
 	return b.String()
 }
 
@@ -555,7 +597,7 @@ func (s *accountSection) tokenView(w, h int) string {
 	} else if s.token.running {
 		b.WriteString(st.Dim.Render("Loading…") + "\n")
 	}
-	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows the whole token, h hides it again, c copies it without showing it. R rotates it: the current token stops working everywhere. f fetches it from your account again.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows or hides the whole token, c copies it without showing it, r fetches it from your account again. T makes a new token (rotates it): the current one stops working everywhere.", w)))
 	return b.String()
 }
 
@@ -573,20 +615,29 @@ func (s *accountSection) keys() []keyHelp {
 		case s.pay.running && s.pay.pending != nil:
 			return s.signin.keysFor(s.pay)
 		case s.buying:
-			return []keyHelp{{"enter", "get the link"}, {"esc", "cancel"}}
+			return s.buyIn.rowKeys("get the link")
 		case s.payLink != "":
-			return []keyHelp{{"enter", "open in the browser"}, {"c", "copy"}, {"x", "close"}}
+			return []keyHelp{{"enter", "open in browser"}, {"o", "open in browser"}, {"c", "copy link"}, {"esc", "close"}}
 		case s.showHist:
-			return []keyHelp{{"h", "plans"}}
+			return []keyHelp{{"↑/↓", "scroll"}, {"h", "plans"}}
 		}
-		return []keyHelp{{"↑/↓", "plan"}, {"s", "subscribe"}, {"b", "buy requests"}, {"n", "renew"}, {"h", "payments"}, {"r", "refresh"}}
+		act := "subscribe"
+		if s.planCur == s.currentPlan() {
+			act = "renew"
+		}
+		return []keyHelp{{"↑/↓", "plan"}, {"enter", act}, {"b", "buy requests"}, {"h", "payments"}, {"r", "refresh"}}
 	case 3:
-		return []keyHelp{{"v", "reveal"}, {"c", "copy"}, {"h", "hide"}, {"R", "rotate"}, {"f", "fetch again"}}
+		reveal := "reveal"
+		if s.revealed {
+			reveal = "hide"
+		}
+		return []keyHelp{{"v", reveal}, {"c", "copy"}, {"r", "fetch again"}, {"T", "new token"}}
 	}
-	if s.confirm != "" {
-		return []keyHelp{{"y", "sign out"}, {"n", "keep it"}}
+	k := []keyHelp{{"↑/↓", "profile"}, {"enter", "switch"}}
+	if s.canSignOut() {
+		k = append(k, keyHelp{"L", "sign out"})
 	}
-	return []keyHelp{{"↑/↓", "profile"}, {"enter", "switch"}, {"L", "sign out"}}
+	return k
 }
 
 func (s *accountSection) command() string {
@@ -603,7 +654,7 @@ func (s *accountSection) command() string {
 		case s.buying:
 			n := s.buyIn.value("requests")
 			if n == "" {
-				n = "10000"
+				return ""
 			}
 			return "audd billing buy " + n
 		case s.pay.args != nil && (s.pay.running || s.pay.res != nil):
@@ -623,9 +674,6 @@ func (s *accountSection) command() string {
 		}
 		return "audd token show"
 	}
-	if s.confirm != "" {
-		return "audd auth logout"
-	}
 	if names := s.profiles(); s.profCur < len(names) {
 		return "audd auth switch " + names[s.profCur]
 	}
@@ -643,8 +691,6 @@ func (s *accountSection) capturing() bool {
 		return s.buying && s.buyIn.capturing() || s.pay.capturing()
 	case 3:
 		return s.token.capturing()
-	case 4:
-		return s.confirm != ""
 	}
 	return false
 }
@@ -673,11 +719,6 @@ func (s *accountSection) back() bool {
 		}
 	case 3:
 		if s.token.back() {
-			return true
-		}
-	case 4:
-		if s.confirm != "" {
-			s.confirm = ""
 			return true
 		}
 	}

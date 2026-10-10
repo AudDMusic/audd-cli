@@ -1,40 +1,40 @@
 AudD  ·  profile default
-                 │ Help › >Guide<
+                 │ Help › Guide
  1 Recognize     │  Getting started >Guide< Commands  Keys  Exit codes  Links 
- 2 Now playing   │   Install                 │ AUDD CLI
- 3 Streams       │   Sign in                 │ 
- 4 History       │   Interactive mode        │ audd recognizes music in files, URLs, folders, long recordings, and from
- 5 Account       │   Recognize music         │ the microphone; monitors streams; and manages your AudD account. It
- 6 Settings      │     Whole recordings (ent…│ prints tables on a terminal and JSON when its output is piped.
-*7 Help          >     Folders, globs, and l…│ 
-                 │     Results cache         │ Get your API token at https://dashboard.audd.io, or run audd login.
-                 │   Limits and confirmations│ 
-                 │   Streams                 │ Install
-                 │     Background recorder   │ 
-                 │     Cover art             │   Where                   Command
-                 │   Custom catalog          │   Node.js                 npm install -g @audd/cli
-                 │   Account                 │   Python                  pipx install audd-cli or uv tool install
-                 │   Output for scripts and …│                           audd-cli
-                 │     Exit codes            │   macOS (Homebrew)        brew install auddmusic/tap/audd
-                 │   Agents                  │   macOS, Linux (script)   curl -fsSL
-                 │   Settings                │                           https://github.com/AudDMusic/audd-cli/releases…
-                 │   Updates and privacy     │                           | sh
-                 │                           │   Windows (Scoop)         scoop bucket add auddmusic
-                 │                           │                           https://github.com/AudDMusic/scoop-bucket then
-                 │                           │                           scoop install auddmusic/audd
-                 │                           │   Windows (installer)     download and run
-                 │                           │                           https://github.com/AudDMusic/audd-cli/releases…
-                 │                           │                           (or
-                 │                           │                           https://github.com/AudDMusic/audd-cli/releases…
-                 │                           │                           on ARM); it adds audd to your PATH
-                 │                           │   Go                      go install
-                 │                           │                           github.com/AudDMusic/audd-cli/cmd/audd@latest
-                 │                           │   Any system              download an archive from
-                 │                           │                           https://github.com/AudDMusic/audd-cli/releases
-                 │                           │                           and put audd on your PATH
+ 2 Now playing   │ › Using interactive mode  │ Using interactive mode
+ 3 Streams       │   Install                 │ 
+ 4 Recognitions  │   Sign in                 │ Menu on the left, page on the right. Arrows move, Enter goes in, Esc
+ 5 Account       │   Interactive mode        │ comes back.
+ 6 Settings      │   Recognize music         │ 
+*7 Help          >     Whole recordings (ent…│ • On the sidebar, up and down pick a section; right or Enter opens it.
+                 │     Folders, globs, and l…│ • Help, Streams, Recognitions, and Account have a tab bar: left and right
+                 │     Results cache         │   switch tabs, down or Enter goes into the page.
+                 │   Limits and confirmations│ • On a page, up and down move; right or Enter opens what is selected;
+                 │   Streams                 │   left or Esc comes back one level.
+                 │     Background recorder   │ • The path at the top shows where you are. The bottom line shows the
+                 │     Cover art             │   command each action runs; y copies it.
+                 │   Custom catalog          │ • ctrl+k runs any command from a form. ? lists the keys of the screen;
+                 │   Account                 │   the Keys tab lists them all.
+                 │   Output for scripts and …│ 
+                 │     Exit codes            │ AUDD CLI
+                 │   Agents                  │ 
+                 │   Settings                │ audd recognizes music in files, URLs, folders, long recordings, and from
+                 │   Updates and privacy     │ the microphone; monitors streams; and manages your AudD account. It
+                 │                           │ prints tables on a terminal and JSON when its output is piped.
                  │                           │ 
-                 │                           │ The install script puts audd in ~/.local/bin and checks the download
- ctrl+k commands │                           │ against the release's checksums.
- ? keys  q quit  │ 9%
+                 │                           │ Get your API token at https://dashboard.audd.io, or run audd login.
+                 │                           │ 
+                 │                           │ Install
+                 │                           │ 
+                 │                           │   Where                   Command
+                 │                           │   Node.js                 npm install -g @audd/cli
+                 │                           │   Python                  pipx install audd-cli or uv tool install
+                 │                           │                           audd-cli
+                 │                           │   macOS (Homebrew)        brew install auddmusic/tap/audd
+                 │                           │   macOS, Linux (script)   curl -fsSL
+                 │                           │                           https://github.com/AudDMusic/audd-cli/releases…
+ ctrl+k commands │                           │ ↓ 378 more lines below
+ ? keys  q quit  │ 8%
+
 ←/→ tabs  ↓ open  esc back  / search  n N next, previous match  ? keys
 $ audd docs cli                                                                                                   y copy

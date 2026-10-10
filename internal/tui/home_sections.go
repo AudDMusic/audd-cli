@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,6 +81,7 @@ func (s *nowPlayingSection) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		s.np = newEmbeddedNowPlaying(s.h.ctx, s.h.a, m.feed, m.stations, NowPlayingOptions{}, s.h.arts)
+		s.np.mark = s.h.mark
 		w, ht := s.h.contentSize()
 		s.np.w, s.np.h = w, ht
 		return s.np.Init()
@@ -171,6 +173,46 @@ func (p *explorerPane) update(msg tea.Msg) tea.Cmd {
 	if p.ex == nil {
 		return nil
 	}
+	if k, ok := msg.(tea.KeyMsg); ok && !p.ex.capturing() {
+		// Interactive mode gives each letter one meaning everywhere: r
+		// refreshes, x exports, e edits, d removes (after asking), R and
+		// F resume a job.
+		l := p.ex.top()
+		kind := ""
+		if l != nil {
+			kind = l.kind
+		}
+		switch k.String() {
+		case "x":
+			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+		case "e":
+			if kind != "streams" {
+				return p.h.noop("e")
+			}
+			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}}
+		case "u":
+			if kind == "streams" {
+				return p.h.noop("u")
+			}
+		case "r":
+			if p.ex.tab == tabUsage {
+				return p.ex.load(tabUsage, nil)
+			}
+			if l != nil {
+				return p.ex.load(p.ex.tab, l)
+			}
+			return nil
+		case "R", "F":
+			if kind == "jobs" || kind == "items" {
+				return p.ex.resumeJob(l, k.String() == "F")
+			}
+			return p.h.noop(k.String())
+		case "d":
+			if kind == "streams" {
+				return p.askRemove()
+			}
+		}
+	}
 	_, cmd := p.ex.Update(msg)
 	return tea.Batch(cmd, p.h.takeOSC(p.ex.takeOSC()))
 }
@@ -216,6 +258,46 @@ func (p *explorerPane) back() bool {
 	return false
 }
 
+// askRemove asks before removing the selected stream, naming it and
+// what happens.
+func (p *explorerPane) askRemove() tea.Cmd {
+	r := p.ex.top().selected()
+	if r == nil || p.ex.d.RemoveStream == nil {
+		return nil
+	}
+	id, _ := strconv.Atoi(r.key)
+	ex := p.ex
+	return p.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: fmt.Sprintf("Remove stream %d?", id),
+		notes:    []string{"URL: " + p.streamURL(r.key), "AudD stops monitoring it; its stored results stay on this computer."},
+		command:  fmt.Sprintf("audd streams remove %d", id),
+		cancel:   fmt.Sprintf("Kept stream %d", id),
+		yes: func() tea.Cmd {
+			return ex.streamAction(func(ctx context.Context) error { return ex.d.RemoveStream(ctx, id) }, fmt.Sprintf("Removed stream %d", id))
+		},
+	})
+}
+
+// streamURL is the URL of stream id when the list has it ("" if not).
+func (p *explorerPane) streamURL(id string) string {
+	if p.ex == nil || len(p.ex.tabs[tabStreams]) == 0 {
+		return ""
+	}
+	for _, r := range p.ex.tabs[tabStreams][0].rows {
+		if r.key == id && len(r.cells) > 0 {
+			if d, ok := r.data.(map[string]any); ok && str(d["url"]) != "" {
+				return str(d["url"])
+			}
+			if u := r.cells[len(r.cells)-1]; u != "" {
+				return u
+			}
+			return "(no URL)"
+		}
+	}
+	return ""
+}
+
 // selectedKey is the key of the selected row ("" for none).
 func (p *explorerPane) selectedKey() string {
 	if p.ex == nil {
@@ -253,7 +335,7 @@ func newHistorySection(h *home) section {
 	return s
 }
 
-func (s *historySection) title() string { return "History" }
+func (s *historySection) title() string { return "Recognitions" }
 
 func (s *historySection) tabNames() []string {
 	if s.pane.ex == nil {
@@ -399,7 +481,7 @@ func (s *historySection) back() bool {
 
 // --- Streams ---
 
-var streamsPages = []string{"Streams", "Callback", "Recorder", "History & reports"}
+var streamsPages = []string{"List", "Callback", "Recorder", "History & reports"}
 
 type streamsSection struct {
 	h    *home
@@ -421,6 +503,7 @@ type streamsSection struct {
 	dataPanel *cmdPanel
 	exportTo  string
 	lastData  []string
+	addedID   string // the stream the last add was for
 }
 
 func newStreamsSection(h *home) section {
@@ -428,11 +511,15 @@ func newStreamsSection(h *home) section {
 		addPanel: newPanel(h), cbPanel: newPanel(h), recPanel: newPanel(h), dataPanel: newPanel(h)}
 	url := textField("url", "URL", "A stream URL, or twitch:<channel>, youtube:<video_id>, youtube-ch:<channel_id>")
 	url.required = true
+	url.need = "Enter the stream's URL"
 	id := &field{kind: fInt, name: "id", label: "ID", help: "A number you choose for the stream", required: true, input: newInput()}
+	id.need = "Choose a number for the stream"
 	s.add = newForm(url, id,
 		boolField("start", "Send results when songs start", "Live now-playing; results then have no play length"),
 		buttonField("add", "Add"))
-	cb := textField("url", "Callback URL", "AudD POSTs each stream result here; "+streams.EmptyCallbackURL+" discards them")
+	cb := textField("url", "Callback URL", "Where AudD sends (POSTs) every result of every stream on your account")
+	cb.required = true
+	cb.need = "Enter the callback URL, or use the placeholder"
 	cbFields := []*field{cb}
 	for _, p := range providers {
 		cbFields = append(cbFields, boolField("return:"+p.name, "Add "+p.label+" data", "--return "+p.name))
@@ -445,20 +532,10 @@ func newStreamsSection(h *home) section {
 	sid := &field{kind: fInt, name: "id", label: "Stream ID", help: "Only this stream (empty: all)", input: newInput()}
 	by := enumField("by", "Group by", "report: group by song, artist, label, or station", []string{"song", "artist", "label", "station"})
 	format := enumField("format", "File format", "export: JSON lines or CSV", []string{"jsonl", "csv"})
-	s.dataForm = newForm(kind, since, sid, by, format, buttonField("run", "Run"))
+	file := textField("file", "File name", "export: the file to write, in "+exportDirShown())
+	s.dataForm = newForm(kind, since, sid, by, format, file, buttonField("run", "Run"))
 	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
-	s.add.get("add").disabled = func() string {
-		if s.add.value("url") == "" || s.add.value("id") == "" {
-			return "Enter the URL and an ID first"
-		}
-		return ""
-	}
-	s.cbForm.get("set").disabled = func() string {
-		if s.cbForm.value("url") == "" {
-			return "Enter the callback URL first, or use the placeholder"
-		}
-		return ""
-	}
+	s.cbForm.get("placeholder").novalidate = true
 	s.syncData()
 	s.recPanel.empty = s.h.st.Dim.Render("Loading…")
 	return s
@@ -468,6 +545,13 @@ func (s *streamsSection) syncData() {
 	k := s.dataForm.value("kind")
 	s.dataForm.get("by").hidden = k != "report"
 	s.dataForm.get("format").hidden = k != "export"
+	file := s.dataForm.get("file")
+	file.hidden = k != "export"
+	// The suggested file name follows the format until it is changed.
+	ext := "." + s.dataForm.value("format")
+	if v := file.value(); v == "" || strings.HasPrefix(v, "audd-streams-export-") && !strings.HasSuffix(v, ext) {
+		file.setValue("audd-streams-export-" + s.h.now().Format("20060102") + ext)
+	}
 }
 
 func (s *streamsSection) title() string { return "Streams" }
@@ -507,6 +591,7 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.addPanel.handle(msg); mine {
 		if done && s.addPanel.res.ok() {
 			s.adding = false
+			s.h.streamAdded = true
 			id := s.add.value("id")
 			s.add.get("url").setValue("")
 			s.add.get("id").setValue("")
@@ -527,13 +612,15 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			s.cbURL, s.cbSet = "", false
 			if doc != nil && doc["url"] != nil {
 				s.cbURL, s.cbSet = str(doc["url"]), true
-				if s.cbForm.value("url") == "" {
-					s.cbForm.get("url").setValue(s.cbURL)
+				if f := s.cbForm.get("url"); f.value() == "" {
+					// The URL in use: read-only until enter or e.
+					f.setValue(s.cbURL)
+					f.lockable, f.locked = true, true
 				}
 			}
 		}
 		if done && s.cbPanel.run.req.tag == "set" && s.cbPanel.res.ok() {
-			return tea.Batch(s.h.setFlash("Callback URL set"), s.getCallback())
+			return tea.Batch(s.h.setFlash("Callback URL set to "+s.cbForm.value("url")), s.getCallback())
 		}
 		return nil
 	}
@@ -563,11 +650,10 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		if s.adding {
 			act, cmd := s.add.update(k)
 			if act == "add" {
-				if e := s.add.check(); e != "" {
-					s.add.err = e
-					return nil
-				}
 				s.add.err = ""
+				if url := s.pane.streamURL(s.add.value("id")); url != "" {
+					return s.askReplace(url)
+				}
 				return s.addPanel.start(runReq{args: s.addArgs()})
 			}
 			return cmd
@@ -581,21 +667,19 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		act, cmd := s.cbForm.update(k)
 		switch act {
 		case "placeholder":
-			s.cbForm.get("url").setValue(streams.EmptyCallbackURL)
+			f := s.cbForm.get("url")
+			f.setValue(streams.EmptyCallbackURL)
+			f.locked = false
+			s.cbForm.focusName("set")
 		case "set":
-			if s.cbForm.value("url") == "" {
-				s.cbForm.err = "Enter the callback URL, or use the placeholder."
-				return nil
-			}
-			s.cbForm.err = ""
-			return s.cbPanel.start(runReq{args: s.callbackArgs(), tag: "set"})
+			return s.askCallback()
 		}
 		return cmd
 	case 2:
 		switch ks {
-		case "s":
+		case "enter":
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})
-		case "x":
+		case "s":
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
 		case "r":
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
@@ -603,14 +687,23 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		_, ht := s.h.contentSize()
 		return s.recPanel.key(k, ht)
 	case 3:
+		if s.exportTo != "" && !s.dataForm.capturing() {
+			switch ks {
+			case "o":
+				dir := filepath.Dir(s.exportTo)
+				if err := openURL(dir); err != nil {
+					return s.h.setFlash("Could not open the folder: " + err.Error())
+				}
+				return s.h.setFlash("Opened " + dir)
+			case "c":
+				return s.h.copy(s.exportTo, "the path")
+			}
+		}
 		act, cmd := s.dataForm.update(k)
 		s.syncData()
 		if act == "run" {
-			if e := s.dataForm.check(); e != "" {
-				s.dataForm.err = e
-				return nil
-			}
 			s.dataForm.err = ""
+			s.exportTo = ""
 			args := s.dataArgs()
 			s.lastData = args
 			switch s.dataForm.value("kind") {
@@ -622,6 +715,47 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	return nil
+}
+
+// askCallback asks before changing the account's callback URL, naming
+// the old and the new address.
+func (s *streamsSection) askCallback() tea.Cmd {
+	old := s.cbURL
+	if !s.cbSet {
+		old = "not set"
+	}
+	args := s.callbackArgs()
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Change the callback URL?",
+		notes: []string{
+			"Now: " + old,
+			"New: " + s.cbForm.value("url"),
+			"AudD sends every result of every stream on your account to the new address.",
+		},
+		command: displayCommand(args),
+		cancel:  "Callback URL unchanged",
+		yes: func() tea.Cmd {
+			return s.cbPanel.start(runReq{args: args, tag: "set"})
+		},
+	})
+}
+
+// askReplace: the ID chosen for a new stream is taken, so it offers to
+// change that stream's URL instead.
+func (s *streamsSection) askReplace(old string) tea.Cmd {
+	id, url := s.add.value("id"), s.add.value("url")
+	args := []string{"streams", "set-url", id, url}
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: fmt.Sprintf("Stream %s exists already. Change its URL instead?", id),
+		notes:    []string{"Now: " + old, "New: " + url, "Or press n and choose another ID for a new stream."},
+		command:  displayCommand(args),
+		cancel:   "Nothing changed; choose another ID",
+		yes: func() tea.Cmd {
+			return s.addPanel.start(runReq{args: args})
+		},
+	})
 }
 
 func (s *streamsSection) addArgs() []string {
@@ -662,12 +796,10 @@ func (s *streamsSection) dataArgs() []string {
 	return args
 }
 
-// writeExport saves the export's output to a file in the working
-// directory and says where.
+// writeExport saves the export's output to the file named in the form
+// and says where.
 func (s *streamsSection) writeExport() tea.Cmd {
-	ext := s.dataForm.value("format")
-	name := "audd-streams-export-" + s.h.now().Format("20060102-150405") + "." + ext
-	path := filepath.Join(explorerExportDir, name)
+	path := s.exportPath()
 	if err := os.WriteFile(path, []byte(s.dataPanel.res.stdout), 0o644); err != nil {
 		s.exportTo = ""
 		return s.h.setFlash("Could not write the export: " + err.Error())
@@ -676,7 +808,28 @@ func (s *streamsSection) writeExport() tea.Cmd {
 		path = abs
 	}
 	s.exportTo = path
-	return s.h.setFlash("Exported to " + path)
+	return nil
+}
+
+// exportPath is where the export goes: the file name in the export
+// folder (the working directory).
+func (s *streamsSection) exportPath() string {
+	name := s.dataForm.value("file")
+	if name == "" {
+		name = "audd-streams-export." + s.dataForm.value("format")
+	}
+	if filepath.IsAbs(name) {
+		return name
+	}
+	return filepath.Join(explorerExportDir, name)
+}
+
+// exportDirShown is the export folder as people see it.
+func exportDirShown() string {
+	if abs, err := filepath.Abs(explorerExportDir); err == nil {
+		return abs
+	}
+	return explorerExportDir
 }
 
 // formView draws a page's form; it has its cursor only while the page
@@ -730,14 +883,20 @@ func (s *streamsSection) view(w, h int) string {
 		case s.cbSet:
 			b.WriteString("Callback URL: " + st.Bold.Render(s.cbURL))
 		case s.cbPanel.res != nil:
-			b.WriteString(output.Wrap("No callback URL is set. Live results (watch, the recorder, now-playing) need one; "+streams.EmptyCallbackURL+" works as a placeholder.", w))
+			b.WriteString("No callback URL is set.")
 		}
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("AudD sends (POSTs) every stream result to your account's callback URL. audd's background recorder receives results on its own, so without a server of your own "+streams.EmptyCallbackURL+" (it accepts the results and drops them) is fine.", w)))
 		b.WriteString("\n\n" + s.formView(s.cbForm, w))
 		return bar + b.String()
 	case 2:
-		return bar + st.Bold.Render("Background recorder") + "\n\n" + s.recPanel.view(w, h-2)
+		intro := styleLines(st.Dim, output.Wrap("The background recorder saves every stream result on this computer, so Recognitions, reports, and Now playing stay complete while audd is closed. It runs in the background; streams.background_recorder in Settings starts it automatically.", w))
+		used := strings.Count(intro, "\n") + 3
+		return bar + st.Bold.Render("Background recorder") + "\n" + intro + "\n\n" + s.recPanel.view(w, max(1, h-used))
 	}
 	formView := s.formView(s.dataForm, w)
+	if s.dataForm.value("kind") == "export" {
+		formView += "\n" + st.Dim.Render(truncate("Folder: "+exportDirShown(), w))
+	}
 	used := strings.Count(formView, "\n") + 2
 	out := bar + formView
 	switch {
@@ -753,7 +912,10 @@ func (s *streamsSection) view(w, h int) string {
 		if s.dataForm.value("format") == "csv" && n > 0 {
 			n-- // the header row
 		}
-		out += "\n\n" + fmt.Sprintf("Wrote %s to %s", output.Plural(n, "play"), s.exportTo)
+		if s.exportTo != "" {
+			out += "\n\n" + output.Wrap(fmt.Sprintf("Wrote %s to %s", output.Plural(n, "play"), s.exportTo), w) +
+				"\n" + st.Dim.Render("o opens the folder, c copies the path.")
+		}
 	case s.dataPanel.res != nil:
 		out += "\n\n" + s.dataPanel.view(w, max(1, h-used-1))
 	}
@@ -764,15 +926,18 @@ func (s *streamsSection) keys() []keyHelp {
 	switch s.page {
 	case 0:
 		if s.adding {
-			return []keyHelp{{"↑/↓", "field"}, {"enter", "next / add"}, {"esc", "cancel"}}
+			return append(s.add.rowKeys("add"), keyHelp{"esc", "cancel"})
 		}
 		return s.pane.keys()
 	case 1:
-		return []keyHelp{{"↑/↓", "field"}, {"enter", "set"}, {"space", "tick"}}
+		return s.cbForm.rowKeys("set")
 	case 2:
-		return []keyHelp{{"↑/↓", "scroll"}, {"s", "start"}, {"x", "stop"}, {"r", "refresh"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"enter", "start"}, {"s", "stop"}, {"r", "refresh"}}
 	}
-	return []keyHelp{{"↑/↓", "field"}, {"enter", "run"}, {"→/space", "change a choice"}, {"pgdn/pgup", "scroll the results"}}
+	if s.exportTo != "" && s.dataPanel.res != nil {
+		return append(s.dataForm.rowKeys("run"), keyHelp{"o", "open folder"}, keyHelp{"c", "copy path"})
+	}
+	return append(s.dataForm.rowKeys("run"), keyHelp{"pgdn/pgup", "scroll the results"})
 }
 
 func (s *streamsSection) command() string {
@@ -807,7 +972,7 @@ func (s *streamsSection) command() string {
 	args := s.dataArgs()
 	if s.dataForm.value("kind") == "export" {
 		ext := s.dataForm.value("format")
-		return displayCommand(append(args, "--format", ext)) + " > plays." + ext
+		return displayCommand(append(args, "--format", ext)) + " > " + shellQuote(s.exportPath())
 	}
 	return displayCommand(args)
 }

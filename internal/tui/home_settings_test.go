@@ -23,8 +23,8 @@ func TestSettingsSection(t *testing.T) {
 	t.Setenv("AUDD_FORMAT", "")
 	h := newTestHome(t, f, homeOpts{start: "settings"})
 	// format: enter opens the choice, → picks json, enter saves.
-	v := drive(t, h, 120, 40, "background_recorder", key("down"), key("enter"), "‹ table ›", key("right"),
-		"$ audd config set format json", key("enter"), "Set format")
+	v := drive(t, h, 120, 40, "background_recorder", key("down"), key("enter"), "‹ auto ›", key("right"), key("right"),
+		"$ audd config set format json", key("enter"), "Format set to json")
 	f.waitFor(t, "config set format json")
 	if !strings.Contains(v, "(env)") && !strings.Contains(v, "(default)") {
 		t.Fatalf("sources:\n%s", v)
@@ -32,7 +32,7 @@ func TestSettingsSection(t *testing.T) {
 
 	// The token goes through stdin, never the command line.
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("enter"), "$ audd config set token -", typeText("abcdef0123456789"), key("enter"), "Set token")
+	drive(t, h, 120, 40, "background_recorder", key("enter"), "$ audd config set token -", typeText("abcdef0123456789"), key("enter"), "Token saved for profile default")
 	f.waitFor(t, "config set token -")
 	for i, c := range f.commands() {
 		if c == "config set token -" && f.stdins[i] != "abcdef0123456789" {
@@ -40,7 +40,7 @@ func TestSettingsSection(t *testing.T) {
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("u"),
-		"Unset max_requests in profile default? It goes back to its default.", key("y"), "Removed max_requests")
+	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("d"),
+		"Unset max_requests in profile default?", "It goes back to its default.", key("y"), "max_requests is back to its default")
 	f.waitFor(t, "config unset max_requests")
 }

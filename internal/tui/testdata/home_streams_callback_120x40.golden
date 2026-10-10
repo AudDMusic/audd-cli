@@ -1,12 +1,16 @@
 AudD  ·  profile default
-                 │ Streams › >Callback<
- 1 Recognize     │  Streams >Callback< Recorder  History & reports 
+                 │ Streams › Callback
+ 1 Recognize     │  List >Callback< Recorder  History & reports 
  2 Now playing   │ Callback URL: https://audd.tech/empty/
 *3 Streams       > 
- 4 History       │   Callback URL  https://audd.tech/empty/
- 5 Account       │   [ ] Add Apple Music data
- 6 Settings      │   [ ] Add Spotify data
- 7 Help          │   [ ] Add Deezer data
+ 4 Recognitions  │ AudD sends (POSTs) every stream result to your account's callback URL. audd's background recorder
+ 5 Account       │ receives results on its own, so without a server of your own https://audd.tech/empty/ (it accepts the
+ 6 Settings      │ results and drops them) is fine.
+ 7 Help          │ 
+                 │   Callback URL* https://audd.tech/empty/
+                 │   [ ] Add Apple Music data
+                 │   [ ] Add Spotify data
+                 │   [ ] Add Deezer data
                  │   [ ] Add MusicBrainz data
                  │ 
                  │   [ Set ]  [ Use the placeholder ]
@@ -29,12 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/→ tabs  ↓ open  esc back  space tick  ? keys
+
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams callback get                                                                                       y copy

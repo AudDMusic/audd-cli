@@ -129,15 +129,23 @@ var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in Input: recognize (the plan comes first); on a button: press it"}, {"→ space enter", "Source: a file or the microphone"}, {"space, x", "tick a box"}, {"ctrl+o", "pick a file or folder (← goes to the parent folder, s picks the folder)"}, {"s", "stop a batch or a recording"}, {"r", "run again"}, {"o, c, d", "result: open, copy the link, details"}}},
-	{"Now playing", []keyHelp{{"←/→ ↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in or out"}, {"h", "history of the stream"}, {"o, c", "open or copy the song link"}, {"r", "refresh"}}},
-	{"Streams", []keyHelp{{"a", "add a stream"}, {"d", "remove the stream (asks first)"}, {"u", "change its URL"}, {"→ or enter", "recent plays of the stream"}, {"/", "filter"}, {"o, c, i", "open the song link, copy it, copy the ISRC"}, {"e", "export to CSV or JSON"}, {"r", "refresh"}, {"s, x", "Recorder: start, stop"}, {"pgdn/pgup", "History & reports: scroll the results"}}},
-	{"History", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"→ or enter", "details, or a job's files"}, {"r, R", "resume a job, retry its failed files"}, {"s", "stop a resumed job"}, {"e", "export to CSV or JSON"}, {"o, c, i, u", "open the link, copy the link, ISRC, UPC"}}},
-	{"Account", []keyHelp{{"r", "refresh"}, {"s, n, b", "Billing: subscribe, renew, buy requests (payment links only)"}, {"h", "Billing: payments"}, {"x", "close a payment link"}, {"v, c, h", "API token: reveal, copy, hide"}, {"R", "rotate the API token (type rotate to confirm)"}, {"f", "fetch the API token again"}, {"enter, L", "Profiles: switch, sign out (asks first)"}, {"o, p", "sign-in: open the page, paste the address"}}},
-	{"Settings", []keyHelp{{"→ or enter, e", "change a setting"}, {"u", "unset it (asks first)"}, {"r", "reload"}}},
-	{"Help", []keyHelp{{"/", "search the guide"}, {"n, N", "next or previous match"}, {"{ }", "previous or next heading"}, {"→ or enter", "open a step or a command's details"}, {"o, c", "Links: open, copy"}}},
-	{"Sign in", []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}, {"o, c, p", "open the sign-in page, copy it, paste the address"}}},
+	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the plan comes first); on a box: tick it; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"ctrl+o", "pick a file or folder (← goes to the parent folder, s picks the folder)"}, {"s", "stop a batch or a recording"}, {"→ or enter", "result: details of the song or of a file"}, {"o, c", "result: open the song link in the browser, copy it"}}},
+	{"Now playing", []keyHelp{{"←/→ ↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in or out"}, {"h", "history of the stream"}, {"o, c", "open the song link in the browser, copy it"}, {"r", "refresh"}}},
+	{"Streams", []keyHelp{{"a", "add a stream"}, {"d", "remove the stream (asks first)"}, {"e", "change its URL"}, {"→ or enter", "recent plays of the stream"}, {"/", "filter"}, {"o, c, i", "open the song link in the browser, copy it, copy the ISRC"}, {"x", "export to CSV or JSON"}, {"r", "refresh"}, {"enter, s", "Recorder: start, stop"}, {"pgdn/pgup", "History & reports: scroll the results"}}},
+	{"Recognitions", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"→ or enter", "details, or a job's files"}, {"R, F", "resume a job; resume it and retry its failed files"}, {"s", "stop a resumed job"}, {"x", "export to CSV or JSON"}, {"o, c, i, u", "open the song link in the browser, copy the link, ISRC, UPC"}, {"r", "refresh"}}},
+	{"Account", []keyHelp{{"r", "refresh"}, {"enter", "Usage: go to Billing. Billing: a payment link for the selected plan (renews your own)"}, {"b", "Billing: buy requests"}, {"h", "Billing: payments"}, {"o, c", "a payment link: open it in the browser, copy it"}, {"v, c", "API token: show or hide, copy"}, {"T", "API token: make a new one (type rotate to confirm)"}, {"enter, L", "Profiles: switch, sign out (asks first)"}, {"p", "sign-in: paste the address the browser was sent to"}}},
+	{"Settings", []keyHelp{{"→ or enter, e", "change a setting"}, {"d", "unset it (asks first)"}, {"r", "reload"}}},
+	{"Help", []keyHelp{{"/", "search the guide"}, {"n, N", "next or previous match"}, {"{ }", "previous or next heading"}, {"→ or enter", "open a step, a heading, or a command's details"}, {"o, c", "Links: open in the browser, copy"}}},
+	{"Sign in", []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}, {"o, c, p", "open the sign-in page in the browser, copy it, paste the address"}}},
 	{"Commands (ctrl+k)", []keyHelp{{"type", "filter the commands"}, {"enter", "open the command's form, then run it"}, {"r, e", "result: run again, edit"}, {"s", "stop"}}},
+}
+
+// letterKeys is the one meaning of each letter, for the Keys page.
+var letterKeys = []keyHelp{
+	{"a", "add"}, {"b", "buy requests"}, {"c", "copy (a link, a path, the token)"}, {"d", "remove or unset, after asking"},
+	{"e", "edit"}, {"h", "history"}, {"i, u", "copy the ISRC, the UPC"}, {"o", "open in the browser"},
+	{"r", "refresh"}, {"R, F", "resume a job; retrying failed files"}, {"s", "stop"}, {"v", "show or hide the token"},
+	{"x", "export"}, {"y", "copy the command at the bottom"}, {"/", "filter or search"},
 }
 
 type helpSection struct {
@@ -271,6 +279,9 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 		case "esc":
 			s.searching = false
 			return nil
+		case "ctrl+u":
+			s.search.SetValue("")
+			return nil
 		}
 		var cmd tea.Cmd
 		s.search, cmd = s.search.Update(k)
@@ -361,6 +372,29 @@ func (s *helpSection) openLink() tea.Cmd {
 	return s.h.setFlash("Opened in your browser: " + u)
 }
 
+// stepDone reports whether a getting-started step is done: a token is
+// set, something was recognized, a stream exists.
+func (s *helpSection) stepDone(i int) bool {
+	switch i {
+	case 0:
+		return !s.h.signedOut
+	case 1:
+		return s.h.recognized
+	case 2:
+		return s.h.listened
+	case 3:
+		if s.h.streamAdded {
+			return true
+		}
+		if st, ok := s.h.subs["streams"].(*streamsSection); ok && st.pane.ex != nil {
+			if l := st.pane.ex.tabs[tabStreams]; len(l) > 0 && len(l[0].rows) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // runStep jumps to the section a getting-started step is about.
 func (s *helpSection) runStep(i int) tea.Cmd {
 	switch i {
@@ -385,13 +419,26 @@ func (s *helpSection) runStep(i int) tea.Cmd {
 	return s.h.openPalette("")
 }
 
+// guideIntro starts the guide in interactive mode: how to move around.
+const guideIntro = `## Using interactive mode
+
+Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
+
+- On the sidebar, up and down pick a section; right or Enter opens it.
+- Help, Streams, Recognitions, and Account have a tab bar: left and right switch tabs, down or Enter goes into the page.
+- On a page, up and down move; right or Enter opens what is selected; left or Esc comes back one level.
+- The path at the top shows where you are. The bottom line shows the command each action runs; y copies it.
+- ctrl+k runs any command from a form. ? lists the keys of the screen; the Keys tab lists them all.
+
+`
+
 // layoutGuide renders the guide for width w when it changed.
 func (s *helpSection) layoutGuide(w int) {
 	if s.guideW == w && s.guide != nil {
 		return
 	}
 	s.guideW = w
-	s.guide, s.heads = renderMarkdown(agent.CLIDoc, w, s.h.st)
+	s.guide, s.heads = renderMarkdown(guideIntro+agent.CLIDoc, w, s.h.st)
 	s.scroll.lines = s.guide
 	if s.query != "" {
 		s.findMatch(0, 1)
@@ -474,7 +521,11 @@ func (s *helpSection) view(w, h int) string {
 	case 0:
 		b.WriteString(st.Bold.Render("Getting started") + "\n\n")
 		for i, step := range gettingStarted {
-			item := s.h.listRow(fmt.Sprintf("%d. %s", i+1, step.title), i == s.stepCur) + "\n" +
+			title := fmt.Sprintf("%d. %s", i+1, step.title)
+			if s.stepDone(i) {
+				title += st.Dim.Render("  ✓ done")
+			}
+			item := s.h.listRow(title, i == s.stepCur) + "\n" +
 				styleLines(st.Dim, indent(output.Wrap(step.text, max(10, w-5)), "     ")) + "\n" +
 				"     " + st.Accent.Render(truncate("$ "+step.cmd, w-5))
 			b.WriteString(s.h.mark(item, func() tea.Cmd {
@@ -564,11 +615,16 @@ func (s *helpSection) outline(w, h int) string {
 			continue
 		}
 		label := strings.Repeat("  ", hd.level-2) + hd.text
+		line := st.Dim.Render(truncate("  "+label, w))
 		if i == cur {
-			lines = append(lines, st.Bold.Render(truncate("› "+label, w)))
-		} else {
-			lines = append(lines, st.Dim.Render(truncate("  "+label, w)))
+			line = st.Bold.Render(truncate("› "+label, w))
 		}
+		// A click on a heading scrolls the guide to it.
+		at := hd.line
+		lines = append(lines, s.h.mark(line, func() tea.Cmd {
+			s.scroll.off = at
+			return nil
+		}))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -599,21 +655,17 @@ func (s *helpSection) keysText(w int) string {
 	var b strings.Builder
 	b.WriteString(st.Bold.Render("Moving around") + "\n")
 	b.WriteString(indent(output.Wrap(tipText, max(10, w-2)), "  ") + "\n")
-	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, History, and Account have a tab bar above their page. A key that does nothing where you press it says so at the bottom.", max(10, w-2)), "  ") + "\n\n")
-	for _, k := range moveKeys {
-		b.WriteString(truncate(fmt.Sprintf("  %-14s %s", k.key, k.help), w) + "\n")
-	}
+	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a field, letters and digits go into it: esc leaves the field, ctrl+u clears it, and 1-7, q, and ? work again once you are out. A key that does nothing where you press it says so at the bottom.", max(10, w-2)), "  ") + "\n\n")
+	b.WriteString(keyLines(moveKeys, w) + "\n")
 	b.WriteString("\n" + st.Bold.Render("Everywhere") + "\n")
-	for _, k := range globalKeys {
-		b.WriteString(truncate(fmt.Sprintf("  %-14s %s", k.key, k.help), w) + "\n")
-	}
+	b.WriteString(keyLines(globalKeys, w) + "\n")
+	b.WriteString("\n" + st.Bold.Render("Letters") + "\n")
+	b.WriteString(keyLines(letterKeys, w) + "\n")
 	b.WriteString("\n" + st.Bold.Render("Mouse") + "\n")
 	b.WriteString(indent(output.Wrap(mouseHelp, max(10, w-2)), "  ") + "\n")
 	for _, sec := range sectionKeyDocs {
 		b.WriteString("\n" + st.Bold.Render(sec.section) + "\n")
-		for _, k := range sec.keys {
-			b.WriteString(truncate(fmt.Sprintf("  %-14s %s", k.key, k.help), w) + "\n")
-		}
+		b.WriteString(keyLines(sec.keys, w) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -655,7 +707,7 @@ func (s *helpSection) keys() []keyHelp {
 		}
 		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"→", "details"}, {"enter", "fill in and run"}}
 	case 5:
-		return []keyHelp{{"↑/↓", "move"}, {"enter", "open in the browser"}, {"c", "copy"}}
+		return []keyHelp{{"↑/↓", "move"}, {"enter", "open in browser"}, {"o", "open in browser"}, {"c", "copy"}}
 	}
 	return []keyHelp{{"↑/↓", "scroll"}}
 }

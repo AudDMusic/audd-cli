@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Help › >Exit codes<
+                 │ Help › Exit codes
  1 Recognize     │  Getting started  Guide  Commands  Keys >Exit codes< Links 
  2 Now playing   │ Exit codes
  3 Streams       │   0    ok           success, including no match
- 4 History       │   1    unexpected   unexpected error, or no match with
+ 4 Recognitions  │   1    unexpected   unexpected error, or no match with
  5 Account       │                     --fail-on-no-match
  6 Settings      │   2    usage        invalid arguments or input, or a missing
 *7 Help          >                     tool such as ffmpeg
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │                     --max-files), a confirmation is needed
                  │                     (--yes), --max-requests was reached, or
                  │                     an unfinished job for the same files
-                 │                     needs --resume or --new
- ctrl+k commands │   7    partial      a batch finished with some files failed
- ? keys  q quit  │   8    threshold    usage --check found fewer remaining
+ ctrl+k commands │                     needs --resume or --new
+ ? keys  q quit  │ ↓ 79 more lines below
+
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd commands --json                                                    y copy

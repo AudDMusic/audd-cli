@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Recognize › >Microphone<
+                 │ Recognize › Microphone
 *1 Recognize     > Identify the music playing near you
  2 Now playing   │ 
  3 Streams       │   Source   ‹ Microphone ›
- 4 History       │   Seconds  10
+ 4 Recognitions  │   Seconds  10
  5 Account       │   Device   ‹ default ›
  6 Settings      │   [ ] Add Apple Music data
  7 Help          │   [ ] Add Spotify data
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ field  enter listen  →/space change a choice  ←/esc back  ? keys
+
+↑/↓ field  enter listen  ←/esc back  ? keys
 $ audd listen                                                             y copy

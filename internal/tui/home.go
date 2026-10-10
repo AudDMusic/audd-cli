@@ -55,9 +55,9 @@ func init() {
 
 // HomeSections are the section names audd ui --section accepts, in
 // sidebar order. It also accepts listen: Recognize with the microphone.
-var HomeSections = []string{"recognize", "now-playing", "streams", "history", "account", "settings", "help"}
+var HomeSections = []string{"recognize", "now-playing", "streams", "recognitions", "account", "settings", "help"}
 
-var homeTitles = []string{"Recognize", "Now playing", "Streams", "History", "Account", "Settings", "Help"}
+var homeTitles = []string{"Recognize", "Now playing", "Streams", "Recognitions", "Account", "Settings", "Help"}
 
 // isListen reports whether a section name asks for the microphone.
 func isListen(name string) bool { return strings.ToLower(strings.TrimSpace(name)) == "listen" }
@@ -233,6 +233,13 @@ type home struct {
 	tip bool
 	// quitAsk: q or ctrl+c while a command runs asks first.
 	quitAsk bool
+	// confirm is a question of the screen's own, before something that
+	// spends requests or cannot be undone.
+	confirm *confirmState
+	// tipKeys counts the keys pressed while the tip shows.
+	tipKeys int
+	// keysScroll scrolls the keys overlay.
+	keysScroll scrollView
 
 	// Mouse: what each region of the last frame does when clicked.
 	zoneFns []func() tea.Cmd
@@ -249,8 +256,10 @@ type home struct {
 
 	signedOut bool
 	testToken bool
-	hdr       headerMsg
-	hdrLoaded bool
+	// recognized and streamAdded mark Getting started steps done.
+	recognized, listened, streamAdded bool
+	hdr                               headerMsg
+	hdrLoaded                         bool
 
 	flash  string
 	flashN int
@@ -295,14 +304,14 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 func (h *home) build() {
 	h.order = append([]string(nil), HomeSections...)
 	h.subs = map[string]section{
-		"recognize":   newRecognizeSection(h),
-		"now-playing": newNowPlayingSection(h),
-		"streams":     newStreamsSection(h),
-		"history":     newHistorySection(h),
-		"account":     newAccountSection(h),
-		"settings":    newSettingsSection(h),
-		"help":        newHelpSection(h),
-		"signin":      newSigninSection(h),
+		"recognize":    newRecognizeSection(h),
+		"now-playing":  newNowPlayingSection(h),
+		"streams":      newStreamsSection(h),
+		"recognitions": newHistorySection(h),
+		"account":      newAccountSection(h),
+		"settings":     newSettingsSection(h),
+		"help":         newHelpSection(h),
+		"signin":       newSigninSection(h),
 	}
 	h.palette = newPalette(h)
 	h.subs["palette"] = h.palette
@@ -442,6 +451,14 @@ func (h *home) toSidebar() {
 	h.showSignin = false
 }
 
+// profileName is the session's profile.
+func (h *home) profileName() string {
+	if h.a.Profile != nil {
+		return h.a.Profile.Name
+	}
+	return "default"
+}
+
 // useMic switches Recognize to the microphone.
 func (h *home) useMic() {
 	if s, ok := h.subs["recognize"].(*recognizeSection); ok {
@@ -510,6 +527,9 @@ func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return h, h.key(msg)
 	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonLeft) {
+			h.flash = ""
+		}
 		return h, h.mouse(msg)
 	}
 	return h, nil
@@ -557,6 +577,9 @@ func (h *home) route(m subMsg) tea.Cmd {
 
 // command is the command for the footer.
 func (h *home) command() string {
+	if h.confirm != nil {
+		return h.confirm.command
+	}
 	if h.paletteO {
 		return h.palette.command()
 	}

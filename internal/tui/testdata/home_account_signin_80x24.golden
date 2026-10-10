@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Account › >Account<
+                 │ Account › Account
  1 Recognize     │ >Account< Usage  Billing  API token  Profiles 
  2 Now playing   │ Sign in to see this
  3 Streams       │ 
- 4 History       │ Your account, usage, and billing need a sign-in to your AudD
+ 4 Recognitions  │ Your account, usage, and billing need a sign-in to your AudD
 *5 Account       > account.
  6 Settings      │ 
  7 Help          │ · Sign in
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
+
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --browser                                                    y copy

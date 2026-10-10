@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Help › >Links<
+                 │ Help › Links
  1 Recognize     │  Getting started  Guide  Commands  Keys  Exit codes >Links<
  2 Now playing   │ Links
  3 Streams       │ 
- 4 History       │ · This guide online                   https://docs.audd.io/cli
+ 4 Recognitions  │ · This guide online                   https://docs.audd.io/cli
  5 Account       │   The AudD API docs                   https://docs.audd.io
  6 Settings      │   Your dashboard (API token, plans)   https://dashboard.audd.io
 *7 Help          >   Report a problem                    https://github.com/AudDMusic/audd-cli/issues
@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/→ tabs  ↓ open  esc back  c copy  ? keys
+
+←/→ tabs  ↓ open  esc back  o open in browser  c copy  ? keys
 ctrl+k runs any audd command

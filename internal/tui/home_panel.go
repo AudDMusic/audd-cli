@@ -124,6 +124,9 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 		case "esc":
 			p.pasting = false
 			return nil
+		case "ctrl+u":
+			p.pasteIn.SetValue("")
+			return nil
 		case "enter":
 			p.pasting = false
 			v := strings.TrimSpace(p.pasteIn.Value())
@@ -213,6 +216,10 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 
 // errorText is an error as the command line shows it, for a pane.
 func errorText(st output.Styles, e *runError, w int) string {
+	if e.Code == "declined" {
+		// Answering no is not an error.
+		return "Cancelled. Nothing was sent."
+	}
 	var b strings.Builder
 	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+e.Message, w)))
 	if e.Hint != "" {

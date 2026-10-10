@@ -16,6 +16,7 @@ import (
 type column struct {
 	title string
 	width int
+	mid   bool // shortened in the middle (URLs)
 }
 
 // row is one line of a list, with what the shared keys need.
@@ -28,6 +29,7 @@ type row struct {
 	detail func(st detailStyles) string
 	view   *app.ResultView // the song whose cover the detail shows
 	data   any             // exported with e
+	hint   string          // what to do about it, in the status line
 }
 
 type detailStyles struct {
@@ -168,11 +170,11 @@ func recentRows(items []RecentItem) []row {
 	return rows
 }
 
-var recentCols = []column{{"When", 12}, {"Song", 0}, {"Album", 24}, {"Source", 24}}
+var recentCols = []column{{title: "When", width: 12}, {title: "Song", width: 0}, {title: "Album", width: 24}, {title: "Source", width: 24}}
 
 // --- jobs ---
 
-var jobCols = []column{{"Job", 10}, {"Status", 11}, {"Done", 11}, {"Failed", 6}, {"Created", 12}, {"Command", 0}}
+var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Command", width: 0}}
 
 func jobRows(jobs []JobRow) []row {
 	rows := make([]row, 0, len(jobs))
@@ -184,7 +186,7 @@ func jobRows(jobs []JobRow) []row {
 	return rows
 }
 
-var jobItemCols = []column{{"#", 5}, {"State", 8}, {"Input", 30}, {"Result", 0}}
+var jobItemCols = []column{{title: "#", width: 5}, {title: "State", width: 8}, {title: "Input", width: 30}, {title: "Result", width: 0}}
 
 func jobItemRows(items []JobItem) []row {
 	rows := make([]row, 0, len(items))
@@ -221,7 +223,18 @@ func jobItemRows(items []JobItem) []row {
 
 // --- streams ---
 
-var streamCols = []column{{"ID", 4}, {"Health", 19}, {"Latest song", 0}, {"When", 17}, {"URL", 22}}
+var streamCols = []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song"}, {title: "When", width: 17}, {title: "URL", mid: true}}
+
+// streamColsFor is the streams list for a w-wide view: the health and
+// the time keep their width; the URL, shortened in the middle, takes what
+// is left once the song has room, and is left out when there is none
+// (the stream's details show it).
+func streamColsFor(w int) []column {
+	if w >= 100 {
+		return []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song", width: 30}, {title: "When", width: 17}, {title: "URL", mid: true}}
+	}
+	return []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song"}, {title: "When", width: 17}}
+}
 
 func streamRows(data []stationData, now time.Time) []row {
 	rows := make([]row, 0, len(data))
@@ -239,13 +252,14 @@ func streamRows(data []stationData, now time.Time) []row {
 		}
 		r := newRow(fmt.Sprint(d.RadioID), fmt.Sprint(d.RadioID), d.healthShort(), song, since, d.URL)
 		r.link = link
+		r.hint = d.healthHint()
 		r.data = stationDoc(d, now)
 		rows = append(rows, r)
 	}
 	return rows
 }
 
-var playCols = []column{{"Time", 12}, {"Song", 0}, {"Album", 28}, {"Played", 7}, {"Length", 7}}
+var playCols = []column{{title: "Time", width: 12}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played", width: 7}, {title: "Length", width: 7}}
 
 // whenShort is the "When" cell of a stream: "now · 1:23" while a song
 // plays, "ended 2 min ago" for a result sent when the song ended, else the
@@ -258,9 +272,9 @@ func whenShort(p Play, now time.Time) string {
 		}
 		return "now · " + clock(p.Elapsed(now))
 	case p.PlayLength > 0:
-		return "ended " + ago(p.Ago(now))
+		return "ended " + agoAt(p.Ago(now), now)
 	}
-	return ago(p.Ago(now))
+	return agoAt(p.Ago(now), now)
 }
 
 func playRows(plays []Play) []row {

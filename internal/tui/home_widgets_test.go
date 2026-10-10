@@ -28,7 +28,7 @@ func TestFormFields(t *testing.T) {
 	for _, k := range typeText("2x") {
 		f.update(k)
 	}
-	if e := f.check(); e != "Limit must be a whole number" {
+	if e := f.check(); e != "2x is not a whole number" {
 		t.Fatalf("check: %q", e)
 	}
 	f.update(key("backspace"))

@@ -11,7 +11,7 @@ Now playing                                                                     
 ╭────────────────────────────────────────────────╮
 │ Stream 3                                       │
 │ Can't connect to the stream (650)              │
-│ Last heard: Portishead — Roads · 3 h ago       │
+│ Last heard: Portishead — Roads · at 09:00      │
 │                                                │
 │                                                │
 │                                                │
@@ -27,4 +27,4 @@ Now playing                                                                     
 
 
 
-←/→/↑/↓ select  enter zoom  o open  c copy link  h history  ? help  q quit
+←/→/↑/↓ select  enter zoom  h history  o open link  c copy link  r refresh  ? help  q quit
