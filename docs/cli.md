@@ -82,9 +82,8 @@ through the list or form, right or Enter opens the selected item, and up from
 the top goes back to the tab bar. Left and Esc go back one level: from details
 to the list, to the tab bar, then to the sidebar (or to the screen a Help step
 or a hint came from). Inside typed text left moves the cursor; on a choice,
-left and right change it, and left on its first option goes back. Letters and
-digits go into a text field only while it has the cursor: Esc leaves the
-field and ctrl+u clears it. `[` and `]` switch tabs from anywhere. The path at
+left and right change it, and left on its first option goes back. `[` and
+`]` switch tabs from anywhere. The path at
 the top of the page shows where you are, and the line above the key hints
 says what just happened.
 
@@ -93,14 +92,17 @@ page) reaches them, left and right move between them, and Enter presses one.
 A letter shown on a button, such as `(o)`, presses it from anywhere on the
 page; each letter means one thing everywhere (`o` opens in the browser, `c`
 copies, `r` refreshes, `d` removes, `e` edits, `x` exports, `s` stops). A key
-works only where it is listed; any other key says it does nothing. `1`-`7`
-jump to a section except while typing in a field.
+works only where it is listed; any other key says it does nothing.
 
-Opening a page never starts typing: its first field is selected, a letter
-starts typing in it, and Enter edits it. Saved values (a setting, the
-callback URL, a stream's URL, the token) are read-only until Enter or Edit;
-Esc cancels the edit and puts the old value back. Settings of audd save
-right away, and `u` undoes the last change. Spending more than one request,
+When a text field is selected, you are typing in it: letters, digits, and
+symbols go in, left and right move the cursor (left at its start goes back),
+ctrl+u clears it, and Esc stops typing. Recognize opens typing in its Input
+field; the other pages open with no text field selected, so `1`-`7` jump to a
+section. Enter in a form's last text field runs the form; in Add a stream,
+Enter in the ID field adds the stream, and the box below it is optional.
+Saved values (a setting, the callback URL, a stream's URL, the token) change
+only after Enter or Edit; Esc puts the old value back. Settings of audd and a
+stream's URL save right away, and `u` undoes the last change. Spending more than one request,
 removing a stream, signing out, and replacing the token or the callback URL
 ask first in a dialog with a button named for the action: after a plan the
 action is focused, otherwise Cancel. In a dialog `y` confirms and `n` or Esc
