@@ -76,7 +76,13 @@ Run `audd` with no arguments on a terminal, or `audd ui`, for a full-screen inte
 
 The bottom line shows the command each action runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its arguments and flags. Limits and confirmations work as on the command line: interactive mode asks before spending more than one request and never adds `--yes`. `audd ui --section streams` opens a section directly.
 
-Esc, or left from the left-most item, goes back one step: to the screen you came from, or to the sidebar. Left and right walk tabs and pages. The mouse works too: click sections, pages, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
+Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back:
+
+- **Sidebar**: ↑/↓ pick a section, → or Enter opens it (`1`-`7` jump straight to one).
+- **Tab bar** (Help, Streams, History, Account): ←/→ switch tabs, ↓ or Enter goes into the page.
+- **Page**: ↑/↓ move through the list or form, → or Enter opens the selected item; ↑ from the top goes back to the tab bar.
+
+← and Esc always go back one level, and the path at the top of the page shows where you are. Inside typed text ← moves the cursor; on a choice such as Source, →, Space, or Enter changes it. `[` and `]` switch tabs from anywhere. A key that does nothing where you press it says so at the bottom, and `q` asks first while a command is running. The mouse works too: click sections, tabs, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
 
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help instead, so scripts and agents get plain output.
 
