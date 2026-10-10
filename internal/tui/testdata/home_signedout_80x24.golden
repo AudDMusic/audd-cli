@@ -17,8 +17,8 @@ AudD  ·  profile default  ·  signed out
                  │     The public test token: 10 requests a day, standard
                  │     endpoint only. Nothing is saved.
                  │ 
- ctrl+k commands │ You can also look around first: the sections on the left work
- ? keys  q quit  │ once a token is set.
+ [ Commands ]    │ You can look around first; recognizing needs a token.
+ [ Keys ] q quit │ 
 
 ↑/↓ choose  enter go  ←/esc back  ? keys
 $ audd login --browser                                                    y copy

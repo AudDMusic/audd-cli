@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 ↑/↓ field  enter listen  ←/esc back  ? keys
 $ audd listen                                                             y copy

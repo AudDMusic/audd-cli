@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ Recognized with audd · 3 recognitions
- ctrl+k commands │ 
- ? keys  q quit  │ [ Refresh (r) ]  [ Export (x) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Refresh (r) ]  [ Export (x) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd browse --tab recent                                                y copy

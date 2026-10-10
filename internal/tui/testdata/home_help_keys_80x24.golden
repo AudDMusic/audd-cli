@@ -7,18 +7,18 @@ AudD  ·  profile default
  5 Account       │   The menu is the sidebar; Help, Streams, Recognitions, and
  6 Settings      │   Account have a tab bar above their page. On a choice ‹ like
 *7 Help          >   this ›, ←/→ change it and ← on its first option goes back.
-                 │   While you type in a field, letters and digits go into it:
-                 │   esc leaves the field, ctrl+u clears it. What a page can do
+                 │   When a text field is selected, you are typing in it:
+                 │   letters, digits, and symbols go in, ←/→ move the cursor (←
+                 │   at its start goes back), ctrl+u clears it, and esc stops
+                 │   typing. Recognize opens typing in Input; other pages open
+                 │   with no text field selected, so 1-7 jump to a section. A
+                 │   saved value, such as the callback URL, is changed only
+                 │   after enter or e, and esc puts the old value back. Enter in
+                 │   a form's last text field runs it (in Add a stream, enter in
+                 │   ID adds it; the box below is optional). What a page can do
                  │   is on its buttons: tab (or ↓ from the end of the page)
-                 │   reaches them, ←/→ move between them, enter presses one. A
-                 │   letter on a button, such as (o), presses it from anywhere
-                 │   on the page. A key works only where it is listed; any other
-                 │   key says it does nothing. Opening a page never starts
-                 │   typing: its field is selected, a letter starts typing in
-                 │   it, enter edits it, and 1-7 jump to a section except while
-                 │   you type. Settings of audd save right away (u undoes the
- ctrl+k commands │   last change). Spending more than one request, removing,
- ? keys  q quit  │ ↓ 111 more lines below
+ [ Commands ]    │   reaches them, ←/→ move between them, enter presses one. A
+ [ Keys ] q quit │ ↓ 115 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

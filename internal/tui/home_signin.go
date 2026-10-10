@@ -174,7 +174,7 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 				}
 			}
 			if s.step == "paste" && s.panel.res.err != nil {
-				s.paste.err = s.panel.res.err.Message
+				s.paste.err = tokenSaveFailed(s.panel.res.err)
 			}
 		}
 		return nil
@@ -205,7 +205,7 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 			if why := suspiciousToken(v); why != "" {
 				return s.h.askFirst(&confirmState{
 					owner: owner, question: why + " Save it anyway?", action: "Save anyway",
-					topic: "Save anyway?", command: "audd config set token -", cancel: "Not saved", yes: save,
+					topic: "Save anyway?", command: "audd config set token -", cancel: "Cancelled. API token unchanged.", yes: save,
 				})
 			}
 			if s.h.signedOut || s.h.testToken {
@@ -218,7 +218,7 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 				notes:    []string{"New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
 				command:  "audd config set token -",
 				action:   "Replace the token",
-				cancel:   "Cancelled. The token is unchanged.",
+				cancel:   "Cancelled. API token unchanged.",
 				yes:      save,
 			})
 		}
@@ -290,7 +290,7 @@ func (s *signinSection) view(w, h int) string {
 		}) + "\n\n")
 	}
 	if s.heading == "" {
-		b.WriteString(styleLines(st.Dim, output.Wrap("You can also look around first: the sections on the left work once a token is set.", w)))
+		b.WriteString(styleLines(st.Dim, output.Wrap("You can look around first; recognizing needs a token.", w)))
 	}
 	return b.String()
 }
@@ -324,4 +324,9 @@ func indent(s, pre string) string {
 		lines[i] = pre + lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// tokenSaveFailed says that saving a token failed, and what to do.
+func tokenSaveFailed(e *runError) string {
+	return "Saving the token failed: " + strings.TrimSuffix(e.Message, ".") + ". Try again, or set AUDD_API_TOKEN."
 }

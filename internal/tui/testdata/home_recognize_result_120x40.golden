@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ Details ]  [ Open link (o) ]  [ Copy link (c) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Details ]  [ Open the song link (o) ]  [ Copy the song link (c) ]
 
 →/enter details  ←/esc back to the form  tab buttons  ? keys
 $ audd recognize song.mp3                                                                                         y copy

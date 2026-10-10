@@ -174,12 +174,13 @@ var recentCols = []column{{title: "When", width: 12}, {title: "Song", width: 0},
 
 // --- jobs ---
 
-var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Command", width: 0}}
+var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Command", width: 0, mid: true}}
 
 func jobRows(jobs []JobRow) []row {
 	rows := make([]row, 0, len(jobs))
 	for _, j := range jobs {
-		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), strings.Join(j.Command, " "))
+		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), strings.Join(j.Command, " "),
+			fmt.Sprintf("%d/%d, %d failed", j.Done, j.Total, j.Failed))
 		r.data = j
 		j := j
 		r.detail = func(st detailStyles) string {
@@ -266,8 +267,8 @@ func streamRows(data []stationData, now time.Time) []row {
 			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
 			out := st.title.Render(fmt.Sprintf("Stream %d", d.RadioID)) + "\n\n" +
 				field("URL", d.URL) + field("Health", d.HealthText())
-			if h := d.healthHint(); h != "" {
-				out += field("", h)
+			if h := d.healthNext(); h != "" {
+				out += field("Next step", h)
 			}
 			return out + field("Latest", song+"  "+st.dim.Render(since))
 		}

@@ -79,6 +79,21 @@ func (s Station) healthShort() string {
 	return "Problem"
 }
 
+// healthNext is only the next step for a stream that is down (its
+// health is shown next to it).
+func (s Station) healthNext() string {
+	if s.Health == nil {
+		return ""
+	}
+	switch s.Health.Code {
+	case 650:
+		return "Check that the URL plays in a browser or media player; e changes it."
+	case 651:
+		return "Check that the stream plays music, not talk or silence."
+	}
+	return ""
+}
+
 // healthHint is the next step for a stream that is down ("" when it is
 // fine).
 func (s Station) healthHint() string {

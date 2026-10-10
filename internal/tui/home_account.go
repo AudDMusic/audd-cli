@@ -244,7 +244,7 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 			return tea.Batch(s.h.setFlash("Token saved for profile "+s.h.profileName()), s.h.loadHeader(), s.showToken(false))
 		}
 		if done && s.tokSet.res.err != nil {
-			s.tokForm.err = s.tokSet.res.err.Message
+			s.tokForm.err = tokenSaveFailed(s.tokSet.res.err)
 		}
 		return nil
 	}
@@ -475,7 +475,7 @@ func (s *accountSection) askSignOut() tea.Cmd {
 		action:   "Sign out",
 		notes:    []string{"Its saved sign-in and API token are removed from this computer. audd cannot recognize music with this profile until you sign in or set a token again."},
 		command:  "audd auth logout",
-		cancel:   "Still signed in",
+		cancel:   "Cancelled. Sign-in unchanged.",
 		yes: func() tea.Cmd {
 			return s.prof.start(runReq{args: []string{"auth", "logout"}, tag: "logout"})
 		},
@@ -609,7 +609,7 @@ func (s *accountSection) billingView(w, h int) string {
 		}
 		b.WriteString(st.Bold.Render(s.payWhat) + "\n\n")
 		b.WriteString("Open this link to review and pay (nothing is charged until you confirm there):\n\n  ")
-		b.WriteString(st.Accent.Render(s.payLink) + "\n\n")
+		b.WriteString(st.Accent.Render(strings.Join(hardWrap([]string{s.payLink}, max(10, w-2)), "\n  ")) + "\n\n")
 		b.WriteString(st.Dim.Render("enter or o opens it in the browser, c copies it, esc closes it."))
 		return b.String()
 	}
@@ -695,7 +695,7 @@ func (s *accountSection) keys() []keyHelp {
 	case 0:
 		return []keyHelp{{"↑/↓", "scroll"}}
 	case 1:
-		return []keyHelp{{"enter", "billing"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"enter", "billing"}}
 	case 2:
 		switch {
 		case s.pay.running && s.pay.pending != nil:
@@ -811,7 +811,8 @@ func (s *accountSection) askToken() tea.Cmd {
 		notes:    []string{"Now: " + old, "New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
 		command:  "audd config set token -",
 		action:   "Replace the token",
-		cancel:   "Cancelled. The token is unchanged.",
+		cancel:   "Not saved · esc closes the form",
+		onCancel: func() { s.tokForm.focusName("save") },
 		yes: func() tea.Cmd {
 			return s.tokSet.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
 		},

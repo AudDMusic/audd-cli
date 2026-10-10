@@ -8,7 +8,7 @@ AudD  ·  profile default
 *6 Settings      >     max_requests · default --max-requests for every command
  7 Help          │   Parallel requests                 4  (default)
                  │     concurrency · parallel requests for batch recognition
-                 │   Start the recorder automatically  true  (default)
+                 │   Start the recorder automatically  on  (default)
                  │     streams.background_recorder · start the background strea…
                  │   API token                         0123…cdef  (saved token)
                  │     token · API token, kept in the system credential store
@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ config-dir/config.toml. Environment variables (env) win over
                  │ the file.
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ Edit (e) ]  [ Reload (r) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Edit (e) ]  [ Reload (r) ]
 
 ↑/↓ move  →/enter edit  ←/esc back  tab buttons  ? keys
 $ audd config get format                                                  y copy

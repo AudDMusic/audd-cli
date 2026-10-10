@@ -271,6 +271,18 @@ func parseResult(code int, stdout, stderr string) runResult {
 				continue
 			}
 		}
+		// A command that prints for people (--format table) writes its
+		// error as "Error: …" and "Try: …" lines.
+		switch {
+		case res.err == nil && strings.HasPrefix(t, "Error: "):
+			res.err = &runError{Code: "error", Message: strings.TrimPrefix(t, "Error: ")}
+			continue
+		case res.err != nil && res.err.Hint == "" && strings.HasPrefix(t, "Try: "):
+			res.err.Hint = strings.TrimPrefix(t, "Try: ")
+			continue
+		case strings.HasPrefix(t, "Docs: "):
+			continue
+		}
 		res.notes = append(res.notes, strings.TrimRight(l, " "))
 	}
 	if code != 0 && res.err == nil {
@@ -375,14 +387,26 @@ func newAskState(owner string, m runAskMsg, h *home) *askState {
 // action is the confirming button, named from the question: "Recognize
 // 2 files, using 2 requests?" is [ Recognize 2 files ].
 func (s *askState) action() string {
-	q := strings.TrimSuffix(strings.TrimSpace(s.msg.question), "?")
-	for _, sep := range []string{", ", "? ", ". ", ": "} {
+	q := strings.TrimSpace(s.msg.question)
+	for _, sep := range []string{"? ", ", "} {
 		if i := strings.Index(q, sep); i > 0 {
 			q = q[:i]
 		}
 	}
-	if q == "" || len(q) > 32 {
-		return "Confirm"
+	q = strings.TrimSuffix(q, "?")
+	// "Scan up to 5 chunks of mix.mp3 with the enterprise endpoint" is
+	// [ Scan mix.mp3 ].
+	q = strings.TrimSuffix(q, " with the enterprise endpoint")
+	if strings.HasPrefix(q, "Scan ") {
+		if i := strings.LastIndex(q, " of "); i > 0 {
+			q = "Scan " + q[i+4:]
+		}
+	}
+	if w := strings.Fields(q); len(w) > 6 {
+		q = strings.Join(w[:6], " ") + "…"
+	}
+	if q == "" {
+		return "Go ahead"
 	}
 	return q
 }

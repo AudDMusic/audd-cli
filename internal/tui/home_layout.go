@@ -237,11 +237,12 @@ func (h *home) sidebar(rows int) string {
 		lines = append(lines, "")
 	}
 	if rows >= 13 {
-		lines[rows-2] = h.mark(h.st.Dim.Render(" ctrl+k commands"), func() tea.Cmd { return h.openPalette("") })
-		lines[rows-1] = h.mark(h.st.Dim.Render(" ? keys"), func() tea.Cmd {
+		// Two buttons (their keys, ctrl+k and ?, are in the footer).
+		lines[rows-2] = " " + h.mark("[ Commands ]", func() tea.Cmd { return h.openPalette("") })
+		lines[rows-1] = " " + h.mark("[ Keys ]", func() tea.Cmd {
 			h.keysO, h.keysScroll.off = true, 0
 			return nil
-		}) + h.st.Dim.Render("  q quit")
+		}) + h.st.Dim.Render(" q quit")
 	}
 	return strings.Join(lines[:rows], "\n")
 }

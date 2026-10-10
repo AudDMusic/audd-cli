@@ -500,7 +500,12 @@ func (h *home) setFlash(s string) tea.Cmd {
 // copy puts s on the clipboard with the next frame.
 func (h *home) copy(s, what string) tea.Cmd {
 	h.osc = oscCopy(s)
-	return tea.Batch(h.setFlash("Copied "+what),
+	// One line: a long command is shortened in the middle.
+	msg := "Copied " + what
+	if len([]rune(msg)) > h.w {
+		msg = truncMiddle(msg, max(20, h.w))
+	}
+	return tea.Batch(h.setFlash(msg),
 		tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} }))
 }
 
@@ -676,6 +681,10 @@ func (h *home) useToken(test bool) {
 	}
 	h.signedOut = h.noToken()
 	h.hdr, h.hdrLoaded = headerMsg{}, false
+	// A result from the other token is not shown as if it was this one's.
+	if r, ok := h.subs["recognize"].(*recognizeSection); ok && r.phase == "result" {
+		r.phase, r.plan = "form", ""
+	}
 }
 
 // switchProfile rebuilds the session for another profile.

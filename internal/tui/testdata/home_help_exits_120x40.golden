@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ error
                  │   printed to stderr when a command fails in a machine format
- ctrl+k commands │ 
- ? keys  q quit  │ ↓ 37 more lines below
+ [ Commands ]    │ 
+ [ Keys ] q quit │ ↓ 37 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd commands --json                                                                                            y copy

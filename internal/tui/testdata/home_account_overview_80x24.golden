@@ -17,8 +17,8 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ Refresh (r) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd account                                                            y copy

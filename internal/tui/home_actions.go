@@ -188,3 +188,13 @@ func actionKeys(acts []button) []keyHelp {
 	}
 	return k
 }
+
+// focusButton puts the keys on the page's button with this label.
+func (h *home) focusButton(label string) {
+	for i, b := range h.pageActions() {
+		if b.label == label {
+			h.focus = focusContent
+			h.btnActive, h.btnCur = true, i
+		}
+	}
+}

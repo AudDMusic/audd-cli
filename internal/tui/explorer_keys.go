@@ -193,14 +193,24 @@ func (m *explorer) enter(l *level) tea.Cmd {
 // drill opens what a job (its files) or a stream (its recent plays)
 // holds, or a row's details.
 func (m *explorer) drill(l *level, r *row) tea.Cmd {
-	l.detail = false
+	// Embedded, the job's (or stream's) page stays under the level
+	// opened from it: esc goes back to that page.
+	l.detail = l.detail && m.embedded
+	title := "Job " + r.key
+	if l.detail {
+		title = "Files"
+	}
 	switch l.kind {
 	case "jobs":
-		nl := &level{kind: "items", arg: r.key, title: "Job " + r.key, cols: jobItemCols, loading: true}
+		nl := &level{kind: "items", arg: r.key, title: title, cols: jobItemCols, loading: true}
 		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
 		return m.load(m.tab, nl)
 	case "streams":
-		nl := &level{kind: "plays", arg: r.key, title: "Stream " + r.key + " · recent plays", cols: playCols, loading: true}
+		playTitle := "Stream " + r.key + " · recent plays"
+		if l.detail {
+			playTitle = "Recent plays"
+		}
+		nl := &level{kind: "plays", arg: r.key, title: playTitle, cols: playCols, loading: true}
 		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
 		return m.load(m.tab, nl)
 	}

@@ -292,9 +292,10 @@ func (m *explorer) levelView(l *level, h int) string {
 		}
 	case "jobs":
 		if m.w < 100 {
-			// Job, status, done, and what it ran, which tells jobs apart.
-			cols = []column{jobCols[0], jobCols[1], {title: "Done", width: 7}, jobCols[5]}
-			pick = []int{0, 1, 2, 5}
+			// Job, status, done with the failures, and what it ran, which
+			// tells jobs apart.
+			cols = []column{jobCols[0], jobCols[1], {title: "Done", width: 13}, jobCols[5]}
+			pick = []int{0, 1, 6, 5}
 		}
 	}
 	var note string

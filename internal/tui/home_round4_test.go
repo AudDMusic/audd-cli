@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
 // lastArgs are the arguments of the last run, as the runner got them.
@@ -129,22 +131,52 @@ func TestRecognizeWithoutToken(t *testing.T) {
 	}
 }
 
-// Opening Recognize never starts typing: digits jump, a letter starts
-// typing with that letter.
+// Recognize opens typing in Input: every printable key goes in, digits
+// and [ ] : too; esc stops typing, and then digits jump. There is no
+// "selected but not typing" step in between.
 func TestRecognizeOpensSelected(t *testing.T) {
 	h := navHome(t, homeOpts{})
 	press(h, key("1"))
 	s := recognizeOf(h)
-	if h.activeID() != "recognize" || s.form.capturing() || !strings.Contains(footerText(h.View()), "type a path or URL") {
-		t.Fatalf("opened typing:\n%s", h.View())
+	foot := footerText(h.View())
+	if h.activeID() != "recognize" || !s.form.capturing() || s.form.current().name != "input" ||
+		!strings.Contains(foot, "type a path or URL") || !strings.Contains(foot, "esc then 1-7 for sections") {
+		t.Fatalf("opens typing in Input:\n%s", h.View())
+	}
+	press(h, typeText("take [2] 3:1.mp3")...)
+	if h.activeID() != "recognize" || s.form.value("input") != "take [2] 3:1.mp3" {
+		t.Fatalf("typed: %q in %s", s.form.value("input"), h.activeID())
+	}
+	press(h, key("left"), key("ctrl+u"))
+	if s.form.value("input") != "" {
+		t.Fatal("ctrl+u clears the field")
+	}
+	press(h, typeText("a.mp3")...)
+	press(h, key("esc"))
+	if s.form.value("input") != "a.mp3" || h.focus == focusContent && s.form.capturing() {
+		t.Fatalf("esc stops typing and keeps the value: %q", s.form.value("input"))
+	}
+	if strings.Contains(h.View(), "type to fill it in") || strings.Contains(h.View(), "enter to type") {
+		t.Fatalf("an in-between state:\n%s", h.View())
 	}
 	press(h, key("3"))
 	if h.activeID() != "streams" {
-		t.Fatal("a digit jumps")
+		t.Fatal("after esc a digit jumps")
 	}
-	press(h, key("1"), key("s"))
-	if s.form.value("input") != "s" || !s.form.capturing() {
-		t.Fatalf("a letter starts typing: %q", s.form.value("input"))
+	press(h, key("1"))
+	if !s.form.capturing() || s.form.current().name != "input" || s.form.value("input") != "a.mp3" {
+		t.Fatal("back on Recognize: typing in Input again, value kept")
+	}
+}
+
+// Other pages open with no text field selected, so digits jump.
+func TestOtherPagesOpenNotTyping(t *testing.T) {
+	h := navHome(t, homeOpts{})
+	for _, d := range []string{"2", "3", "4", "5", "6", "7"} {
+		press(h, key(d))
+		if h.active().capturing() {
+			t.Fatalf("%s opened typing:\n%s", h.activeID(), h.View())
+		}
 	}
 }
 
@@ -280,4 +312,23 @@ func TestStreamRemoveAndExportName(t *testing.T) {
 		t.Fatalf("export path: %s", p)
 	}
 	_ = tea.KeyMsg{}
+}
+
+// Runs in interactive mode print errors as text (Error:, Try:, Docs:
+// lines); each becomes the error the page shows, with what to try.
+func TestHumanErrorsParse(t *testing.T) {
+	for _, c := range []struct{ stderr, msg, hint string }{
+		{"Error: no such file or folder: /nope.mp3\nTry: check the path\n", "no such file or folder: /nope.mp3", "check the path"},
+		{"Error: found 3 files, more than --max-files 2\nTry: pass --max-files 3, or --max-files none\nDocs: https://docs.audd.io\n", "found 3 files, more than --max-files 2", "pass --max-files 3, or --max-files none"},
+		{"Error: --enterprise needs --limit\nTry: add --limit N\n", "--enterprise needs --limit", "add --limit N"},
+		{"Error: Wrong API token\n", "Wrong API token", ""},
+	} {
+		res := parseResult(1, "", c.stderr)
+		if res.err == nil || res.err.Message != c.msg || res.err.Hint != c.hint {
+			t.Fatalf("%q: %+v", c.stderr, res.err)
+		}
+		if v := errorText(output.Styles{}, res.err, 100); !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg+"\nTry: "+c.hint)) && c.hint != "" || !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg)) {
+			t.Fatalf("shown: %q", v)
+		}
+	}
 }

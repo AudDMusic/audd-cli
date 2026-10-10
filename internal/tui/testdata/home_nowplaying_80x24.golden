@@ -10,15 +10,15 @@ AudD  ·  profile default
                  │ ┃ Warriors (album) · Label · 2019                           ┃
                  │ ┃ played 2:50                                               ┃
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-                 │ 
-                 │ 
-                 │ 
-                 │ 
                  │ ↓ 2 more streams below
                  │ 
                  │ 
- ctrl+k commands │ [ History ]  [ Open link (o) ]  [ Copy link (c) ]
- ? keys  q quit  │ [ Refresh (r) ]
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ [ Commands ]    │ [ History ]  [ Open the song link (o) ]
+ [ Keys ] q quit │ [ Copy the song link (c) ]  [ Refresh (r) ]
 
 ←/→ previous, next stream  ↑/↓ rows  enter open  esc back  tab buttons  ? keys
 $ audd now-playing                                                        y copy

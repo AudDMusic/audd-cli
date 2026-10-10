@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │     https://dashboard.audd.io.
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --browser                                                    y copy

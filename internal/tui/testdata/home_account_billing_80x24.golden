@@ -17,8 +17,8 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ Buy requests ]  [ Payments ]  [ Refresh (r) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Buy requests ]  [ Payments ]  [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd billing subscribe startup_plan                                     y copy

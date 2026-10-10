@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │                     --max-files), a confirmation is needed
                  │                     (--yes), --max-requests was reached, or
                  │                     an unfinished job for the same files
- ctrl+k commands │                     needs --resume or --new
- ? keys  q quit  │ ↓ 79 more lines below
+ [ Commands ]    │                     needs --resume or --new
+ [ Keys ] q quit │ ↓ 79 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd commands --json                                                    y copy

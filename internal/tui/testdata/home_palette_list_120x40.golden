@@ -3,13 +3,13 @@ AudD  ·  profile default
  1 Recognize     > Run a command
  2 Now playing   │ >                                                                                                   
  3 Streams       │ 
- 4 Recognitions  │ > completion      Print a shell completion script
- 5 Account       │   docs            Print AudD documentation as markdown
- 6 Settings      │   now-playing     Show the latest songs on your streams
- 7 Help          │   recognize       Identify music in files, URLs, and folders
-                 │   streams add     Add a stream to monitor
-                 │   streams remove  Stop monitoring a stream
-                 │   streams report  Plays grouped
+ 4 Recognitions  │ > recognize       Identify music in files, URLs, and folders
+ 5 Account       │   streams add     Add a stream to monitor
+ 6 Settings      │   streams remove  Stop monitoring a stream
+ 7 Help          │   streams report  Plays grouped
+                 │   now-playing     Show the latest songs on your streams
+                 │   docs            Print AudD documentation as markdown
+                 │   completion      Print a shell completion script
                  │ 
                  │ 
                  │ 
@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 type filter  ↑/↓ move  enter open  esc close  ctrl+u clear
-$ audd completion                                                                                                 y copy
+$ audd recognize                                                                                                  y copy

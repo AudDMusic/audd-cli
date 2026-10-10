@@ -207,9 +207,11 @@ type form struct {
 // laterField reports whether a field other than a button comes after
 // the cursor.
 func (f *form) laterField() bool {
+	// Boxes and choices are optional: enter in the last text field
+	// sends the form.
 	v := f.visible()
 	for i := f.cursor + 1; i < len(v); i++ {
-		if v[i].kind != fButton {
+		if v[i].isText() {
 			return true
 		}
 	}
@@ -370,42 +372,23 @@ func (f *form) resume() {
 	}
 }
 
-// idle selects the text field under the cursor without typing in it:
-// a page opened with number keys never starts typing.
-func (f *form) idle() {
-	if c := f.current(); c != nil && c.isText() && !c.lockable {
-		c.locked = true
-	}
-}
-
-// startsTyping reports whether k, typed now, starts typing into the
-// selected field: any character but the digits that jump to sections.
-func (f *form) startsTyping(k tea.KeyMsg) bool {
-	c := f.current()
-	if c == nil || !c.isText() || c.lockable || !c.locked || k.Type != tea.KeyRunes {
-		return false
-	}
-	s := k.String()
-	return !(len(s) == 1 && s >= "1" && s <= "7")
-}
-
 // leaveField stops typing in the text field under the cursor (esc): the
 // field stays selected, and enter types in it again. It reports whether
 // there was a field to leave.
 func (f *form) leaveField() bool {
 	c := f.current()
-	if c == nil || !c.isText() || c.locked {
+	if c == nil || !c.isText() || !c.lockable {
+		// A field of a new form: esc leaves the form (or the page), and
+		// the value stays.
 		return false
 	}
-	c.locked = true
-	if c.lockable {
-		// Editing a saved value: esc cancels, and the value is as it
-		// was.
-		c.input.SetValue(c.orig)
-		c.problem = ""
-		return true
+	if c.locked && c.input.Value() == c.orig {
+		return false
 	}
-	c.problem = c.formatProblem()
+	// Editing a saved value: esc cancels, and the value is as it was.
+	c.locked = true
+	c.input.SetValue(c.orig)
+	c.problem = ""
 	return true
 }
 
@@ -545,21 +528,9 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 			c.orig = c.input.Value()
 			c.input.CursorEnd()
 			return "", c.input.Focus()
-		case !c.lockable && k.Type == tea.KeyRunes:
-			// Typing into a selected field starts editing it, with what
-			// was typed.
-			c.locked = false
-			c.input.CursorEnd()
-			c.input.Focus()
-			var cmd tea.Cmd
-			c.input, cmd = c.input.Update(k)
-			return "", cmd
 		}
 		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
-			if c.lockable {
-				return "", f.h.setFlash("Press enter or e to edit " + c.label)
-			}
-			return "", f.h.setFlash("Press enter to type in " + c.label)
+			return "", f.h.setFlash("Press enter or e to edit " + c.label)
 		}
 		return "", nil
 	}
@@ -571,12 +542,13 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 			return "", nil
 		}
 		if b := f.firstButton(); b != nil {
-			// The form is sent: the keys leave the field (o, c, and the
-			// rest work on what comes next).
-			if !c.lockable {
-				c.locked = true
+			// The form is sent: the cursor goes to its button, so the
+			// next keys (o, c, 1-7) are not typed into the field.
+			act := f.press(b)
+			if act != "" && !c.lockable {
+				f.focusName(b.name)
 			}
-			return f.press(b), nil
+			return act, nil
 		}
 		f.move(1)
 		return "", nil
@@ -616,13 +588,12 @@ func (f *form) rowKeys(primary string) []keyHelp {
 		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel"})
 	case f.enterNext && f.laterField():
 		k = append(k, keyHelp{"enter", "next field"})
-	case c.locked:
-		what := c.typeHint
-		if what == "" {
-			what = "to fill it in"
+	case c.typeHint != "":
+		k = append(k, keyHelp{"type", c.typeHint})
+		if primary != "" {
+			k = append(k, keyHelp{"enter", primary})
 		}
-		k = append(k, keyHelp{"type", what}, keyHelp{"enter", "edit"}, keyHelp{"1-7", "sections"})
-	default:
+	case primary != "":
 		k = append(k, keyHelp{"enter", primary})
 	}
 	return k
@@ -742,11 +713,8 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 						val += st.Dim.Render(" · " + d)
 					}
 				}
-				switch {
-				case cur && x.lockable:
+				if cur && x.lockable {
 					val += st.Dim.Render("  (enter or e to edit)")
-				case cur:
-					val += st.Dim.Render("  (enter to type)")
 				}
 			}
 			b.WriteString(truncate(mark+label+val, w))

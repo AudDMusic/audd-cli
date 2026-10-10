@@ -350,7 +350,7 @@ func (m *npModel) gridView(h int) string {
 		if below > 0 {
 			marks = append(marks, "↓ "+plural(below, "more stream")+" below")
 		}
-		out = fit(out, m.w, max(1, h-1)) + "\n" + m.st.Dim.Render(strings.Join(marks, " · "))
+		out += "\n" + m.st.Dim.Render(strings.Join(marks, " · "))
 	}
 	return out
 }

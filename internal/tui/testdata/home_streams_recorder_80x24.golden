@@ -7,7 +7,8 @@ AudD  ·  profile default
  5 Account       │ complete while audd is closed. Settings can start it
  6 Settings      │ automatically with audd.
  7 Help          │ 
-                 │ The recorder is running (process 4242).
+                 │ The recorder is running (process 4242). Press enter to stop
+                 │ it.
                  │ Results are saved in /data/streams-default.db
                  │ 
                  │ 
@@ -16,9 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ Stop ]  [ Refresh (r) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Stop ]  [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams recorder status                                            y copy

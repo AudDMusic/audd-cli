@@ -293,3 +293,73 @@ func TestUIHelpSearch(t *testing.T) {
 	s.press(kEnter)
 	s.wait(`"exit codes" · n next`)
 }
+
+// Errors of real runs show their message and what to try, on the page
+// that ran them.
+func TestUIRecognizeErrorsShow(t *testing.T) {
+	t.Run("missing path", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(filepath.Join(e.dir, "nope.mp3"))
+		s.press(kEnter)
+		s.wait("no such file or folder")
+		s.wait("check the path")
+	})
+	t.Run("too many files", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		for _, n := range []string{"a", "b", "c"} {
+			e.file("music/"+n+".mp3", n)
+		}
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(filepath.Join(e.dir, "music"))
+		s.wait("fill in Max files")
+		s.press(kEnter) // enter goes to what is missing
+		s.typeText("2")
+		s.press(kEnter)
+		s.wait("more than Max files 2")
+		s.wait("set it to 3")
+		if n := e.api.Count(testutil.EndpointRecognize); n != 0 {
+			t.Fatalf("%d requests", n)
+		}
+	})
+	t.Run("missing limit", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		song := e.file("song.mp3", "song audio")
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.press(kCtrlK)
+		s.typeText("recognize")
+		s.press(kEnter)
+		s.wait("audd recognize")
+		s.typeText(song)
+		s.press(down(8)...) // Enterprise
+		s.press(" ")        // on, with no limit
+		s.wait("[x] Enterprise")
+		for range 8 {
+			s.press(kUp)
+		}
+		s.press(kEnter) // enter in a text field runs
+		s.wait("--enterprise needs --limit")
+		s.wait("add --limit N")
+		if n := e.api.Count(testutil.EndpointEnterprise); n != 0 {
+			t.Fatalf("%d requests", n)
+		}
+	})
+	t.Run("rejected token", func(t *testing.T) {
+		e := uiEnv(t)
+		e.api.AcceptTokens("some-other-token")
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		song := e.file("song.mp3", "song audio")
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(song)
+		s.press(kEnter)
+		s.wait("Wrong API token")
+		s.wait("check AUDD_API_TOKEN")
+	})
+}

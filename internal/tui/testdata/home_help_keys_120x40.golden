@@ -4,16 +4,19 @@ AudD  ·  profile default
  2 Now playing   │ Moving around
  3 Streams       │   Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
  4 Recognitions  │   The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page.
- 5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a
- 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it. What a page can do is
-*7 Help          >   on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between them, enter
-                 │   presses one. A letter on a button, such as (o), presses it from anywhere on the page. A key works
-                 │   only where it is listed; any other key says it does nothing. Opening a page never starts typing:
-                 │   its field is selected, a letter starts typing in it, enter edits it, and 1-7 jump to a section
-                 │   except while you type. Settings of audd save right away (u undoes the last change). Spending more
-                 │   than one request, removing, signing out, or replacing the token asks in a dialog: enter presses the
-                 │   focused button (the action after a plan, Cancel otherwise), y confirms, n or esc cancels; in a
-                 │   dialog y confirms instead of copying the command.
+ 5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. When a text field is
+ 6 Settings      │   selected, you are typing in it: letters, digits, and symbols go in, ←/→ move the cursor (← at its
+*7 Help          >   start goes back), ctrl+u clears it, and esc stops typing. Recognize opens typing in Input; other
+                 │   pages open with no text field selected, so 1-7 jump to a section. A saved value, such as the
+                 │   callback URL, is changed only after enter or e, and esc puts the old value back. Enter in a form's
+                 │   last text field runs it (in Add a stream, enter in ID adds it; the box below is optional). What a
+                 │   page can do is on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between
+                 │   them, enter presses one. A letter on a button, such as (o), presses it from anywhere on the page. A
+                 │   key works only where it is listed; any other key says it does nothing. Settings of audd save right
+                 │   away (u undoes the last change). Spending more than one request, removing, signing out, or
+                 │   replacing the token asks in a dialog: enter presses the focused button (the action after a plan,
+                 │   Cancel otherwise), y confirms, n or esc cancels; in a dialog y confirms instead of copying the
+                 │   command.
                  │ 
                  │   ↑/↓            move in the menu, a list, or a form
                  │   → or enter     go in: open the section, the page, the selected item
@@ -30,11 +33,8 @@ AudD  ·  profile default
                  │   F1             help
                  │   q              quit; not while typing, and it asks while a command runs
                  │   ctrl+c         quit, also while typing (it asks while a command runs)
-                 │   ctrl+u         clear the field being typed in
-                 │   click, wheel   select or press; scroll
-                 │ 
- ctrl+k commands │ Letters on buttons
- ? keys  q quit  │ ↓ 66 more lines below
+ [ Commands ]    │   ctrl+u         clear the field being typed in
+ [ Keys ] q quit │ ↓ 69 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

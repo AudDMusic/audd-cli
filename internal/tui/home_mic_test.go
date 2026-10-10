@@ -107,7 +107,7 @@ func TestMicRuns(t *testing.T) {
 	s.form.focusName("listen")
 	press(h, key("enter"))
 	f.waitFor(t, "listen --seconds 12 --device usb --return spotify")
-	if v := h.View(); !strings.Contains(v, "Warriors") || !strings.Contains(v, "Open link (o)") || !strings.Contains(v, "→/enter details") {
+	if v := h.View(); !strings.Contains(v, "Warriors") || !strings.Contains(v, "Open the song link (o)") || !strings.Contains(v, "→/enter details") {
 		t.Fatalf("result:\n%s", v)
 	}
 	if got := h.command(); got != "audd listen --seconds 12 --device usb --return spotify" {

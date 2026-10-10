@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ [ History ]  [ Open link (o) ]  [ Copy link (c) ]  [ Refresh (r) ]
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ History ]  [ Open the song link (o) ]  [ Copy the song link (c) ]  [ Refresh (r) ]
 
 ←/→ previous, next stream  ↑/↓ rows  enter open  esc back  tab buttons  ? keys
 $ audd now-playing                                                                                                y copy

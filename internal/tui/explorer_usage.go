@@ -44,15 +44,15 @@ func (m *explorer) usageView() string {
 	if len(u.Days) > 0 {
 		b.WriteString("\n" + m.st.Bold.Render("Requests per day") + "\n\n")
 		// The chart takes the rows left (and at least a few).
-		used := strings.Count(b.String(), "\n") + 3
+		used := strings.Count(b.String(), "\n") + 4
 		b.WriteString(dayChart(u.Days, m.w-4, max(3, m.h-used), m.st))
 		b.WriteString("\n")
 	}
+	note := "Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"
 	if m.embedded {
-		b.WriteString("\n" + m.st.Dim.Render("Plans, payments, and more requests: → or enter opens the Billing tab."))
-	} else {
-		b.WriteString("\n" + m.st.Dim.Render("Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"))
+		note = "Plans, payments, and more requests: → or enter opens the Billing tab."
 	}
+	b.WriteString("\n" + styleLines(m.st.Dim, output.Wrap(note, max(20, m.w-2))))
 	return b.String()
 }
 

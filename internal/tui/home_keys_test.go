@@ -177,7 +177,7 @@ func TestDialogButtons(t *testing.T) {
 		t.Fatalf("the dialog:\n%s", v)
 	}
 	press(h, key("enter"))
-	if h.confirm != nil || len(changed(f)) != 0 || strings.Count(h.View(), "Kept token") != 1 {
+	if h.confirm != nil || len(changed(f)) != 0 || strings.Count(h.View(), "Cancelled. API token unchanged.") != 1 {
 		t.Fatalf("enter on Cancel cancels, said once:\n%s", h.View())
 	}
 	press(h, key("d"), key("right"), key("enter"))
@@ -208,29 +208,18 @@ func TestTestTokenAndSignIn(t *testing.T) {
 	}
 }
 
-// Recognize: enter on Source goes on; esc leaves the field, then the
-// page; digits on a box say how jumps work.
+// Recognize: enter on Source goes on to Input; on a box, a digit jumps.
 func TestRecognizeFormKeys(t *testing.T) {
 	h := navHome(t, homeOpts{start: "recognize"})
 	s := recognizeOf(h)
 	press(h, key("up"), key("enter"))
-	if s.form.current().name != "input" {
-		t.Fatalf("enter on Source goes to the next field: %s", s.form.current().name)
+	if s.form.current().name != "input" || !s.form.capturing() {
+		t.Fatalf("enter on Source goes to Input, typing: %s", s.form.current().name)
 	}
-	press(h, typeText("a.mp3")...)
-	press(h, key("esc"))
-	if h.focus != focusContent || s.form.capturing() || !strings.Contains(footerText(h.View()), "enter edit") {
-		t.Fatalf("esc leaves the field:\n%s", h.View())
+	press(h, key("down"))
+	if s.form.capturing() {
+		t.Fatal("a box is not typing")
 	}
-	press(h, typeText("z")...)
-	if s.form.value("input") != "a.mp3z" || !s.form.capturing() {
-		t.Fatal("typing on the selected field starts typing in it again")
-	}
-	press(h, key("esc"), key("esc"))
-	if h.focus != focusSidebar {
-		t.Fatal("the next esc goes back")
-	}
-	press(h, key("right"), key("down"))
 	press(h, key("3"))
 	if h.activeID() != "streams" {
 		t.Fatalf("a digit outside a text field jumps: %s", h.activeID())
@@ -335,10 +324,15 @@ func TestEditStreamURL(t *testing.T) {
 	}
 	press(h, key("e"), key("ctrl+u"))
 	press(h, typeText("https://radio.example/new.mp3")...)
+	// A stream's URL saves right away, with undo, no question.
 	press(h, key("enter"))
-	v := h.View()
-	if h.confirm == nil || !strings.Contains(v, "Now: https://radio.example/a.mp3") || !strings.Contains(v, "New: https://radio.example/new.mp3") {
-		t.Fatalf("the question:\n%s", v)
+	if h.confirm != nil || strings.Join(api.setURL, ",") != "1=https://radio.example/new.mp3" ||
+		!strings.Contains(statusText(h.View()), "Stream 1 now uses https://radio.example/new.mp3 · u undo") {
+		t.Fatalf("saved with undo: %v\n%s", api.setURL, h.View())
+	}
+	press(h, key("u"))
+	if strings.Join(api.setURL, ",") != "1=https://radio.example/new.mp3,1=https://radio.example/a.mp3" {
+		t.Fatalf("u puts the old URL back: %v\n%s", api.setURL, h.View())
 	}
 }
 

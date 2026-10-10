@@ -33,8 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --browser                                                                                            y copy

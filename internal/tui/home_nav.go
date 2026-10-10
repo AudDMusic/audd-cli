@@ -162,7 +162,9 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 			// they were.
 			if h.palette.phase != "list" {
 				h.palette.phase = "list"
-				return nil
+				h.palette.picker.filter.SetValue("")
+				h.palette.picker.cursor = 0
+				return h.palette.picker.filter.Focus()
 			}
 			h.paletteO = false
 			return nil
@@ -345,9 +347,6 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 		h.focus = focusTabs
 		return nil
 	}
-	if t, ok := cur.(typeStarter); ok && !typing && t.startsTyping(k) {
-		return h.send(h.activeID(), k)
-	}
 	if typing {
 		return h.send(h.activeID(), k)
 	}
@@ -368,10 +367,6 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 
 // enterPresser is a page whose enter presses its first button.
 type enterPresser interface{ enterPresses() bool }
-
-// typeStarter is a section where typing on a selected text field starts
-// typing in it.
-type typeStarter interface{ startsTyping(k tea.KeyMsg) bool }
 
 // pageEnterer is a section with forms: when its page gets the keys, the
 // cursor's text field takes typing again (esc may have left it).
@@ -835,6 +830,9 @@ type confirmState struct {
 	cur     int // the focused button; 0 is Cancel
 	// topic ends the path while the dialog shows ("Remove?").
 	topic string
+	// onCancel runs when the answer is no (the field keeps what was
+	// typed, without typing in it).
+	onCancel func()
 }
 
 // buttons are the dialog's buttons, Cancel first.
@@ -844,7 +842,7 @@ func (c *confirmState) buttons() []string {
 	}
 	action := c.action
 	if action == "" {
-		action = "Confirm"
+		action = "Go ahead"
 	}
 	return []string{"Cancel", action}
 }
@@ -862,6 +860,9 @@ func (h *home) pressConfirm(i int) tea.Cmd {
 	h.confirm = nil
 	switch {
 	case i == 0:
+		if c.onCancel != nil {
+			c.onCancel()
+		}
 		msg := c.cancel
 		if msg == "" {
 			msg = "Cancelled. Nothing was changed."

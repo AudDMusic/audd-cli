@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -156,13 +157,8 @@ func (s *recognizeSection) init() tea.Cmd {
 	return s.findDevices()
 }
 
-// pageEntered: the page opens with its field selected, not typing in it.
-func (s *recognizeSection) pageEntered() { s.form.idle() }
-
-// startsTyping: a character typed on the selected Input starts typing.
-func (s *recognizeSection) startsTyping(k tea.KeyMsg) bool {
-	return s.browser == nil && s.phase == "form" && s.form.startsTyping(k)
-}
+// pageEntered: the page opens typing in its field.
+func (s *recognizeSection) pageEntered() { s.form.resume() }
 
 func (s *recognizeSection) capturing() bool {
 	return s.browser == nil && s.phase == "form" && s.form.capturing()
@@ -316,7 +312,7 @@ func (s *recognizeSection) keys() []keyHelp {
 	}
 	k := s.form.rowKeys(s.primary())
 	if c := s.form.current(); c != nil && c.name == "input" {
-		k = append(k, keyHelp{"ctrl+o", "pick a file"})
+		k = append(k, keyHelp{"esc", "then 1-7 for sections"}, keyHelp{"ctrl+o", "pick a file"})
 	}
 	return k
 }
@@ -327,13 +323,20 @@ func (s *recognizeSection) primary() string {
 	if s.mic() {
 		return "listen"
 	}
-	if _, e := s.check(true); e != "" {
+	if name, e := s.check(true); e != "" {
+		if f := s.form.get(name); f != nil {
+			if c := s.form.current(); c != nil && c.name == name {
+				return "" // the field being typed in: its own hint says what to type
+			}
+			return "fill in " + f.label
+		}
 		return "show what is missing"
 	}
-	if n := s.batchCount(); n > 0 {
-		return "recognize " + output.Plural(n, "file")
+	n := s.batchCount()
+	if n == 0 {
+		return "recognize"
 	}
-	return "recognize"
+	return "recognize " + output.Plural(n, "file")
 }
 
 // actions are the result's buttons, and Stop while it runs.
@@ -367,8 +370,8 @@ func (s *recognizeSection) actions() []button {
 	}
 	if link != "" {
 		b = append(b,
-			button{"Open link", "o", func() tea.Cmd { return s.openLink(link) }},
-			button{"Copy link", "c", func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
+			button{"Open the song link", "o", func() tea.Cmd { return s.openLink(link) }},
+			button{"Copy the song link", "c", func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
 	}
 	if s.mic() && s.rec.view != nil {
 		b = append(b, button{"Listen again", "", s.startListen})
@@ -427,6 +430,12 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 	}
 	if forRun && s.isBatch() && f.value("max-files") == "" {
 		return "max-files", f.get("max-files").need
+	}
+	if n := s.batchCount(); forRun && n > 0 {
+		// audd recognize refuses more files than Max files allows.
+		if m, err := strconv.Atoi(f.value("max-files")); err == nil && m < n {
+			return "max-files", fmt.Sprintf("The input has %s, more than Max files %d: set it to %d, or type none", output.Plural(n, "file"), m, n)
+		}
 	}
 	return "", ""
 }

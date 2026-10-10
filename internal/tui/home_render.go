@@ -161,6 +161,11 @@ func (b *batchState) listView(st output.Styles, w, ht int, row func(label string
 		out.WriteString(head + "\n")
 	}
 	room := max(1, ht-strings.Count(out.String(), "\n"))
+	// Finished files are listed in the order of the input, not the order
+	// they finished in.
+	sort.SliceStable(b.results, func(i, j int) bool {
+		return num(b.results[i]["index"]) < num(b.results[j]["index"])
+	})
 	if b.cursor < b.off {
 		b.off = b.cursor
 	}
@@ -439,12 +444,12 @@ func (h *home) batchButtons(bs *batchState) []button {
 		return nil
 	}
 	return []button{
-		{"Open link", "o", func() tea.Cmd {
+		{"Open the song link", "o", func() tea.Cmd {
 			if err := openURL(link); err != nil {
 				return h.setFlash("Could not open the browser: " + err.Error())
 			}
 			return h.setFlash("Opened in your browser: " + link)
 		}},
-		{"Copy link", "c", func() tea.Cmd { return h.copy(link, "the link "+link) }},
+		{"Copy the song link", "c", func() tea.Cmd { return h.copy(link, "the link "+link) }},
 	}
 }

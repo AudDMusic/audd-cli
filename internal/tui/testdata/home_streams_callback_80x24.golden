@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │   [ Set ]  [ Use the placeholder ]
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams callback get                                               y copy

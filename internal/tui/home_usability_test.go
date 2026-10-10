@@ -70,17 +70,19 @@ func TestCallbackChangeAsks(t *testing.T) {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
-	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") || !strings.Contains(statusText(h.View()), "Callback URL unchanged") {
+	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") || !strings.Contains(statusText(h.View()), "Not saved · esc puts the old value back") || s.cbForm.capturing() {
 		t.Fatalf("n: %q\n%s", f.commands(), h.View())
 	}
 	if s.cbForm.value("url") != "https://hooks.example/audd" {
 		t.Fatal("the typed URL is kept after cancelling")
 	}
-	press(h, key("enter"), key("enter"))
+	// enter edits the kept text, enter asks again, and a double enter
+	// lands on Cancel.
+	press(h, key("enter"), key("enter"), key("enter"))
 	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
 		t.Fatal("a double enter lands on Cancel")
 	}
-	press(h, key("enter"), key("y"))
+	press(h, key("enter"), key("enter"), key("y"))
 	f.waitFor(t, "streams callback set https://hooks.example/audd")
 }
 
@@ -108,7 +110,7 @@ func TestTypingInAField(t *testing.T) {
 		t.Fatalf("3 was a jump: %s %q", h.activeID(), s.form.value("input"))
 	}
 	foot := footerText(h.View())
-	if !strings.Contains(foot, "esc leave the field") || !strings.Contains(foot, "ctrl+u clear") || strings.Contains(foot, "? keys") {
+	if !strings.Contains(foot, "esc then 1-7 for sections") || !strings.Contains(foot, "ctrl+u clear") || strings.Contains(foot, "? keys") {
 		t.Fatalf("footer while typing: %q", foot)
 	}
 	press(h, key("ctrl+u"))
@@ -338,11 +340,15 @@ func TestAddStreamWithATakenID(t *testing.T) {
 	press(h, key("down"))
 	press(h, key("ctrl+u"))
 	press(h, typeText("1")...)
-	// Enter goes field by field; the Add button adds.
-	press(h, key("enter"), key("down"), key("enter"))
+	// Enter in the last text field adds (the box below is optional).
+	press(h, key("enter"))
 	if v := h.View(); !strings.Contains(v, "Stream 1 exists already. Change its URL instead?") || !s.adding {
 		t.Fatalf("taken ID:\n%s", v)
 	}
+	press(h, key("right"), key("enter"))
+	pump(h, func() bool {
+		return strings.Contains(statusText(h.View()), "Stream 1 now uses https://radio.example/new.mp3")
+	})
 }
 
 func TestTruncMiddle(t *testing.T) {

@@ -37,6 +37,8 @@ type settingsSection struct {
 	undo *settingUndo
 	// fresh: nothing typed in the editor yet.
 	fresh bool
+	// typedTok is the token last sent to be saved.
+	typedTok string
 }
 
 func newSettingsSection(h *home) section { return &settingsSection{h: h, panel: newPanel(h)} }
@@ -127,22 +129,22 @@ func (s *settingsSection) selected() *settingRow {
 func (s *settingsSection) editor(r settingRow) *field {
 	switch r.key {
 	case "format":
-		f := enumField("value", "format", "←/→ to choose, enter to save. auto: a table on a terminal, JSON when piped", []string{"auto", "table", "json", "jsonl", "csv"})
+		f := enumField("value", settingLabel("format"), "←/→ to choose, enter to save. auto: a table on a terminal, JSON when piped", []string{"auto", "table", "json", "jsonl", "csv"})
 		f.setValue(r.value)
 		return f
 	case "streams.background_recorder":
-		f := enumField("value", r.key, "←/→ to choose, enter to save", []string{"true", "false"})
-		f.setValue(r.value)
+		f := enumField("value", settingLabel(r.key), "←/→ to choose, enter to save", []string{"on", "off"})
+		f.setValue(onOff(r.value))
 		return f
 	case "token":
-		f := textField("value", "token", "Paste the API token from https://dashboard.audd.io, then enter")
+		f := textField("value", settingLabel("token"), "Paste the API token from https://dashboard.audd.io, then enter")
 		f.masked = true
 		f.input.EchoMode = textinput.EchoPassword
 		f.input.EchoCharacter = '•'
 		f.input.Focus()
 		return f
 	}
-	f := &field{kind: fInt, name: "value", label: r.key, help: "A whole number, then enter", input: newInput()}
+	f := &field{kind: fInt, name: "value", label: settingLabel(r.key), help: "A whole number, then enter", input: newInput()}
 	if _, err := strconv.Atoi(r.value); err == nil {
 		// The value in effect, from the file, the environment, or the
 		// default.
@@ -185,7 +187,7 @@ func (s *settingsSection) askUnset() tea.Cmd {
 		action:   "Unset " + key,
 		notes:    []string{what},
 		command:  "audd config unset " + key,
-		cancel:   "Kept " + key,
+		cancel:   "Cancelled. " + settingLabel(key) + " unchanged.",
 		yes: func() tea.Cmd {
 			return s.panel.start(runReq{args: []string{"config", "unset", key}})
 		},
@@ -201,6 +203,9 @@ func (s *settingsSection) setArgs() []string {
 		return []string{"config", "set", "token", "-"}
 	}
 	v := s.edit.value()
+	if r.key == "streams.background_recorder" {
+		v = map[string]string{"on": "true", "off": "false"}[v]
+	}
 	if r.key == "format" && v == "auto" {
 		return []string{"config", "unset", "format"}
 	}
@@ -214,6 +219,15 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.panel.handle(msg); mine {
 		if done {
 			s.load()
+			if !s.panel.res.ok() && s.panel.args[1] == "set" && s.panel.args[2] == "token" && s.typedTok != "" {
+				// The token was not saved: the form stays, with what
+				// was pasted, to try again.
+				s.startEdit()
+				if s.edit != nil {
+					s.edit.setValue(s.typedTok)
+					s.fresh = false
+				}
+			}
 			if s.panel.res.ok() {
 				key := s.panel.args[2]
 				what := settingLabel(key) + " is back to its default"
@@ -223,7 +237,7 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 				case key == "token":
 					what = "Token saved for profile " + s.profile
 				case s.panel.args[1] == "set":
-					what = settingLabel(key) + " set to " + s.panel.args[3]
+					what = settingLabel(key) + " set to " + onOff(s.panel.args[3])
 				}
 				if key == "token" {
 					// The saved token runs from now on, not a session one.
@@ -328,6 +342,7 @@ func (s *settingsSection) askSave(v string) tea.Cmd {
 		req := runReq{args: args}
 		if r.key == "token" {
 			req.stdin = v
+			s.typedTok = v
 		}
 		return s.panel.start(req)
 	}
@@ -346,7 +361,7 @@ func (s *settingsSection) askSave(v string) tea.Cmd {
 		action:   "Replace the token",
 		topic:    "Replace the token?",
 		command:  displayCommand(args),
-		cancel:   "Cancelled. The token is unchanged.",
+		cancel:   "Cancelled. API token unchanged.",
 		yes:      run,
 	})
 }
@@ -405,6 +420,9 @@ func (s *settingsSection) view(w, h int) string {
 	}
 	for i, r := range s.rows {
 		val := r.value
+		if r.key == "streams.background_recorder" {
+			val = onOff(val)
+		}
 		if s.edit != nil && i == s.cur {
 			if s.edit.kind == fEnum {
 				val = st.Bold.Render("‹ " + s.edit.value() + " ›")
@@ -442,7 +460,11 @@ func (s *settingsSection) view(w, h int) string {
 		b.WriteString("\n" + styleLines(st.Dim, output.Wrap(s.edit.help+"; esc cancels.", w)) + "\n")
 	}
 	if s.panel.res != nil && s.panel.res.err != nil {
-		b.WriteString("\n" + errorText(st, s.panel.res.err, w) + "\n")
+		if len(s.panel.args) > 2 && s.panel.args[2] == "token" && s.panel.args[1] == "set" {
+			b.WriteString("\n" + styleLines(st.Warn, output.Wrap(tokenSaveFailed(s.panel.res.err), w)) + "\n")
+		} else {
+			b.WriteString("\n" + errorText(st, s.panel.res.err, w) + "\n")
+		}
 	}
 	b.WriteString("\n" + styleLines(st.Dim, output.Wrap(fmt.Sprintf("Settings apply to profile %s and are saved in %s. Environment variables (env) win over the file.", s.profile, s.path), w)))
 	return b.String()
@@ -464,7 +486,7 @@ func (s *settingsSection) keys() []keyHelp {
 
 func (s *settingsSection) crumbs() []string {
 	if s.edit != nil {
-		return []string{s.selected().key}
+		return []string{settingLabel(s.selected().key)}
 	}
 	return nil
 }
@@ -518,6 +540,17 @@ var settingLabels = map[string]string{
 	"concurrency":                 "Parallel requests",
 	"streams.background_recorder": "Start the recorder automatically",
 	"token":                       "API token",
+}
+
+// onOff shows a true/false setting as on/off.
+func onOff(v string) string {
+	switch v {
+	case "true":
+		return "on"
+	case "false":
+		return "off"
+	}
+	return v
 }
 
 func settingLabel(key string) string {

@@ -158,7 +158,7 @@ func (s *nowPlayingSection) actions() []button {
 		b = append(b, button{"History", "", press('h')})
 	}
 	if cur := np.current(); cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != "" && !np.history {
-		b = append(b, button{"Open link", "o", press('o')}, button{"Copy link", "c", press('c')})
+		b = append(b, button{"Open the song link", "o", press('o')}, button{"Copy the song link", "c", press('c')})
 	}
 	return append(b, button{"Refresh", "r", func() tea.Cmd {
 		_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
@@ -197,6 +197,9 @@ type explorerPane struct {
 	// wantKey is a row to select once it is in the list (a stream just
 	// added).
 	wantKey string
+	undo    *paneUndo
+	// scroll scrolls the usage page.
+	scroll scrollView
 }
 
 func newExplorerPane(h *home, tabs ...tabID) *explorerPane { return &explorerPane{h: h, tabs: tabs} }
@@ -216,6 +219,11 @@ func (p *explorerPane) init() tea.Cmd {
 
 func (p *explorerPane) update(msg tea.Msg) tea.Cmd {
 	if p.ex == nil {
+		return nil
+	}
+	if k, ok := msg.(tea.KeyMsg); ok && p.ex.tab == tabUsage {
+		_, ht := p.h.contentSize()
+		p.scroll.key(k.String(), ht)
 		return nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok && !p.ex.capturing() {
@@ -246,6 +254,12 @@ func (p *explorerPane) view(w, h int) string {
 	}
 	if p.ex == nil {
 		return p.h.st.Dim.Render("Loading…")
+	}
+	if p.ex.tab == tabUsage {
+		// The whole page, every day of the chart, scrolled.
+		p.ex.w, p.ex.h = w, 200
+		p.scroll.lines = strings.Split(strings.TrimRight(p.ex.usageView(), "\n"), "\n")
+		return p.scroll.view(w, h)
 	}
 	p.ex.w, p.ex.h = w, h
 	return p.ex.View()
@@ -297,6 +311,23 @@ func (p *explorerPane) actions() []button {
 	if ex.tab == tabUsage {
 		return []button{refresh, export}
 	}
+	if u := p.undo; u != nil && (p.h.flash == u.msg || p.h.lastFlash == u.msg) {
+		// Undo, while the change's message shows.
+		return append(p.actionsFor(), button{"Undo", "u", func() tea.Cmd { p.undo = nil; return u.do() }})
+	}
+	return p.actionsFor()
+}
+
+// actionsFor are the buttons for the list or the row's page.
+func (p *explorerPane) actionsFor() []button {
+	ex := p.ex
+	refresh := button{"Refresh", "r", func() tea.Cmd {
+		if l := ex.top(); l != nil {
+			return tea.Batch(ex.load(ex.tab, l), p.h.setFlash("Refreshed"))
+		}
+		return nil
+	}}
+	export := button{"Export", "x", p.askExport}
 	l := ex.top()
 	if l == nil {
 		return nil
@@ -324,6 +355,8 @@ func (p *explorerPane) actions() []button {
 				button{"Edit URL", "e", p.startEditURL},
 				button{"Remove", "d", p.askRemove})
 			if u := p.streamURL(r.key); strings.Contains(u, "://") {
+				// No letters on the link buttons: o could mean the stream
+				// URL or the song link.
 				b = append(b, button{"Open the stream URL", "", func() tea.Cmd {
 					if err := openURL(u); err != nil {
 						return p.h.setFlash("Could not open the browser: " + err.Error())
@@ -333,8 +366,8 @@ func (p *explorerPane) actions() []button {
 			}
 			if r.link != "" {
 				b = append(b,
-					button{"Open the song link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
-					button{"Copy the song link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
+					button{"Open the song link", "", func() tea.Cmd { return ex.rowAction("o", r) }},
+					button{"Copy the song link", "", func() tea.Cmd { return ex.rowAction("c", r) }})
 			}
 			return b
 		case "jobs":
@@ -356,8 +389,8 @@ func (p *explorerPane) actions() []button {
 		}
 		if r.link != "" {
 			b = append(b,
-				button{"Open link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
-				button{"Copy link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
+				button{"Open the song link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
+				button{"Copy the song link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
 		}
 		if r.copies["i"] != "" {
 			b = append(b, button{"Copy ISRC", "i", func() tea.Cmd { return ex.rowAction("i", r) }})
@@ -391,8 +424,12 @@ func (p *explorerPane) downExits() bool {
 	if p.ex == nil {
 		return true
 	}
+	if p.ex.tab == tabUsage {
+		_, ht := p.h.contentSize()
+		return p.scroll.off >= len(p.scroll.lines)-ht+1
+	}
 	l := p.ex.top()
-	if l == nil || p.ex.tab == tabUsage {
+	if l == nil {
 		return true
 	}
 	if l.detail {
@@ -408,7 +445,7 @@ func (p *explorerPane) askExport() tea.Cmd {
 		owner:    p.owner(),
 		question: "Export this list as CSV or JSON?",
 		notes:    []string{"The file is written in " + exportDirShown() + "."},
-		cancel:   "Export cancelled",
+		cancel:   "Cancelled. Nothing was written.",
 		choices:  []string{"CSV", "JSON"},
 		pick:     func(i int) tea.Cmd { return p.ex.export(formats[i]) },
 	})
@@ -453,18 +490,20 @@ func (p *explorerPane) askSetURL(id int, url string) tea.Cmd {
 	case !validStreamURL(url):
 		return p.h.setFlash("That is not a stream URL: use http(s)://…, twitch:<channel>, youtube:<video_id>, or youtube-ch:<channel_id>")
 	}
+	// A stream's URL is easily changed back: saved right away, with undo.
 	ex := p.ex
-	return p.h.askFirst(&confirmState{
-		owner:    p.owner(),
-		question: fmt.Sprintf("Change the URL of stream %d?", id),
-		action:   "Change the URL",
-		notes:    []string{"Now: " + old, "New: " + url, "AudD starts monitoring the new URL; results so far stay."},
-		command:  displayCommand([]string{"streams", "set-url", key, url}),
-		cancel:   "Cancelled. Nothing was changed.",
-		yes: func() tea.Cmd {
-			return ex.streamAction(func(ctx context.Context) error { return ex.d.SetStreamURL(ctx, id, url) }, fmt.Sprintf("Stream %d now uses %s", id, url))
-		},
-	})
+	msg := fmt.Sprintf("Stream %d now uses %s · u undo", id, url)
+	p.undo = &paneUndo{msg: msg, do: func() tea.Cmd {
+		return ex.streamAction(func(ctx context.Context) error { return ex.d.SetStreamURL(ctx, id, old) }, fmt.Sprintf("Stream %d uses %s again", id, old))
+	}}
+	return ex.streamAction(func(ctx context.Context) error { return ex.d.SetStreamURL(ctx, id, url) }, msg)
+}
+
+// paneUndo puts back the last change of a stream, while its message
+// shows.
+type paneUndo struct {
+	msg string
+	do  func() tea.Cmd
 }
 
 // validStreamURL accepts what audd streams add takes: a URL with a host,
@@ -494,7 +533,7 @@ func (p *explorerPane) askRemove() tea.Cmd {
 		action:   "Remove stream",
 		notes:    []string{"URL: " + p.streamURL(r.key), "AudD stops monitoring it; its stored results stay on this computer."},
 		command:  fmt.Sprintf("audd streams remove %d", id),
-		cancel:   fmt.Sprintf("Kept stream %d", id),
+		cancel:   fmt.Sprintf("Cancelled. Stream %d unchanged.", id),
 		yes: func() tea.Cmd {
 			// Back on the list, on the row after the one removed.
 			if l := ex.top(); l != nil {
@@ -553,6 +592,7 @@ type historySection struct {
 	panel   *cmdPanel
 	bs      *batchState
 	resume  bool // showing a resumed job
+	retry   bool // the resume retries failed files
 	runArgs []string
 }
 
@@ -603,7 +643,19 @@ func (s *historySection) actions() []button {
 		if s.panel.running {
 			return []button{{"Stop", "s", func() tea.Cmd { s.panel.stop(); return s.h.setFlash("Stopping…") }}}
 		}
-		return s.h.batchButtons(s.bs)
+		if s.bs.detail {
+			return s.h.batchButtons(s.bs)
+		}
+		// What the command's hint would say, as buttons.
+		var b []button
+		failed := s.bs.summary != nil && num(s.bs.summary["failed"]) > 0
+		if res := s.panel.res; res != nil && res.err != nil && strings.Contains(res.err.Hint, "--retry-failed") {
+			failed = true
+		}
+		if failed {
+			b = append(b, button{"Retry failed files again", "", func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
+		}
+		return append(b, button{"Back to the job", "", func() tea.Cmd { s.resume = false; return nil }})
 	}
 	return s.pane.actions()
 }
@@ -637,7 +689,7 @@ func (s *historySection) startResume(id string, retry bool) tea.Cmd {
 	if retry {
 		s.runArgs = append(s.runArgs, "--retry-failed")
 	}
-	s.resume = true
+	s.resume, s.retry = true, retry
 	s.bs = &batchState{jobID: id, selectable: true, inJobs: true}
 	return s.panel.start(runReq{args: s.runArgs, format: "jsonl", stream: true, spends: true})
 }
@@ -648,8 +700,10 @@ func (s *historySection) update(msg tea.Msg) tea.Cmd {
 			s.bs.add(l.line)
 		}
 		if done && s.panel.res.err != nil && s.panel.res.err.Code == "declined" {
-			// Cancelled at its question: back on the job's page.
+			// Cancelled at its question: back on the job's page, on the
+			// button that was pressed.
 			s.resume = false
+			s.h.focusButton(map[bool]string{true: "Retry failed files", false: "Resume"}[s.retry])
 			return s.h.setFlash("Cancelled. Nothing was sent.")
 		}
 		if done {
@@ -688,7 +742,11 @@ func (s *historySection) view(w, h int) string {
 			out = s.h.batchPage(s.bs, w, h-3)
 		}
 		if !s.panel.running && s.panel.res != nil && s.panel.res.err != nil {
-			out += "\n\n" + errorText(st, s.panel.res.err, w)
+			e := *s.panel.res.err
+			if strings.Contains(e.Hint, "jobs resume") {
+				e.Hint = "" // the buttons below do it
+			}
+			out += "\n\n" + errorText(st, &e, w)
 		}
 		return out
 	}
@@ -720,6 +778,8 @@ func (s *historySection) command() string {
 	switch {
 	case ex.tab == tabJobs && l != nil && l.kind == "items":
 		return "audd jobs show " + l.arg
+	case ex.tab == tabJobs && l != nil && l.detail:
+		return "audd jobs show " + s.pane.selectedKey()
 	case ex.tab == tabJobs:
 		return "audd jobs list"
 	}
@@ -808,9 +868,9 @@ func newStreamsSection(h *home) section {
 	since.describe = sinceWords
 	sid := &field{kind: fInt, name: "id", label: "Stream ID", help: "Only this stream (empty: all)", input: newInput()}
 	sid.placeholder = "all streams"
-	by := enumField("by", "Group by", "report: group by song, artist, label, or station", []string{"song", "artist", "label", "station"})
-	format := enumField("format", "File format", "export: CSV (opens in a spreadsheet) or JSON lines", []string{"csv", "jsonl"})
-	file := textField("file", "File name", "export: the file to write, in the folder shown below")
+	by := enumField("by", "Group by", "Group plays by song, artist, label, or station", []string{"song", "artist", "label", "station"})
+	format := enumField("format", "File format", "The file's format: CSV (opens in a spreadsheet) or JSON lines", []string{"csv", "jsonl"})
+	file := textField("file", "File name", "File to write, in the folder shown below")
 	s.dataForm = newForm(kind, since, sid, by, format, file, buttonField("run", "Run"))
 	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
 	// These forms are filled field by field: enter goes on until the
@@ -883,6 +943,10 @@ func (s *streamsSection) openAdd() {
 
 func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.addPanel.handle(msg); mine {
+		if done && s.addPanel.res.ok() && s.addPanel.run.req.tag == "replace" {
+			s.adding = false
+			return tea.Batch(s.pane.reload(tabStreams), s.h.setFlash(fmt.Sprintf("Stream %s now uses %s", s.add.value("id"), s.add.value("url"))))
+		}
 		if done && s.addPanel.res.ok() {
 			s.adding = false
 			s.h.streamAdded = true
@@ -1016,8 +1080,8 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 					return s.h.askFirst(&confirmState{
 						owner:    "streams",
 						question: "Replace " + filepath.Base(path) + "?",
-						action:   "Replace the file",
-						notes:    []string{"The file exists in " + filepath.Dir(path) + "; the export is written over it."},
+						action:   "Replace " + filepath.Base(path),
+						notes:    []string{"The file exists in " + shortPath(absPath(filepath.Dir(path)), 60) + "; the export is written over it."},
 						command:  s.command(),
 						cancel:   "Cancelled. Nothing was written.",
 						yes:      run,
@@ -1051,7 +1115,12 @@ func (s *streamsSection) askCallback() tea.Cmd {
 			"AudD sends every result of every stream on your account to the new address.",
 		},
 		command: displayCommand(args),
-		cancel:  "Callback URL unchanged",
+		cancel:  "Not saved · esc puts the old value back",
+		onCancel: func() {
+			if f := s.cbForm.get("url"); f.lockable {
+				f.locked = true
+			}
+		},
 		yes: func() tea.Cmd {
 			return s.cbPanel.start(runReq{args: args, tag: "set"})
 		},
@@ -1069,9 +1138,9 @@ func (s *streamsSection) askReplace(old string) tea.Cmd {
 		action:   "Change its URL",
 		notes:    []string{"Now: " + old, "New: " + url, "Or press n and choose another ID for a new stream."},
 		command:  displayCommand(args),
-		cancel:   "Nothing changed; choose another ID",
+		cancel:   "Cancelled. Stream " + id + " unchanged; choose another ID.",
 		yes: func() tea.Cmd {
-			return s.addPanel.start(runReq{args: args})
+			return s.addPanel.start(runReq{args: args, tag: "replace"})
 		},
 	})
 }
@@ -1361,10 +1430,11 @@ func (s *streamsSection) view(w, h int) string {
 				if i := strings.Index(run, "pid "); i >= 0 {
 					state += " (process " + strings.TrimRight(run[i+4:], ")") + ")"
 				}
-				state += "."
+				state += ". Press enter to stop it."
 			} else {
 				state = "The recorder is stopped. Press enter to start it."
 			}
+			state = output.Wrap(state, w)
 			if store != "" {
 				state += "\n" + st.Dim.Render(output.Wrap("Results are saved in "+store, w))
 			}
@@ -1451,7 +1521,7 @@ func (s *streamsSection) askStopRecorder() tea.Cmd {
 		notes:    []string{"Stream results stop being saved on this computer until it starts again."},
 		command:  "audd streams recorder stop",
 		action:   "Stop the recorder",
-		cancel:   "The recorder keeps running",
+		cancel:   "Cancelled. Recorder unchanged.",
 		yes: func() tea.Cmd {
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
 		},
@@ -1484,7 +1554,11 @@ func (s *streamsSection) keys() []keyHelp {
 	case 2:
 		return nil
 	}
-	return append(s.dataForm.rowKeys(s.dataPrimary()), keyHelp{"pgdn/pgup", "scroll the results"})
+	k := s.dataForm.rowKeys(s.dataPrimary())
+	if s.dataPanel.res != nil && s.exportTo == "" {
+		k = append(k, keyHelp{"pgdn/pgup", "scroll the results"})
+	}
+	return k
 }
 
 func (s *streamsSection) command() string {
@@ -1637,24 +1711,23 @@ func (p *explorerPane) crumbs() []string {
 		return nil
 	}
 	var out []string
-	levels := p.ex.tabs[p.ex.tab]
-	for i, l := range levels {
+	for i, l := range p.ex.tabs[p.ex.tab] {
 		if i > 0 {
 			out = append(out, l.title)
 		}
-	}
-	if l := p.ex.top(); l != nil && l.detail {
-		// The page of a stream or a job is named for it.
-		name := "Details"
-		if r := l.selected(); r != nil {
-			switch l.kind {
-			case "streams":
-				name = "Stream " + r.key
-			case "jobs":
-				name = "Job " + r.key
+		if l.detail {
+			// The page of a stream or a job is named for it.
+			name := "Details"
+			if r := l.selected(); r != nil {
+				switch l.kind {
+				case "streams":
+					name = "Stream " + r.key
+				case "jobs":
+					name = "Job " + r.key
+				}
 			}
+			out = append(out, name)
 		}
-		out = append(out, name)
 	}
 	return out
 }
@@ -1683,6 +1756,14 @@ func (s *historySection) wheel(dir int) tea.Cmd {
 		return nil
 	}
 	return s.pane.wheel(dir)
+}
+
+// absPath is p made absolute when it can be (never ".").
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
 }
 
 // shortPath shortens a path to w cells in the middle, keeping the file

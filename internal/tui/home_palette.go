@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -272,6 +273,19 @@ type palette struct {
 
 func newPalette(h *home) *palette { return &palette{h: h, phase: "list", panel: newPanel(h)} }
 
+// paletteOrder is the order of the palette's list, by top-level command.
+var paletteOrder = []string{"recognize", "listen", "streams", "now-playing", "usage", "jobs", "browse", "catalog", "login", "account", "billing", "token", "auth", "config", "cache", "version", "update", "api", "docs", "commands", "agent-setup", "mcp", "ui", "completion"}
+
+func paletteRank(path string) int {
+	top, _, _ := strings.Cut(path, " ")
+	for i, c := range paletteOrder {
+		if c == top {
+			return i
+		}
+	}
+	return len(paletteOrder) - 2 // unknown: before ui and completion
+}
+
 func (p *palette) title() string { return "Commands" }
 
 func (p *palette) init() tea.Cmd { return nil }
@@ -287,6 +301,8 @@ func (p *palette) load() {
 			items = append(items, pickItem{title: c.path, desc: c.cmd.Short, value: c.path})
 		}
 	}
+	// Most used first; scripting and setup commands last.
+	sort.SliceStable(items, func(i, j int) bool { return paletteRank(items[i].value) < paletteRank(items[j].value) })
 	p.picker = newPicker(items)
 	p.picker.h = p.h
 	p.picker.click = func(i int) tea.Cmd {
@@ -494,7 +510,7 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 					action:   c[2],
 					notes:    []string{c[1]},
 					command:  displayCommand(p.cf.argv()),
-					cancel:   "Cancelled. Nothing was changed.",
+					cancel:   "Cancelled. Nothing was sent.",
 					yes:      p.run,
 				})
 			}

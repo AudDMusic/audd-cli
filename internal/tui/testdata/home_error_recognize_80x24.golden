@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
 
 enter open audd login  ←/esc back to the form  ? keys
 $ audd recognize song.mp3                                                 y copy

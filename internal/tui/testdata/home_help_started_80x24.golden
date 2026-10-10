@@ -9,16 +9,16 @@ AudD  ·  profile default
 *7 Help          >      $ audd login --device
                  │ 
                  │   2. Recognize a file
-                 │      Pick a file, URL, or folder and recognize it. This fills
-                 │      in AudD's example song.
+                 │      Pick a file, URL, or folder and recognize it. Enter here
+                 │      fills in AudD's example song so you can try a
+                 │      recognition.
                  │      $ audd recognize https://audd.tech/example.mp3
                  │ 
                  │   3. Use the microphone
                  │      In Recognize, set Source to Microphone to record a few
                  │      seconds and identify the song.
-                 │      $ audd listen
- ctrl+k commands │ 
- ? keys  q quit  │   4. Add a stream
+ [ Commands ]    │      $ audd listen
+ [ Keys ] q quit │ 
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --device                                                     y copy
