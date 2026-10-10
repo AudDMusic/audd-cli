@@ -365,6 +365,11 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 			return p.openForm(m.path)
 		case m.line != "":
 			words := splitCommandLine(strings.TrimPrefix(strings.TrimSpace(m.line), "audd "))
+			for n := min(2, len(words)); n > 0; n-- {
+				if path := strings.Join(words[:n], " "); interactiveTarget(path) != "" {
+					return p.openForm(path)
+				}
+			}
 			// The longest command path the line starts with.
 			best := ""
 			for _, c := range p.cmds {

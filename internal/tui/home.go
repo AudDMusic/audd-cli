@@ -80,7 +80,7 @@ func RunHome(ctx context.Context, a *app.App, section string) error {
 		return err
 	}
 	opts := a.Out.Options()
-	if !(a.Out.IsHuman() && opts.StdoutTTY && opts.StdinTTY) {
+	if !(opts.StdoutTTY && opts.StdinTTY) {
 		return output.Errf(output.ExitUsage, "no_terminal", "audd --help",
 			"interactive mode needs a terminal; run commands directly instead")
 	}
@@ -106,6 +106,9 @@ func RunHome(ctx context.Context, a *app.App, section string) error {
 func sessionApp(a *app.App) *app.App {
 	s := *a
 	opts := a.Out.Options()
+	// The screen is for people whatever --format or AUDD_FORMAT says; the
+	// commands it runs choose their own format.
+	opts.Format = output.FormatTable
 	s.Out = output.NewPrinter(a.Out.Stdout(), io.Discard, opts)
 	return &s
 }
@@ -233,7 +236,9 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 	case h.signedOut:
 		h.showSignin, h.focus = true, focusContent
 	default:
-		h.cur, h.focus = 0, focusContent
+		// The sidebar has the keys, so 1-8, ? and q work right away;
+		// enter goes into the section.
+		h.cur, h.focus = 0, focusSidebar
 	}
 	return h
 }

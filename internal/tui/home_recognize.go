@@ -267,6 +267,10 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		return nil
 	case "result":
 		switch ks {
+		case "enter":
+			if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+				return s.h.openPaletteLine(res.err.Hint)
+			}
 		case "r":
 			return s.startPlan(true)
 		case "o":

@@ -114,7 +114,7 @@ func (s *listenSection) keys() []keyHelp {
 	case "running":
 		return []keyHelp{{"s or esc", "stop"}}
 	case "result":
-		k := []keyHelp{{"enter", "listen again"}, {"esc", "back"}}
+		k := []keyHelp{{"r", "listen again"}, {"esc", "back"}}
 		if s.rec.link != "" {
 			k = append(k, keyHelp{"o", "open the link"}, keyHelp{"c", "copy it"})
 		}
@@ -184,6 +184,9 @@ func (s *listenSection) update(msg tea.Msg) tea.Cmd {
 	case "result":
 		switch k.String() {
 		case "enter", "r":
+			if res := s.panel.res; k.String() == "enter" && res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+				return s.h.openPaletteLine(res.err.Hint)
+			}
 			return s.start()
 		case "o":
 			if s.rec.link != "" {
@@ -226,7 +229,7 @@ func (s *listenSection) view(w, h int) string {
 		}
 		if res.err != nil {
 			b.WriteString(errorText(st, res.err, w))
-			b.WriteString("\n\n" + st.Dim.Render("Press enter to try again."))
+			b.WriteString("\n\n" + st.Dim.Render("Press r to try again."))
 			return b.String()
 		}
 		if s.rec.view != nil {

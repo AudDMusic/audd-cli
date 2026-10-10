@@ -164,3 +164,38 @@ func TestExplorerPaneError(t *testing.T) {
 	_ = context.Background
 	_ = errors.New
 }
+
+// Error states: a failed command shows its message and the hint, and an
+// account without streams says how to add one.
+func TestErrorSnapshots(t *testing.T) {
+	f := &fakeRun{}
+	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"no_token","message":"no API token is set","hint":"audd login","retryable":false}}`+"\n", 3)
+	snap(t, "error_recognize", func() *home {
+		h := newTestHome(t, f, homeOpts{start: "recognize"})
+		r := recognizeOf(h)
+		r.form.get("input").setValue("song.mp3")
+		r.form.focusName("recognize")
+		return h
+	}, "Recognize music", key("enter"), "Try: audd login")
+	snap(t, "error_nowplaying", func() *home {
+		h := newTestHome(t, f, homeOpts{start: "now-playing"})
+		NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
+		return h
+	}, "no streams")
+}
+
+func TestErrorHintOpensCommand(t *testing.T) {
+	useSigninMethod(t, "device")
+	f := &fakeRun{}
+	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"no_token","message":"no API token is set","hint":"audd login"}}`+"\n", 3)
+	h := newTestHome(t, f, homeOpts{start: "recognize"})
+	r := recognizeOf(h)
+	r.form.get("input").setValue("song.mp3")
+	r.form.focusName("recognize")
+	drive(t, h, 120, 40, "Recognize music", key("enter"), "Try: audd login", key("enter"), "Welcome to AudD")
+	if h.activeID() != "signin" {
+		t.Fatalf("audd login opens the sign-in screen: %s", h.activeID())
+	}
+}
