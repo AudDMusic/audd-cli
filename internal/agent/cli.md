@@ -15,6 +15,7 @@ Get your API token at https://dashboard.audd.io, or run `audd login`.
 | macOS (Homebrew) | `brew install auddmusic/tap/audd` |
 | macOS, Linux (script) | `curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket` then `scoop install auddmusic/audd` |
+| Windows (installer) | download `audd_<version>_windows_amd64.msi` (or `_arm64.msi`) from https://github.com/AudDMusic/audd-cli/releases/latest and run it; it adds `audd` to your PATH |
 | Go | `go install github.com/AudDMusic/audd-cli/cmd/audd@latest` |
 | Any system | download an archive from https://github.com/AudDMusic/audd-cli/releases and put `audd` on your `PATH` |
 
