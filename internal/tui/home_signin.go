@@ -98,9 +98,9 @@ func (s *signinSection) keys() []keyHelp {
 		if s.panel.running && s.panel.pending != nil {
 			return s.keysFor(s.panel)
 		}
-		return []keyHelp{{"esc", "back"}}
+		return nil
 	case "paste":
-		return []keyHelp{{"enter", "save"}, {"esc", "back"}}
+		return []keyHelp{{"type", "paste"}, {"enter", "save"}}
 	}
 	return []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}}
 }
@@ -145,16 +145,8 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 	}
 	switch s.step {
 	case "login":
-		if k.String() == "left" && !s.panel.capturing() {
-			s.back()
-			return nil
-		}
 		return s.panel.key(k, s.h.h)
 	case "paste":
-		if k.String() == "left" && s.paste.leftExits() {
-			s.step = ""
-			return nil
-		}
 		act, cmd := s.paste.update(k)
 		if act == "save" {
 			v := s.paste.value("token")
@@ -217,13 +209,7 @@ func (s *signinSection) view(w, h int) string {
 		b.WriteString(output.Wrap("audd recognizes music in files, URLs, and from the microphone, monitors streams, and manages your account. To start, choose how audd gets your API token:", w) + "\n\n")
 	}
 	for i, c := range signinChoices[:s.choices()] {
-		mark := "  "
-		title := c.title
-		if i == s.choice {
-			mark = "› "
-			title = st.Bold.Render(title)
-		}
-		item := mark + title + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
+		item := s.h.listRow(c.title, i == s.choice) + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
 		b.WriteString(s.h.mark(item, func() tea.Cmd {
 			if s.choice == i {
 				return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -238,9 +224,28 @@ func (s *signinSection) view(w, h int) string {
 	return b.String()
 }
 
-// leftExits: left leaves from the choices; inside a step it goes back
-// to them.
-func (s *signinSection) leftExits() bool { return s.step == "" }
+// leftExits: left goes back, from a step to the choices too, except
+// inside typed text.
+func (s *signinSection) leftExits() bool {
+	switch s.step {
+	case "login":
+		return !s.panel.capturing()
+	case "paste":
+		return s.paste.leftExits()
+	}
+	return true
+}
+
+// crumbs: the step chosen.
+func (s *signinSection) crumbs() []string {
+	switch s.step {
+	case "login":
+		return []string{"Sign in to AudD"}
+	case "paste":
+		return []string{"Paste an API token"}
+	}
+	return nil
+}
 
 func indent(s, pre string) string {
 	lines := strings.Split(s, "\n")

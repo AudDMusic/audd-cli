@@ -248,9 +248,12 @@ type palette struct {
 	picker *picker
 	phase  string // "list", "form", "result"
 	cf     *cmdForm
-	panel  *cmdPanel
-	tree   *jsonTree
-	argv   []string
+	// forms keeps each command's form, so leaving a form and coming
+	// back keeps what was typed.
+	forms map[string]*cmdForm
+	panel *cmdPanel
+	tree  *jsonTree
+	argv  []string
 }
 
 func newPalette(h *home) *palette { return &palette{h: h, phase: "list", panel: newPanel(h)} }
@@ -337,6 +340,12 @@ func (p *palette) openForm(path string) tea.Cmd {
 		p.picker.filter.SetValue(path)
 		return nil
 	}
+	if cf := p.forms[path]; cf != nil {
+		p.cf = cf
+		p.phase = "form"
+		cf.form.focus()
+		return nil
+	}
 	cf, err := newCmdForm(info)
 	if err != nil {
 		p.phase = "list"
@@ -344,6 +353,11 @@ func (p *palette) openForm(path string) tea.Cmd {
 	}
 	p.cf = cf
 	cf.form.h = p.h
+	cf.form.inPalette = true
+	if p.forms == nil {
+		p.forms = map[string]*cmdForm{}
+	}
+	p.forms[path] = cf
 	p.phase = "form"
 	cf.form.cursor = 0
 	cf.form.focus()
@@ -586,7 +600,7 @@ func (p *palette) view(w, h int) string {
 	p.load()
 	switch p.phase {
 	case "list":
-		return st.Bold.Render("Run a command") + "\n" + p.picker.view(w, h-1, st, p.h.color)
+		return st.Bold.Render("Run a command") + "\n" + p.picker.view(w, h-1, st, p.h.color, p.h.hasKeys(true))
 	case "form":
 		var b strings.Builder
 		c := p.cf.info.cmd
@@ -605,18 +619,30 @@ func (p *palette) view(w, h int) string {
 func (p *palette) keys() []keyHelp {
 	switch p.phase {
 	case "list":
-		return []keyHelp{{"type", "filter"}, {"↑/↓", "choose"}, {"enter", "open"}, {"esc", "close"}}
+		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, {"esc", "close"}}
 	case "form":
-		return []keyHelp{{"↑/↓", "field"}, {"space", "toggle"}, {"enter", "next / run"}, {"esc", "back"}}
+		return []keyHelp{{"↑/↓", "field"}, {"enter", "next / run"}, {"space", "tick"}}
 	}
 	if p.panel.running {
-		return []keyHelp{{"s", "stop"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"s", "stop"}}
 	}
-	k := []keyHelp{{"r", "run again"}, {"e", "edit"}, {"esc", "back"}}
+	k := []keyHelp{{"↑/↓", "move"}, {"r", "run again"}, {"e", "edit"}}
 	if p.tree != nil {
 		k = append([]keyHelp{{"enter", "fold"}}, k...)
 	}
 	return k
+}
+
+// crumbs: the command, then its result.
+func (p *palette) crumbs() []string {
+	if p.cf == nil || p.phase == "list" {
+		return nil
+	}
+	out := []string{"audd " + p.cf.info.path}
+	if p.phase == "result" {
+		out = append(out, "Result")
+	}
+	return out
 }
 
 func (p *palette) command() string {

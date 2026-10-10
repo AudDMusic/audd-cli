@@ -149,6 +149,7 @@ type homeOpts struct {
 	signedOut bool // no API token
 	loggedIn  bool // signed in to the account
 	start     string
+	tip       bool // show the first-run tip (hidden in other tests)
 }
 
 // newTestHome is interactive mode over fakes: f answers the runs.
@@ -172,6 +173,7 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	a := npApp(&out, &errb, output.PrinterOptions{Format: output.FormatTable, StdoutTTY: true, StdinTTY: true, NoColor: true})
 	a.Cfg = config.Defaults(filepath.Join(t.TempDir(), "config.toml"))
 	a.Profile = a.Cfg.Profile("default")
+	a.Profile.UITipSeen = !o.tip
 	mem := secrets.NewMemory()
 	if !o.signedOut {
 		mem.Set("default", "api_token", "0123456789abcdef0123456789abcdef")
@@ -415,7 +417,7 @@ func TestLeftReturnsToSidebar(t *testing.T) {
 		h.show(id, false)
 		h.focus = focusSidebar
 		press(h, key("right"))
-		if h.focus != focusContent {
+		if h.focus == focusSidebar {
 			t.Fatalf("%s: right opens the section", id)
 		}
 		press(h, key("left"))

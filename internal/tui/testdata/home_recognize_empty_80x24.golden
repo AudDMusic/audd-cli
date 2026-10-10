@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │ Recognize music in a file, URL, or folder
-*1 Recognize     > 
- 2 Now playing   │   Source     ‹ File, URL, or folder ›
- 3 Streams       │ › Input*                                                    
- 4 History       │              A file, URL, folder, or glob. ctrl+o picks a
- 5 Account       │              file.
- 6 Settings      │   [ ] Add Apple Music data
- 7 Help          │   [ ] Add Spotify data
+                 │ Recognize › >File<
+*1 Recognize     > Recognize music in a file, URL, or folder
+ 2 Now playing   │ 
+ 3 Streams       │   Source     ‹ File, URL, or folder ›
+ 4 History       │ › Input*                                                    
+ 5 Account       │              A file, URL, folder, or glob. ctrl+o picks a
+ 6 Settings      │              file.
+ 7 Help          │   [ ] Add Apple Music data
+                 │   [ ] Add Spotify data
                  │   [ ] Add Deezer data
                  │   [ ] Add MusicBrainz data
                  │   [ ] Enterprise: scan the whole file
@@ -15,10 +16,9 @@ AudD  ·  profile default
                  │   [ ] Send even if cached
                  │ 
                  │   [ Recognize ]  [ Show the plan ]
-                 │ 
-                 │ 
+                 │   Enter a file, URL, or folder first
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/esc back  ↑/↓ field  space toggle  ctrl+o pick a file  enter next / press
+↑/↓ field  enter recognize  ←/esc back  ctrl+o pick a file  space tick
 $ audd recognize '<file>'                                                 y copy

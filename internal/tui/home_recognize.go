@@ -36,7 +36,7 @@ type recognizeSection struct {
 
 func newRecognizeSection(h *home) section {
 	s := &recognizeSection{h: h, panel: newPanel(h), phase: "form"}
-	src := enumField("source", "Source", "←/→ or space switches between a file and the microphone", []string{sourceFile, sourceMic})
+	src := enumField("source", "Source", "→, space, or enter switches between a file and the microphone", []string{sourceFile, sourceMic})
 	in := textField("input", "Input", "A file, URL, folder, or glob. ctrl+o picks a file.")
 	in.required = true
 	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
@@ -58,6 +58,14 @@ func newRecognizeSection(h *home) section {
 	)
 	s.form = newForm(fields...)
 	s.form.h = h
+	needInput := func() string {
+		if s.form.value("input") == "" {
+			return "Enter a file, URL, or folder first"
+		}
+		return ""
+	}
+	s.form.get("recognize").disabled = needInput
+	s.form.get("plan").disabled = needInput
 	s.sync()
 	s.form.focusName("input")
 	return s
@@ -125,13 +133,32 @@ func (s *recognizeSection) back() bool {
 	case s.phase == "result":
 		s.phase = "form"
 		return true
-	case s.phase == "running":
-		if s.mic() {
-			s.panel.stop()
-		}
-		return true // s stops it
+	case s.phase == "running" && s.mic():
+		s.panel.stop()
+		return true
 	}
+	// A recognition keeps running (s stops it); esc goes to the sidebar.
 	return false
+}
+
+// crumbs: the source, then what is open (the file picker, the run, the
+// result).
+func (s *recognizeSection) crumbs() []string {
+	out := []string{"File"}
+	if s.mic() {
+		out[0] = "Microphone"
+	}
+	switch {
+	case s.browser != nil:
+		out = append(out, "Pick a file")
+	case s.phase == "running" && s.mic():
+		out = append(out, "Listening")
+	case s.phase == "running":
+		out = append(out, "Running")
+	case s.phase == "result":
+		out = append(out, "Result")
+	}
+	return out
 }
 
 // prefill sets the input (Help: getting started).
@@ -192,7 +219,7 @@ func (s *recognizeSection) keys() []keyHelp {
 	}
 	switch {
 	case s.browser != nil:
-		return []keyHelp{{"enter", "open or pick"}, {"s", "pick the folder"}, {"esc", "close"}}
+		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "open or pick"}, {"s", "pick the folder"}, {"esc", "close"}}
 	case s.phase == "running":
 		return []keyHelp{{"s", "stop"}}
 	case s.phase == "result":
@@ -205,7 +232,7 @@ func (s *recognizeSection) keys() []keyHelp {
 		}
 		return k
 	}
-	return []keyHelp{{"↑/↓", "field"}, {"space", "toggle"}, {"ctrl+o", "pick a file"}, {"enter", "next / press"}, {"esc", "sidebar"}}
+	return []keyHelp{{"↑/↓", "field"}, {"enter", "recognize"}, {"ctrl+o", "pick a file"}, {"space", "tick"}}
 }
 
 // validLimit accepts a whole number or the typed word none.
@@ -338,7 +365,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 				if err := openURL(s.rec.link); err != nil {
 					return s.h.setFlash("Could not open the browser: " + err.Error())
 				}
-				return s.h.setFlash("Opened " + s.rec.link)
+				return s.h.setFlash("Opened in your browser: " + s.rec.link)
 			}
 		case "c":
 			if s.rec.link != "" {
@@ -346,7 +373,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 			}
 		case "d":
 			s.details = !s.details
-		case "backspace", "left":
+		case "backspace":
 			s.phase = "form"
 		}
 		return nil
@@ -475,14 +502,14 @@ func (s *recognizeSection) planBlock(w int) string {
 	return styleLines(s.h.st.Dim, output.Wrap(s.plan, w)) + "\n\n"
 }
 
+// leftExits: left goes back (from a result to the form, too), except
+// in typed text and in the file picker, where it goes to the parent
+// folder.
 func (s *recognizeSection) leftExits() bool {
 	if s.browser != nil {
 		return false
 	}
-	switch s.phase {
-	case "result":
-		return false // left goes back to the form
-	case "running":
+	if s.phase != "form" {
 		return true
 	}
 	return s.form.leftExits()

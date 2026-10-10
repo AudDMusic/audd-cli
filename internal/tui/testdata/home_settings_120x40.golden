@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │ Settings  profile default
- 1 Recognize     │ 
- 2 Now playing   │ › token                        0123…cdef  (audd config set token)
- 3 Streams       │     API token, kept in the system credential store
- 4 History       │   format                       auto  (default)
- 5 Account       │     default output format: table, json, jsonl, csv (auto: table on a terminal, JSON when piped)
-*6 Settings      >   max_requests                 no limit  (default)
- 7 Help          │     default --max-requests for every command
+                 │ Settings
+ 1 Recognize     │ Settings  profile default
+ 2 Now playing   │ 
+ 3 Streams       │ › token                        0123…cdef  (audd config set token)
+ 4 History       │     API token, kept in the system credential store
+ 5 Account       │   format                       auto  (default)
+*6 Settings      >     default output format: table, json, jsonl, csv (auto: table on a terminal, JSON when piped)
+ 7 Help          │   max_requests                 no limit  (default)
+                 │     default --max-requests for every command
                  │   concurrency                  4  (default)
                  │     parallel requests for batch recognition
                  │   streams.background_recorder  true  (default)
@@ -33,8 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/esc back  ↑/↓ setting  enter change  u unset  r reload
+↑/↓ move  →/enter change  ←/esc back  u unset  r reload  ? keys
 $ audd config get token                                                                                           y copy

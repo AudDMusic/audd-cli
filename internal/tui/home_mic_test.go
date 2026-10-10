@@ -71,10 +71,10 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 	if got := h.command(); got != "audd listen --return spotify" {
 		t.Fatalf("command: %s", got)
 	}
-	// Left on Microphone goes back to a file first, then to the sidebar.
-	press(h, key("left"))
+	// Right again cycles back to a file; left always goes back.
+	press(h, key("right"))
 	if s.mic() || h.focus != focusContent {
-		t.Fatal("left switches back to a file")
+		t.Fatal("right cycles back to a file")
 	}
 	if got := h.command(); got != "audd recognize '<file>' --return spotify" {
 		t.Fatalf("command: %s", got)
@@ -82,9 +82,10 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 	if v := h.View(); !strings.Contains(v, "Max files") || strings.Contains(v, "Seconds") {
 		t.Fatalf("file fields:\n%s", v)
 	}
+	press(h, key("right"))
 	press(h, key("left"))
-	if h.focus != focusSidebar {
-		t.Fatal("left on the first option goes back to the sidebar")
+	if h.focus != focusSidebar || !s.mic() {
+		t.Fatal("left on a choice goes back to the sidebar, keeping the choice")
 	}
 }
 

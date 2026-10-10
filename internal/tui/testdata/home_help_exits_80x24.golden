@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │  Getting started   Guide   Commands   Keys  [Exit codes and …
- 1 Recognize     │ Exit codes
- 2 Now playing   │   0    ok           success, including no match
- 3 Streams       │   1    unexpected   unexpected error, or no match with
- 4 History       │                     --fail-on-no-match
- 5 Account       │   2    usage        invalid arguments or input, or a missing
- 6 Settings      │                     tool such as ffmpeg
-*7 Help          >   3    auth         missing or rejected API token, or sign-in
+                 │ Help › >Exit codes<
+ 1 Recognize     │  Getting started  Guide  Commands  Keys >Exit codes< Links 
+ 2 Now playing   │ Exit codes
+ 3 Streams       │   0    ok           success, including no match
+ 4 History       │   1    unexpected   unexpected error, or no match with
+ 5 Account       │                     --fail-on-no-match
+ 6 Settings      │   2    usage        invalid arguments or input, or a missing
+*7 Help          >                     tool such as ffmpeg
+                 │   3    auth         missing or rejected API token, or sign-in
                  │                     needed (audd login)
                  │   4    quota        quota, plan, or feature not available on
                  │                     the account
@@ -17,8 +18,7 @@ AudD  ·  profile default
                  │                     (--yes), --max-requests was reached, or
                  │                     an unfinished job for the same files
                  │                     needs --resume or --new
-                 │   7    partial      a batch finished with some files failed
- ctrl+k commands │   8    threshold    usage --check found fewer remaining
- ? keys  q quit  │                     requests than --min-remaining
-esc back  ↑/↓ scroll  ←/→ [ ] pages
+ ctrl+k commands │   7    partial      a batch finished with some files failed
+ ? keys  q quit  │   8    threshold    usage --check found fewer remaining
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd commands --json                                                    y copy

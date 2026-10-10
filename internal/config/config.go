@@ -62,6 +62,9 @@ type Profile struct {
 	OAuthIssuer string   `toml:"oauth_issuer,omitempty"`
 	OAuthScopes []string `toml:"oauth_scopes,omitempty"`
 	Account     string   `toml:"account,omitempty"` // email, for display only
+	// UITipSeen is set once interactive mode's first-run tip was
+	// dismissed.
+	UITipSeen bool `toml:"ui_tip_seen,omitempty"`
 }
 
 // RecorderEnabled reports whether the background stream recorder may start
@@ -287,6 +290,9 @@ func mergeChanged(dst, p, old *Profile) {
 	if p.Account != old.Account {
 		dst.Account = p.Account
 	}
+	if p.UITipSeen != old.UITipSeen {
+		dst.UITipSeen = p.UITipSeen
+	}
 }
 
 func boolPtrEqual(a, b *bool) bool {
@@ -351,6 +357,7 @@ func mergeProfile(rp map[string]any, p *Profile) {
 	set("oauth_issuer", p.OAuthIssuer, p.OAuthIssuer != "")
 	set("oauth_scopes", p.OAuthScopes, len(p.OAuthScopes) > 0)
 	set("account", p.Account, p.Account != "")
+	set("ui_tip_seen", p.UITipSeen, p.UITipSeen)
 }
 
 // ProfileName picks the active profile: --profile > AUDD_PROFILE > the

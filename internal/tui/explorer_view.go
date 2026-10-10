@@ -30,10 +30,7 @@ func (m *explorer) View() string {
 	}
 	bodyH := m.h - 3
 	if m.embedded {
-		bodyH = m.h - 1 // the status line
-		if len(m.allowed) > 1 {
-			bodyH--
-		}
+		bodyH = m.h - 1 // the status line; the screen shows the tabs
 	}
 	var body string
 	switch {
@@ -45,11 +42,7 @@ func (m *explorer) View() string {
 		body = m.levelView(m.top(), bodyH)
 	}
 	if m.embedded {
-		page := fit(body, m.w, bodyH) + "\n" + m.statusLine()
-		if len(m.allowed) > 1 {
-			page = m.tabBar() + "\n" + page
-		}
-		return page
+		return fit(body, m.w, bodyH) + "\n" + m.statusLine()
 	}
 	page := m.tabBar() + "\n" + fit(body, m.w, bodyH) + "\n" + m.statusLine() + "\n" + m.keysLine()
 	page = m.arts.finishView(page, m.w)
@@ -143,34 +136,21 @@ func (m *explorer) keysLine() string {
 // keyList is the key hints for the current view. Embedded, it leaves out
 // what the surrounding screen handles (help, quit, a single tab).
 func (m *explorer) keyList() []string {
+	if m.embedded {
+		return m.embeddedKeys()
+	}
 	var keys []string
 	l := m.top()
-	tabs := !m.embedded || len(m.allowed) > 1
 	tail := func(k ...string) []string {
-		if tabs {
-			k = append(k, "tab next")
-		}
-		if !m.embedded {
-			k = append(k, "? help", "q quit")
-		}
-		return k
+		return append(k, "tab next", "? help", "q quit")
 	}
 	switch {
 	case m.help:
 		keys = []string{"any key: close help"}
 	case m.tab == tabUsage:
-		if tabs {
-			keys = append(keys, "tab next")
-		}
-		keys = append(keys, "r refresh", "e export")
-		if !m.embedded {
-			keys = append(keys, "? help", "q quit")
-		}
+		keys = append(keys, "tab next", "r refresh", "e export", "? help", "q quit")
 	case l != nil && l.detail:
-		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC"}
-		if !m.embedded {
-			keys = append(keys, "q quit")
-		}
+		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC", "q quit"}
 	default:
 		keys = []string{"↑/↓ move", "enter open", "/ filter", "o open", "c copy"}
 		switch l.kind {
@@ -180,6 +160,32 @@ func (m *explorer) keyList() []string {
 			keys = append(keys, "r resume", "R retry failed")
 		}
 		keys = append(keys, tail("e export")...)
+	}
+	return keys
+}
+
+// embeddedKeys are the hints in interactive mode, which adds how to go
+// back and the keys of the screen around it.
+func (m *explorer) embeddedKeys() []string {
+	l := m.top()
+	switch {
+	case m.tab == tabUsage:
+		return []string{"r refresh", "e export"}
+	case l == nil:
+		return nil
+	case l.detail:
+		return []string{"↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC"}
+	}
+	keys := []string{"↑/↓ move", "→ open"}
+	switch l.kind {
+	case "streams":
+		keys = append(keys, "a add", "d remove", "u set URL")
+	case "jobs", "items":
+		keys = append(keys, "r resume", "R retry failed")
+	}
+	keys = append(keys, "/ filter", "o open", "c copy", "e export")
+	if len(m.allowed) > 1 {
+		keys = append(keys, "tab next tab")
 	}
 	return keys
 }
@@ -266,9 +272,14 @@ func (m *explorer) levelView(l *level, h int) string {
 	for i := l.offset; i < len(rows) && i < l.offset+listH; i++ {
 		line := cellsLine(rows[i].cells, widths)
 		if i == l.cursor {
-			if m.color {
+			switch {
+			case m.color && m.blur:
+				line = m.st.Bold.Render(line)
+			case m.color:
 				line = m.st.Bold.Reverse(true).Render(padRight(line, m.w))
-			} else {
+			case m.blur:
+				line = "· " + truncate(line, m.w-2)
+			default:
 				line = "> " + truncate(line, m.w-2)
 			}
 		} else if !m.color {

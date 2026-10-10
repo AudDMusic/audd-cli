@@ -37,7 +37,7 @@ func TestAccountBillingLink(t *testing.T) {
 	openURL = func(u string) error { opened = append(opened, u); return nil }
 	t.Cleanup(func() { openURL = old })
 	h := newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "pro_plan", key("down"),
+	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "pro_plan", key("down"), key("down"),
 		"audd billing subscribe pro_plan", key("s"), "https://checkout.stripe.example/c/pay_123")
 	if !strings.Contains(v, "nothing is charged until you confirm there") || len(opened) != 0 {
 		t.Fatalf("link:\n%s\nopened %v", v, opened)
@@ -69,14 +69,14 @@ func TestAccountTokenRevealAndRotate(t *testing.T) {
 		return 0
 	})
 	h := newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	drive(t, h, 120, 40, "Paid until", key("["), key("["), "0123…cdef")
+	drive(t, h, 120, 40, "Paid until", key("]"), key("]"), key("]"), "0123…cdef")
 	for _, c := range f.commands() {
 		if strings.Contains(c, "--reveal") {
 			t.Fatalf("revealed without a keypress: %q", c)
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	v := drive(t, h, 120, 40, "Paid until", key("["), key("["), "0123…cdef", key("v"), "0123456789abcdef0123456789abcdef",
+	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), key("]"), "0123…cdef", key("v"), "0123456789abcdef0123456789abcdef",
 		key("R"), "Type rotate", typeText("rota"), key("enter"), "That does not match", typeText("te"), key("enter"), "fedc…3210")
 	if ok := <-answered; !ok {
 		t.Fatal("typing rotate confirms")
@@ -93,7 +93,7 @@ func TestAccountProfilesSwitch(t *testing.T) {
 	h.a.Cfg.Profile("work")
 	h.a.Cfg.Profiles["work"] = h.a.Cfg.Profile("work")
 	drain(h, h.activate(), 0)
-	press(h, key("["))
+	press(h, key("]"), key("]"), key("]"), key("]"))
 	if !strings.Contains(h.View(), "work") {
 		t.Fatalf("profiles:\n%s", h.View())
 	}

@@ -185,10 +185,14 @@ func wrapGen(owner string, gen int, cmd tea.Cmd) tea.Cmd {
 // wrap tags what cmd returns for owner in the current session.
 func (h *home) wrap(owner string, cmd tea.Cmd) tea.Cmd { return wrapGen(owner, h.gen, cmd) }
 
+// focusArea is the level that has the keys: the sidebar (1), a
+// section's tab bar (2), or the page under it (3, and anything opened
+// from it).
 type focusArea int
 
 const (
 	focusSidebar focusArea = iota
+	focusTabs
 	focusContent
 )
 
@@ -221,7 +225,14 @@ type home struct {
 	// backTo are the screens jumps came from (a Help step, a hint, the
 	// palette): esc at the top of a screen returns to the last one, and
 	// to the sidebar when there is none.
-	backTo []string
+	backTo []origin
+	// headRows are the rows above the section's page (breadcrumb, tab
+	// bar) in the last frame.
+	headRows int
+	// tip is the first-run line that states how to move around.
+	tip bool
+	// quitAsk: q or ctrl+c while a command runs asks first.
+	quitAsk bool
 
 	// Mouse: what each region of the last frame does when clicked.
 	zoneFns []func() tea.Cmd
@@ -262,11 +273,14 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 	h.st = a.Out.Styles()
 	h.color = !a.Out.Options().NoColor
 	h.runs.cancels = map[int]context.CancelFunc{}
+	h.runs.spending = map[int]string{}
 	h.build()
 	h.signedOut = h.noToken()
+	h.tip = a.Profile != nil && !a.Profile.UITipSeen
 	switch {
 	case start >= 0:
-		h.cur, h.focus = start, focusContent
+		h.cur = start
+		h.focus = h.entryFocus()
 	case h.signedOut:
 		h.showSignin, h.focus = true, focusContent
 	default:
@@ -353,17 +367,39 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 		h.focus = focusContent
 	}
 	cmd := h.activate()
+	if h.focus == focusTabs && h.tabs() == nil {
+		h.focus = focusContent
+	}
 	if s, ok := h.subs["recognize"].(*recognizeSection); ok && mic {
 		cmd = tea.Batch(cmd, h.wrap("recognize", s.findDevices()))
 	}
 	return cmd
 }
 
+// origin is where a jump came from: the screen and the level that had
+// the keys.
+type origin struct {
+	id    string
+	focus focusArea
+}
+
 // navigate opens a section the user chose (sidebar, number keys, F1):
-// there is nothing to go back to but the sidebar.
+// there is nothing to go back to but the sidebar. The keys go to the
+// section's tab bar when it has one, else to its page.
 func (h *home) navigate(id string) tea.Cmd {
 	h.backTo = nil
-	return h.show(id, true)
+	cmd := h.show(id, false)
+	h.focus = h.entryFocus()
+	return cmd
+}
+
+// entryFocus is where the keys go when a section is opened: its tab
+// bar, or its page when it has no tabs.
+func (h *home) entryFocus() focusArea {
+	if h.tabs() != nil {
+		return focusTabs
+	}
+	return focusContent
 }
 
 // jump opens a screen from an action in another (a Help step, a hint,
@@ -374,20 +410,25 @@ func (h *home) jump(id string) tea.Cmd {
 	if to == "listen" {
 		to = "recognize"
 	}
-	if h.focus == focusContent && from != to {
-		h.backTo = append(h.backTo, from)
+	if h.focus != focusSidebar && from != to {
+		h.backTo = append(h.backTo, origin{from, h.focus})
 	}
 	return h.show(id, true)
 }
 
-// goBack leaves the top of a screen: to the screen a jump came from, or
-// to the sidebar, with its section shown and highlighted.
+// goBack leaves the top of a screen: to the screen a jump came from (at
+// the level it was left from), or to the sidebar, with its section shown
+// and highlighted.
 func (h *home) goBack() tea.Cmd {
 	for len(h.backTo) > 0 {
-		id := h.backTo[len(h.backTo)-1]
+		o := h.backTo[len(h.backTo)-1]
 		h.backTo = h.backTo[:len(h.backTo)-1]
-		if id != h.activeID() {
-			return h.show(id, true)
+		if o.id != h.activeID() {
+			cmd := h.show(o.id, true)
+			if o.focus == focusTabs && h.tabs() != nil {
+				h.focus = focusTabs
+			}
+			return cmd
 		}
 	}
 	h.toSidebar()
@@ -514,98 +555,6 @@ func (h *home) route(m subMsg) tea.Cmd {
 	return h.send(m.owner, m.msg)
 }
 
-func (h *home) key(k tea.KeyMsg) tea.Cmd {
-	s := k.String()
-	if h.ask != nil {
-		return h.askKey(k)
-	}
-	if s == "ctrl+c" {
-		return tea.Quit
-	}
-	if h.keysO {
-		h.keysO = false
-		if s == "f1" || s == "enter" {
-			return h.navigate("help")
-		}
-		return nil
-	}
-	if h.paletteO {
-		if s == "esc" || s == "left" && h.palette.leftExits() {
-			if !h.palette.back() {
-				h.paletteO = false
-			}
-			return nil
-		}
-		if s == "ctrl+k" {
-			h.paletteO = false
-			return nil
-		}
-		return h.send("palette", k)
-	}
-	switch s {
-	case "ctrl+k":
-		return h.openPalette("")
-	case "f1":
-		return h.navigate("help")
-	}
-	cur := h.active()
-	if h.focus == focusContent && s == "left" && leftExits(cur) {
-		return h.goBack()
-	}
-	if h.focus == focusContent && cur.capturing() {
-		if s == "esc" && !cur.back() {
-			return h.goBack()
-		}
-		return h.send(h.activeID(), k)
-	}
-	switch s {
-	case ":":
-		return h.openPalette("")
-	case "?":
-		h.keysO = true
-		return nil
-	case "q":
-		return tea.Quit
-	case "y":
-		if c := h.command(); c != "" {
-			return h.copy(c, "the command: "+c)
-		}
-		return h.setFlash("No command to copy here")
-	case "1", "2", "3", "4", "5", "6", "7":
-		return h.navigate(h.order[s[0]-'1'])
-	}
-	if h.focus == focusSidebar {
-		h.backTo = nil
-		switch s {
-		case "down", "j":
-			if h.showSignin {
-				h.showSignin = false
-			} else {
-				h.cur = (h.cur + 1) % len(h.order)
-			}
-			return h.activate()
-		case "up", "k":
-			if h.showSignin {
-				h.showSignin = false
-			} else {
-				h.cur = (h.cur + len(h.order) - 1) % len(h.order)
-			}
-			return h.activate()
-		case "enter", "right", "l", "tab":
-			h.focus = focusContent
-			return h.activate()
-		}
-		return nil
-	}
-	if s == "esc" {
-		if !cur.back() {
-			return h.goBack()
-		}
-		return nil
-	}
-	return h.send(h.activeID(), k)
-}
-
 // command is the command for the footer.
 func (h *home) command() string {
 	if h.paletteO {
@@ -700,6 +649,9 @@ type runRegistry struct {
 	mu      sync.Mutex
 	wg      sync.WaitGroup
 	cancels map[int]context.CancelFunc
+	// spending are the runs that may spend requests, by id: their
+	// commands, for the question before quitting.
+	spending map[int]string
 }
 
 func (h *home) waitRuns(d time.Duration) {
@@ -712,14 +664,14 @@ func (h *home) waitRuns(d time.Duration) {
 }
 
 // leftExiter is a section that uses the left key in some states (a text
-// cursor, tabs, streams) and says when there is nothing further left, so
-// left goes back to the sidebar.
+// cursor, the stations grid) and says when it does not, so left goes
+// back one level, as esc does.
 type leftExiter interface {
 	leftExits() bool
 }
 
-// leftExits reports whether left returns to the sidebar from s. Sections
-// that don't say keep left only while they are capturing keys.
+// leftExits reports whether left goes back one level in s. Sections that
+// don't say keep left only while they are capturing keys.
 func leftExits(s section) bool {
 	if le, ok := s.(leftExiter); ok {
 		return le.leftExits()

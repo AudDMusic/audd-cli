@@ -118,6 +118,9 @@ func (h *home) start(req runReq) tea.Cmd {
 	ctx, cancel := context.WithCancel(h.ctx)
 	h.runs.mu.Lock()
 	h.runs.cancels[r.id] = cancel
+	if req.spends {
+		h.runs.spending[r.id] = displayCommand(req.args)
+	}
 	h.runs.mu.Unlock()
 	h.runs.wg.Add(1)
 	width := h.contentWidth()
@@ -178,6 +181,7 @@ func (rr *runRegistry) done(id int) {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	delete(rr.cancels, id)
+	delete(rr.spending, id)
 }
 
 // cancel stops a run (Ctrl-C for that command).

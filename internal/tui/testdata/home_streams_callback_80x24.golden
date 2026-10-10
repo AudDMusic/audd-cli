@@ -1,16 +1,16 @@
 AudD  ·  profile default
-                 │  Streams  [Callback]  Recorder   History & reports 
- 1 Recognize     │ Callback URL: https://audd.tech/empty/
- 2 Now playing   │ 
-*3 Streams       >   Callback URL  https://audd.tech/empty/
- 4 History       │   [ ] Add Apple Music data
- 5 Account       │   [ ] Add Spotify data
- 6 Settings      │   [ ] Add Deezer data
- 7 Help          │   [ ] Add MusicBrainz data
+                 │ Streams › >Callback<
+ 1 Recognize     │  Streams >Callback< Recorder  History & reports 
+ 2 Now playing   │ Callback URL: https://audd.tech/empty/
+*3 Streams       > 
+ 4 History       │   Callback URL  https://audd.tech/empty/
+ 5 Account       │   [ ] Add Apple Music data
+ 6 Settings      │   [ ] Add Spotify data
+ 7 Help          │   [ ] Add Deezer data
+                 │   [ ] Add MusicBrainz data
                  │ 
                  │   [ Set ]  [ Use the placeholder ]
-                 │ Press enter to fill this in.
-                 │ 
+                 │ Press ↓ or enter to fill this in.
                  │ 
                  │ 
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-esc back  enter change it  ←/→ [ ] pages
+←/→ tabs  ↓ open  esc back  space tick  ? keys
 $ audd streams callback get                                               y copy

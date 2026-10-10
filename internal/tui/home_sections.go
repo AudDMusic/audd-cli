@@ -133,6 +133,18 @@ func (s *nowPlayingSection) back() bool {
 	return false
 }
 
+// crumbs: the stream zoomed into, and its history.
+func (s *nowPlayingSection) crumbs() []string {
+	if s.np == nil || len(s.np.stations) == 0 || !s.np.zoom && !s.np.history {
+		return nil
+	}
+	out := []string{fmt.Sprintf("Stream %d", s.np.stations[s.np.sel].RadioID)}
+	if s.np.history {
+		out = append(out, "History")
+	}
+	return out
+}
+
 // --- explorer wrapper shared by History, Streams, and Account usage ---
 
 type explorerPane struct {
@@ -164,6 +176,9 @@ func (p *explorerPane) update(msg tea.Msg) tea.Cmd {
 }
 
 func (p *explorerPane) view(w, h int) string {
+	if p.ex != nil {
+		p.ex.blur = !p.h.pageHasKeys()
+	}
 	if p.err != nil {
 		e := output.AsError(p.err)
 		return errorText(p.h.st, &runError{Message: e.Message, Hint: e.Hint}, w)
@@ -184,10 +199,14 @@ func (p *explorerPane) keys() []keyHelp {
 
 func (p *explorerPane) capturing() bool { return p.ex != nil && p.ex.capturing() }
 
-// back closes a detail view, a filter, or a drill-down.
+// back closes a prompt, a detail view, a filter, or a drill-down.
 func (p *explorerPane) back() bool {
 	if p.ex == nil {
 		return false
+	}
+	if p.ex.capturing() {
+		p.ex.key(tea.KeyMsg{Type: tea.KeyEsc})
+		return true
 	}
 	l := p.ex.top()
 	if l != nil && (l.detail || l.filter != "" || len(p.ex.tabs[p.ex.tab]) > 1) {
@@ -235,6 +254,48 @@ func newHistorySection(h *home) section {
 }
 
 func (s *historySection) title() string { return "History" }
+
+func (s *historySection) tabNames() []string {
+	if s.pane.ex == nil {
+		return []string{tabTitles[tabRecent], tabTitles[tabJobs]}
+	}
+	var out []string
+	for _, t := range s.pane.ex.allowed {
+		out = append(out, tabTitles[t])
+	}
+	return out
+}
+
+func (s *historySection) tabIndex() int {
+	if s.pane.ex == nil {
+		return 0
+	}
+	for i, t := range s.pane.ex.allowed {
+		if t == s.pane.ex.tab {
+			return i
+		}
+	}
+	return 0
+}
+
+func (s *historySection) selectTab(i int) tea.Cmd {
+	if s.pane.ex == nil || i < 0 || i >= len(s.pane.ex.allowed) {
+		return nil
+	}
+	if !s.panel.running {
+		s.resume = false
+	}
+	return s.pane.ex.switchTab(s.pane.ex.allowed[i])
+}
+
+func (s *historySection) upExits() bool { return !s.resume && s.pane.upExits() }
+
+func (s *historySection) crumbs() []string {
+	if s.resume && s.bs != nil {
+		return []string{"Resume job " + s.bs.jobID}
+	}
+	return s.pane.crumbs()
+}
 
 func (s *historySection) init() tea.Cmd {
 	cmd := s.pane.init()
@@ -323,11 +384,14 @@ func (s *historySection) command() string {
 
 func (s *historySection) capturing() bool { return !s.resume && s.pane.capturing() }
 
+// back closes a finished resume, and what is open in the list. While a
+// resume runs it stays (s stops it), and esc goes to the tab bar.
 func (s *historySection) back() bool {
 	if s.resume {
-		if !s.panel.running {
-			s.resume = false
+		if s.panel.running {
+			return false
 		}
+		s.resume = false
 		return true
 	}
 	return s.pane.back()
@@ -357,9 +421,6 @@ type streamsSection struct {
 	dataPanel *cmdPanel
 	exportTo  string
 	lastData  []string
-	// inForm: on the Callback and History pages, keys go to the form
-	// (enter or ↓ goes in, esc comes out); otherwise [ and ] switch pages.
-	inForm bool
 }
 
 func newStreamsSection(h *home) section {
@@ -386,8 +447,18 @@ func newStreamsSection(h *home) section {
 	format := enumField("format", "File format", "export: JSON lines or CSV", []string{"jsonl", "csv"})
 	s.dataForm = newForm(kind, since, sid, by, format, buttonField("run", "Run"))
 	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
-	s.cbForm.before = func() { s.inForm = true }
-	s.dataForm.before = func() { s.inForm = true }
+	s.add.get("add").disabled = func() string {
+		if s.add.value("url") == "" || s.add.value("id") == "" {
+			return "Enter the URL and an ID first"
+		}
+		return ""
+	}
+	s.cbForm.get("set").disabled = func() string {
+		if s.cbForm.value("url") == "" {
+			return "Enter the callback URL first, or use the placeholder"
+		}
+		return ""
+	}
 	s.syncData()
 	s.recPanel.empty = s.h.st.Dim.Render("Loading…")
 	return s
@@ -403,10 +474,13 @@ func (s *streamsSection) title() string { return "Streams" }
 
 func (s *streamsSection) init() tea.Cmd { return tea.Batch(s.pane.init(), s.h.startRecorder()) }
 
+func (s *streamsSection) tabNames() []string      { return streamsPages }
+func (s *streamsSection) tabIndex() int           { return s.page }
+func (s *streamsSection) selectTab(i int) tea.Cmd { s.adding = false; return s.openPage(i) }
+
 // openPage switches pages and loads what the page shows.
 func (s *streamsSection) openPage(p int) tea.Cmd {
-	s.page = (p + len(streamsPages)) % len(streamsPages)
-	s.inForm = false
+	s.page = max(0, min(len(streamsPages)-1, p))
 	switch s.page {
 	case 1:
 		if s.cbPanel.res == nil && !s.cbPanel.running {
@@ -477,50 +551,12 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		return s.pane.update(msg)
 	}
 	ks := k.String()
-	if !s.capturing() && !s.adding && !s.inForm {
+	if s.page == 3 && s.dataPanel.res != nil {
 		switch ks {
-		case "]":
-			return s.openPage(s.page + 1)
-		case "[":
-			return s.openPage(s.page - 1)
-		case "left":
-			if s.page > 0 {
-				return s.openPage(s.page - 1)
-			}
-		case "right":
-			if s.page < len(streamsPages)-1 && (s.page > 0 || s.pane.atTop()) {
-				return s.openPage(s.page + 1)
-			}
-		}
-	}
-	// Left at the start of a form leaves the form.
-	if ks == "left" {
-		switch {
-		case s.page == 0 && s.adding && s.add.leftExits():
-			s.adding = false
-			return nil
-		case s.inForm && s.page == 1 && s.cbForm.leftExits(), s.inForm && s.page == 3 && s.dataForm.leftExits():
-			s.inForm = false
-			return nil
-		}
-	}
-	if (s.page == 1 || s.page == 3) && !s.inForm {
-		switch ks {
-		case "enter", "down", "tab":
-			s.inForm = true
-			f := s.cbForm
-			if s.page == 3 {
-				f = s.dataForm
-			}
-			f.cursor = 0
-			f.focus()
 		case "pgdown", "pgup", "ctrl+d", "ctrl+u":
-			if s.page == 3 && s.dataPanel.res != nil {
-				_, ht := s.h.contentSize()
-				return s.dataPanel.key(k, ht/2)
-			}
+			_, ht := s.h.contentSize()
+			return s.dataPanel.key(k, ht/2)
 		}
-		return nil
 	}
 	switch s.page {
 	case 0:
@@ -643,23 +679,14 @@ func (s *streamsSection) writeExport() tea.Cmd {
 	return s.h.setFlash("Exported to " + path)
 }
 
-// formView draws a page's form, with its cursor only while keys go to it.
+// formView draws a page's form; it has its cursor only while the page
+// has the keys.
 func (s *streamsSection) formView(f *form, w int) string {
-	if s.inForm {
-		return f.view(w, s.h.st, s.h.color)
-	}
-	cur := f.cursor
-	f.cursor = -1
 	v := f.view(w, s.h.st, s.h.color)
-	f.cursor = cur
-	return v + "\n" + s.h.st.Dim.Render("Press enter to fill this in.")
-}
-
-func (s *streamsSection) pageBar(w int) string {
-	return s.h.pageStrip(streamsPages, s.page, w, func(i int) tea.Cmd {
-		s.adding = false
-		return s.openPage(i)
-	})
+	if !s.h.pageHasKeys() {
+		v += "\n" + s.h.st.Dim.Render("Press ↓ or enter to fill this in.")
+	}
+	return v
 }
 
 // wheel moves through the list of streams, or scrolls the output.
@@ -682,8 +709,7 @@ func (s *streamsSection) wheel(dir int) tea.Cmd {
 
 func (s *streamsSection) view(w, h int) string {
 	st := s.h.st
-	bar := s.pageBar(w) + "\n"
-	h--
+	bar := ""
 	switch s.page {
 	case 0:
 		if s.adding {
@@ -735,26 +761,18 @@ func (s *streamsSection) view(w, h int) string {
 }
 
 func (s *streamsSection) keys() []keyHelp {
-	pages := keyHelp{"←/→ [ ]", "pages"}
 	switch s.page {
 	case 0:
 		if s.adding {
-			return []keyHelp{{"enter", "next / add"}, {"esc", "cancel"}}
+			return []keyHelp{{"↑/↓", "field"}, {"enter", "next / add"}, {"esc", "cancel"}}
 		}
-		k := s.pane.keys()
-		return append(k, pages)
+		return s.pane.keys()
 	case 1:
-		if !s.inForm {
-			return []keyHelp{{"enter", "change it"}, pages}
-		}
-		return []keyHelp{{"↑/↓", "field"}, {"enter", "set"}, {"esc", "done"}}
+		return []keyHelp{{"↑/↓", "field"}, {"enter", "set"}, {"space", "tick"}}
 	case 2:
-		return []keyHelp{{"s", "start"}, {"x", "stop"}, {"r", "refresh"}, pages}
+		return []keyHelp{{"↑/↓", "scroll"}, {"s", "start"}, {"x", "stop"}, {"r", "refresh"}}
 	}
-	if !s.inForm {
-		return []keyHelp{{"enter", "choose what to show"}, {"pgdn/pgup", "scroll"}, pages}
-	}
-	return []keyHelp{{"↑/↓", "field"}, {"←/→", "choose"}, {"enter", "run"}, {"esc", "done"}}
+	return []keyHelp{{"↑/↓", "field"}, {"enter", "run"}, {"→/space", "change a choice"}, {"pgdn/pgup", "scroll the results"}}
 }
 
 func (s *streamsSection) command() string {
@@ -776,7 +794,7 @@ func (s *streamsSection) command() string {
 		}
 		return "audd streams list"
 	case 1:
-		if !s.inForm || s.cbForm.value("url") == "" {
+		if !s.h.pageHasKeys() || s.cbForm.value("url") == "" {
 			return "audd streams callback get"
 		}
 		return displayCommand(s.callbackArgs())
@@ -799,13 +817,15 @@ func (s *streamsSection) capturing() bool {
 	case 0:
 		return s.adding && s.add.capturing() || s.pane.capturing()
 	case 1:
-		return s.inForm && s.cbForm.capturing()
+		return s.cbForm.capturing()
 	case 3:
-		return s.inForm && s.dataForm.capturing()
+		return s.dataForm.capturing()
 	}
 	return false
 }
 
+// back closes the add form, details, or a drill-down; the pages
+// themselves are the top, so esc then goes to the tab bar.
 func (s *streamsSection) back() bool {
 	if s.page == 0 {
 		if s.adding {
@@ -814,35 +834,96 @@ func (s *streamsSection) back() bool {
 		}
 		return s.pane.back()
 	}
-	if s.inForm {
-		s.inForm = false
-		return true
-	}
 	return false
 }
 
-func (s *nowPlayingSection) leftExits() bool {
-	return s.np == nil || !s.np.history && s.np.sel == 0
+func (s *streamsSection) upExits() bool {
+	switch s.page {
+	case 0:
+		return !s.adding && s.pane.upExits()
+	case 1:
+		return s.cbForm.cursor == 0
+	case 2:
+		return s.recPanel.scroll.off == 0
+	}
+	return s.dataForm.cursor == 0
 }
 
-// leftExits: left closes details and drill-downs, then switches the
-// explorer's tabs, so it leaves from the first one.
+func (s *streamsSection) crumbs() []string {
+	if s.page == 0 {
+		if s.adding {
+			return []string{"Add a stream"}
+		}
+		return s.pane.crumbs()
+	}
+	return nil
+}
+
+// leftExits: in the grid, left moves to the station on the left and
+// goes back from the left-most column; zoomed in, it goes back from the
+// first station.
+func (s *nowPlayingSection) leftExits() bool {
+	if s.np == nil || s.np.history || len(s.np.stations) == 0 {
+		return true
+	}
+	if s.np.single() {
+		return s.np.sel == 0
+	}
+	return s.np.sel%s.np.gridCols() == 0
+}
+
+// leftExits: left goes back (closing details and drill-downs first),
+// except in a prompt being typed.
 func (p *explorerPane) leftExits() bool {
+	return p.ex == nil || !p.ex.capturing() || p.ex.purpose != inputNone && p.ex.input.Position() == 0
+}
+
+func (s *historySection) leftExits() bool { return s.resume || s.pane.leftExits() }
+
+// leftExits: left goes back, except inside typed text in a form.
+func (s *streamsSection) leftExits() bool {
+	switch s.page {
+	case 0:
+		if s.adding {
+			return s.add.leftExits()
+		}
+		return s.pane.leftExits()
+	case 1:
+		return s.cbForm.leftExits()
+	case 3:
+		return s.dataForm.leftExits()
+	}
+	return true
+}
+
+// upExits: the list is at its top row (or shows no list).
+func (p *explorerPane) upExits() bool {
 	if p.ex == nil {
 		return true
 	}
 	if !p.atTop() {
 		return false
 	}
-	return len(p.ex.allowed) <= 1 || p.ex.tab == p.ex.allowed[0]
+	l := p.ex.top()
+	return l == nil || p.ex.tab == tabUsage || l.cursor == 0
 }
 
-func (s *historySection) leftExits() bool { return s.resume || s.pane.leftExits() }
-
-// leftExits: left walks back through the pages (out of a form first),
-// and leaves from the first page.
-func (s *streamsSection) leftExits() bool {
-	return s.page == 0 && !s.adding && s.pane.leftExits()
+// crumbs names what is opened in the explorer: a drill-down, details.
+func (p *explorerPane) crumbs() []string {
+	if p.ex == nil {
+		return nil
+	}
+	var out []string
+	levels := p.ex.tabs[p.ex.tab]
+	for i, l := range levels {
+		if i > 0 {
+			out = append(out, l.title)
+		}
+	}
+	if l := p.ex.top(); l != nil && l.detail {
+		out = append(out, "Details")
+	}
+	return out
 }
 
 // atTop reports whether the explorer shows its list (no details, no

@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │ Now playing                                     stream 1 of 3
- 1 Recognize     │ 
-*2 Now playing   > ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
- 3 Streams       │ ┃ Stream 1                                                  ┃
- 4 History       │ ┃ JUST PLAYED · ended 1 min ago                             ┃
- 5 Account       │ ┃ Warriors                                                  ┃
- 6 Settings      │ ┃ Imagine Dragons                                           ┃
- 7 Help          │ ┃ Warriors (album) · Label · 2019                           ┃
+                 │ Now playing
+ 1 Recognize     │ Now playing                                     stream 1 of 3
+*2 Now playing   > 
+ 3 Streams       │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ 4 History       │ ┃ Stream 1                                                  ┃
+ 5 Account       │ ┃ JUST PLAYED · ended 1 min ago                             ┃
+ 6 Settings      │ ┃ Warriors                                                  ┃
+ 7 Help          │ ┃ Imagine Dragons                                           ┃
+                 │ ┃ Warriors (album) · Label · 2019                           ┃
                  │ ┃ played 2:50                                               ┃
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
                  │ ╭───────────────────────────────────────────────────────────╮
@@ -17,8 +18,7 @@ AudD  ·  profile default
                  │ │ Feeling Good (album) · Label · 2019                       │
                  │ │ played 3:50                                               │
                  │ ╰───────────────────────────────────────────────────────────╯
-                 │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/esc back  ←/→/↑/↓ select  enter zoom  o open  c copy link  h history
+←/→/↑/↓ select  enter zoom  ←/esc back  o open  c copy link  ? keys
 $ audd now-playing                                                        y copy

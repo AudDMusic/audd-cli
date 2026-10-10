@@ -197,7 +197,8 @@ func TestHelpGettingStartedJumps(t *testing.T) {
 	useFakeTree(t)
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "help"}), 120, 40)
 	drain(h, h.activate(), 0)
-	press(h, key("down"), key("enter"))
+	// Help opens on its tab bar: ↓ goes into the steps, ↓ again moves.
+	press(h, key("down"), key("down"), key("enter"))
 	if h.activeID() != "recognize" || h.command() != "audd recognize https://audd.tech/example.mp3" {
 		t.Fatalf("step 2: %s %s", h.activeID(), h.command())
 	}

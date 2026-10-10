@@ -145,7 +145,7 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 			if err := openURL(u); err != nil {
 				return p.h.setFlash("Could not open the browser: " + err.Error())
 			}
-			return p.h.setFlash("Opened " + u)
+			return p.h.setFlash("Opened in your browser: " + u)
 		case "c":
 			return p.h.copy(u, "the sign-in address")
 		case "p":

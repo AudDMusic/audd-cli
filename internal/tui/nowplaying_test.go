@@ -413,6 +413,16 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
+	case "ctrl+o":
+		return tea.KeyMsg{Type: tea.KeyCtrlO}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
@@ -511,7 +521,7 @@ func TestNowPlayingScreenHistoryAndKeys(t *testing.T) {
 
 	m := npTestModel(t, sampleFeed(), []int{1}, true)
 	view := runModel(t, m, "Warriors", key("h"), key("o"))
-	if !strings.Contains(view, "recent plays") || !strings.Contains(view, "Teardrop") || !strings.Contains(view, "Opened https://lis.tn/Warriors") {
+	if !strings.Contains(view, "recent plays") || !strings.Contains(view, "Teardrop") || !strings.Contains(view, "Opened in your browser: https://lis.tn/Warriors") {
 		t.Fatalf("history view:\n%s", view)
 	}
 	if len(opened) != 1 || opened[0] != "https://lis.tn/Warriors" {

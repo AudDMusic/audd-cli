@@ -40,6 +40,7 @@ func TestSettingsSection(t *testing.T) {
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("u"), "Removed max_requests")
+	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("u"),
+		"Unset max_requests in profile default? It goes back to its default.", key("y"), "Removed max_requests")
 	f.waitFor(t, "config unset max_requests")
 }

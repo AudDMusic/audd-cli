@@ -1,10 +1,10 @@
 AudD  ·  profile default
-                 │ [Streams]  Callback   Recorder   History & reports 
- 1 Recognize     │   ID    Health     Latest …  When      URL
- 2 Now playing   │ > 1     Live       Imagine…  ended 1…  https://ra…
-*3 Streams       >   2     Live       Nina Si…  ended 2…  https://ra…
- 4 History       │   3     Can't co…  Portish…  ended 3…  https://ra…
- 5 Account       │ 
+                 │ Streams › >Streams<
+ 1 Recognize     │ >Streams< Callback  Recorder  History & reports 
+ 2 Now playing   │   ID    Health     Latest …  When      URL
+*3 Streams       > · 1     Live       Imagine…  ended 1…  https://ra…
+ 4 History       │   2     Live       Nina Si…  ended 2…  https://ra…
+ 5 Account       │   3     Can't co…  Portish…  ended 3…  https://ra…
  6 Settings      │ 
  7 Help          │ 
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ Streams · 3
-←/esc back  ↑/↓ move  enter open  / filter  o open  c copy  a add  d remove  u …
+←/→ tabs  ↓ open  esc back  a add  d remove  ? keys
 $ audd streams list                                                       y copy

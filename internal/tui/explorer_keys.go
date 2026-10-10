@@ -44,18 +44,14 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	l := m.top()
 	if m.embedded && (s == "left" || s == "right") {
-		// Embedded, left and right walk the tabs without wrapping, and
-		// left first closes details and drill-downs.
-		if s == "left" && l != nil && (l.detail || len(m.tabs[m.tab]) > 1) {
+		// Embedded, the tabs are the screen's tab bar: left goes back and
+		// right opens the selected row.
+		switch {
+		case s == "left":
 			s = "esc"
-		} else {
-			d := 1
-			if s == "left" {
-				d = -1
-			}
-			if next := m.nextTab(d); (d > 0) == (next > m.tab) && next != m.tab {
-				return m, m.switchTab(next)
-			}
+		case l != nil && !l.detail && m.tab != tabUsage:
+			s = "enter"
+		default:
 			return m, nil
 		}
 	}
@@ -217,7 +213,7 @@ func (m *explorer) rowAction(s string, r *row) tea.Cmd {
 		if err := openURL(r.link); err != nil {
 			return m.setFlash("Could not open the browser: " + err.Error())
 		}
-		return m.setFlash("Opened " + r.link)
+		return m.setFlash("Opened in your browser: " + r.link)
 	case "c":
 		val, what = r.link, "link"
 	case "i":

@@ -40,12 +40,22 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.help = true
 	case "right", "l", "tab":
-		if len(m.stations) > 0 {
+		switch {
+		case len(m.stations) == 0:
+		case !m.embedded:
 			m.sel = (m.sel + 1) % len(m.stations)
+		case m.sel+1 < len(m.stations) && (m.single() || (m.sel+1)%m.gridCols() != 0):
+			// Embedded, the arrows stay in the row: left from its first
+			// station goes back.
+			m.sel++
 		}
 	case "left", "shift+tab":
-		if len(m.stations) > 0 {
+		switch {
+		case len(m.stations) == 0:
+		case !m.embedded:
 			m.sel = (m.sel + len(m.stations) - 1) % len(m.stations)
+		case m.sel > 0 && (m.single() || m.sel%m.gridCols() != 0):
+			m.sel--
 		}
 	case "down", "j":
 		if !m.single() {
@@ -82,7 +92,7 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := openURL(s.Plays[0].SongLink); err != nil {
 				return m, m.setFlash("Could not open the browser: " + err.Error())
 			}
-			return m, m.setFlash("Opened " + s.Plays[0].SongLink)
+			return m, m.setFlash("Opened in your browser: " + s.Plays[0].SongLink)
 		}
 		return m, m.setFlash("No link to open")
 	case "c":

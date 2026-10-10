@@ -1,8 +1,8 @@
 AudD  ·  profile default
-                 │ Error: no API token is set
-*1 Recognize     > Try: audd login
- 2 Now playing   │ Press enter to open it.
- 3 Streams       │ 
+                 │ Recognize › File › >Result<
+*1 Recognize     > Error: no API token is set
+ 2 Now playing   │ Try: audd login
+ 3 Streams       │ Press enter to open it.
  4 History       │ 
  5 Account       │ 
  6 Settings      │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-esc back to the form  r run again
+←/esc back to the form  r run again  ? keys
 $ audd recognize song.mp3                                                 y copy

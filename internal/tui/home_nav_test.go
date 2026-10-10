@@ -4,16 +4,40 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/media"
 )
 
 // sidebarLit matches a sidebar item highlighted with the keys on the
 // sidebar (no color: ">3 Streams").
 var sidebarLit = regexp.MustCompile(`(?m)^>\d [A-Z]`)
+
+// crumbText is the breadcrumb row of a wide frame, as text.
+func crumbText(v string) string { return paneRow(v, 1) }
+
+// paneRow is row y of a wide frame, the content pane part, as text.
+func paneRow(v string, y int) string {
+	lines := strings.Split(ansi.Strip(v), "\n")
+	if y >= len(lines) {
+		return ""
+	}
+	r := []rune(lines[y])
+	if len(r) <= sidebarW+2 {
+		return ""
+	}
+	return strings.TrimRight(string(r[sidebarW+2:]), " ")
+}
+
+// footerText is the key hints row of a frame.
+func footerText(v string) string {
+	lines := strings.Split(ansi.Strip(v), "\n")
+	return lines[len(lines)-2]
+}
 
 // backOut presses k until the keys are on the sidebar (at most n times)
 // and checks that the sidebar shows it.
@@ -31,6 +55,258 @@ func backOut(t *testing.T, h *home, k string, n int, what string) {
 	}
 	if strings.Contains(v, "\x1b[733") {
 		t.Fatalf("%s: click marks left in the frame", what)
+	}
+}
+
+// focusShown checks that the frame shows where the keys are (the
+// sidebar item, the tab, or the page: the divider marker and the
+// breadcrumb), and that the footer is about arrows, not [ ].
+func focusShown(t *testing.T, h *home, what string) {
+	t.Helper()
+	v := h.View()
+	items, at := h.crumbs()
+	crumb := crumbText(v)
+	foot := footerText(v)
+	if strings.Contains(foot, "[ ]") || strings.Contains(foot, "pages") {
+		t.Fatalf("%s: the footer advertises [ ]: %q", what, foot)
+	}
+	switch h.focus {
+	case focusSidebar:
+		if !sidebarLit.MatchString(v) || !strings.HasPrefix(crumb, ">"+items[0].text+"<") {
+			t.Fatalf("%s: sidebar focus not shown (crumb %q):\n%s", what, crumb, v)
+		}
+		if h.flash == "" && (!strings.Contains(foot, "↑/↓ move") || !strings.Contains(foot, "→ open")) {
+			t.Fatalf("%s: sidebar footer %q", what, foot)
+		}
+	case focusTabs:
+		tab := items[1].text
+		if !strings.HasSuffix(crumb, ">"+tab+"<") || !strings.Contains(paneRow(v, 2), ">"+tab+"<") {
+			t.Fatalf("%s: tab bar focus not shown (crumb %q):\n%s", what, crumb, v)
+		}
+		if h.flash == "" && !strings.HasPrefix(foot, "←/→ tabs  ↓ open  esc back") {
+			t.Fatalf("%s: tab bar footer %q", what, foot)
+		}
+	default:
+		if at >= 0 && !strings.HasSuffix(crumb, ">"+items[at].text+"<") || at < 0 && strings.Contains(crumb, "<") {
+			t.Fatalf("%s: crumb %q, want %q emphasized", what, crumb, items[max(0, at)].text)
+		}
+		if !h.showSignin {
+			// The frame's header, then the sidebar's blank first row.
+			if r := []rune(strings.Split(ansi.Strip(v), "\n")[h.cur+2]); r[sidebarW] != '>' {
+				t.Fatalf("%s: the divider does not mark the content:\n%s", what, v)
+			}
+		}
+		if h.flash == "" && !strings.Contains(foot, "esc") {
+			t.Fatalf("%s: the footer does not say how to go back: %q", what, foot)
+		}
+	}
+}
+
+type navState struct {
+	focus focusArea
+	n     int
+	id    string
+}
+
+func stateOf(h *home) navState {
+	items, _ := h.crumbs()
+	return navState{h.focus, len(items), h.activeID()}
+}
+
+// escClimbs presses esc and checks that it went up exactly one level,
+// and that the screen changed.
+func escClimbs(t *testing.T, h *home, what string) {
+	t.Helper()
+	before, v0 := stateOf(h), h.View()
+	tabbed := h.tabs() != nil
+	press(h, key("esc"))
+	after, v1 := stateOf(h), h.View()
+	if v0 == v1 {
+		t.Fatalf("%s: esc left the screen as it was:\n%s", what, v1)
+	}
+	var ok bool
+	switch before.focus {
+	case focusContent:
+		ok = after.id == before.id && after.focus == focusContent && after.n == before.n-1 ||
+			after.id == before.id && tabbed && after.focus == focusTabs && after.n == before.n ||
+			!tabbed && after.focus == focusSidebar
+	case focusTabs:
+		ok = after.focus == focusSidebar
+	}
+	if !ok {
+		t.Fatalf("%s: esc went from %+v to %+v:\n%s", what, before, after, v1)
+	}
+	focusShown(t, h, what)
+}
+
+// climbOut presses esc until the sidebar, each press one level up.
+func climbOut(t *testing.T, h *home, what string) {
+	t.Helper()
+	for i := 0; h.focus != focusSidebar; i++ {
+		if i > 10 {
+			t.Fatalf("%s: esc never reached the sidebar", what)
+		}
+		escClimbs(t, h, what)
+	}
+	if !sidebarLit.MatchString(h.View()) {
+		t.Fatalf("%s: no sidebar highlight", what)
+	}
+}
+
+func navHome(t *testing.T, o homeOpts) *home {
+	t.Helper()
+	useListenTools(t, media.Tools{FFmpeg: "/usr/bin/ffmpeg"})
+	h := sized(newTestHome(t, &fakeRun{}, o), 100, 30)
+	drain(h, h.activate(), 0)
+	return h
+}
+
+// Every section and tab: the sidebar opens it, the tab bar switches tabs
+// and goes in and out of the page, ↑ at the top of a page goes back to
+// the tab bar, and esc climbs one level at a time, visibly.
+func TestHierarchy(t *testing.T) {
+	for i, id := range HomeSections {
+		t.Run(id, func(t *testing.T) {
+			h := navHome(t, homeOpts{})
+			h.cur = i
+			drain(h, h.activate(), 0)
+			title := homeTitles[i]
+			focusShown(t, h, id+" sidebar")
+			press(h, key("right"))
+			tb := h.tabs()
+			if tb == nil {
+				if h.focus != focusContent {
+					t.Fatalf("→ opens the page of a section without tabs: %v", h.focus)
+				}
+				focusShown(t, h, id+" page")
+				if c := crumbText(h.View()); !strings.HasPrefix(c, title) {
+					t.Fatalf("crumb %q", c)
+				}
+				climbOut(t, h, id)
+				return
+			}
+			names := tb.tabNames()
+			for ti, name := range names {
+				what := id + "/" + name
+				if h.focus != focusTabs || tb.tabIndex() != ti {
+					t.Fatalf("%s: on the tab bar at %d, want %d (focus %v)", what, tb.tabIndex(), ti, h.focus)
+				}
+				h.flash = ""
+				focusShown(t, h, what+" tab bar")
+				if c := crumbText(h.View()); c != title+" › >"+name+"<" {
+					t.Fatalf("%s: crumb %q", what, c)
+				}
+				press(h, key("down"))
+				if h.focus != focusContent {
+					t.Fatalf("%s: ↓ goes into the page", what)
+				}
+				focusShown(t, h, what+" page")
+				if c := crumbText(h.View()); !strings.HasPrefix(c, title+" › "+name) {
+					t.Fatalf("%s: page crumb %q", what, c)
+				}
+				press(h, key("up"))
+				if h.focus != focusTabs {
+					t.Fatalf("%s: ↑ at the top of the page goes to the tab bar", what)
+				}
+				press(h, key("enter"))
+				if h.focus != focusContent {
+					t.Fatalf("%s: enter goes into the page", what)
+				}
+				escClimbs(t, h, what)
+				if h.focus != focusTabs {
+					t.Fatalf("%s: esc from the page goes to the tab bar", what)
+				}
+				v0 := h.View()
+				press(h, key("right"))
+				if ti < len(names)-1 {
+					if tb.tabIndex() != ti+1 || h.focus != focusTabs {
+						t.Fatalf("%s: → opens the next tab", what)
+					}
+				} else if tb.tabIndex() != ti || h.View() == v0 || !strings.Contains(h.View(), "last tab") {
+					t.Fatalf("%s: → on the last tab stays and says so:\n%s", what, h.View())
+				}
+			}
+			for ti := len(names) - 1; ti > 0; ti-- {
+				press(h, key("left"))
+				if tb.tabIndex() != ti-1 || h.focus != focusTabs {
+					t.Fatalf("← goes to the previous tab: %d", tb.tabIndex())
+				}
+			}
+			press(h, key("left"))
+			if h.focus != focusSidebar {
+				t.Fatal("← on the first tab goes back to the sidebar")
+			}
+			focusShown(t, h, id+" back on the sidebar")
+		})
+	}
+}
+
+// Deeper levels: each esc closes one thing, visibly, until the sidebar.
+func TestEscClimbsFromDeepLevels(t *testing.T) {
+	cases := []struct {
+		name  string
+		opts  homeOpts
+		keys  []string
+		crumb string // the breadcrumb at the deepest level
+	}{
+		{"help command details", homeOpts{start: "help"}, []string{"]", "]", "down", "down", "right"}, "Help › Commands › >audd docs<"},
+		{"help guide search", homeOpts{start: "help"}, []string{"]", "down", "/"}, "Help › Guide › >Search<"},
+		{"streams add", homeOpts{start: "streams"}, []string{"a"}, "Streams › Streams › >Add a stream<"},
+		{"streams plays", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › Streams › >Stream 1 · recent plays<"},
+		{"history details", homeOpts{start: "history"}, []string{"down", "right"}, "History › Recent › >Details<"},
+		{"history job", homeOpts{start: "history"}, []string{"]", "down", "right"}, "History › Jobs › >Job k3x9<"},
+		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › >token<"},
+		{"settings unset", homeOpts{start: "settings"}, []string{"u"}, "Settings › >Unset token?<"},
+		{"recognize file picker", homeOpts{start: "recognize"}, []string{"ctrl+o"}, "Recognize › File › >Pick a file<"},
+		{"recognize microphone", homeOpts{start: "listen"}, nil, "Recognize › >Microphone<"},
+		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "h"}, "Now playing › Stream 1 › >History<"},
+		{"sign-in paste", homeOpts{signedOut: true}, []string{"down", "enter"}, "Sign in › >Paste an API token<"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := navHome(t, c.opts)
+			for _, k := range c.keys {
+				press(h, key(k))
+			}
+			if got := crumbText(h.View()); got != c.crumb {
+				t.Fatalf("crumb %q, want %q:\n%s", got, c.crumb, h.View())
+			}
+			focusShown(t, h, c.name)
+			climbOut(t, h, c.name)
+		})
+	}
+}
+
+// The mouse: a click on a tab opens it with the keys on the tab bar, a
+// click on the page puts the keys there, and a click on the section's
+// name in the breadcrumb goes back to the sidebar.
+func TestMouseLevels(t *testing.T) {
+	for _, id := range []string{"streams", "history", "account", "help"} {
+		h := navHome(t, homeOpts{})
+		for i, s := range HomeSections {
+			if s == id {
+				h.cur = i
+			}
+		}
+		drain(h, h.activate(), 0)
+		tb := h.tabs()
+		second := tb.tabNames()[1]
+		x, y := at(t, h.View(), " "+second+" ")
+		_, cmd := h.Update(tea.MouseMsg{X: x + 2, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		drain(h, cmd, 0)
+		if h.focus != focusTabs || tb.tabIndex() != 1 {
+			t.Fatalf("%s: click on a tab: focus %v tab %d", id, h.focus, tb.tabIndex())
+		}
+		focusShown(t, h, id+" clicked tab")
+		_, cmd = h.Update(tea.MouseMsg{X: sidebarW + 30, Y: 4 + h.headRows, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		drain(h, cmd, 0)
+		if h.focus != focusContent {
+			t.Fatalf("%s: click on the page: focus %v", id, h.focus)
+		}
+		click(t, h, homeTitles[h.cur]+" › ")
+		if h.focus != focusSidebar {
+			t.Fatalf("%s: click on the section in the breadcrumb: focus %v", id, h.focus)
+		}
 	}
 }
 
@@ -54,7 +330,8 @@ func TestEscAndLeftReachTheSidebar(t *testing.T) {
 	}
 }
 
-// Every jump comes back to where it started, then to the sidebar.
+// Every jump comes back to where it started (at the level it was left
+// from), then to the sidebar.
 func TestJumpsGoBackToTheirOrigin(t *testing.T) {
 	useListenTools(t, media.Tools{FFmpeg: "/usr/bin/ffmpeg"})
 	type jump struct {
@@ -67,6 +344,7 @@ func TestJumpsGoBackToTheirOrigin(t *testing.T) {
 			s := h.subs["help"].(*helpSection)
 			s.setPage(0)
 			s.stepCur = i
+			h.focus = focusContent
 			return h.Update2(key("enter"))
 		}})
 	}
@@ -88,7 +366,7 @@ func TestJumpsGoBackToTheirOrigin(t *testing.T) {
 			for i := 0; i < 40 && h.activeID() != j.from; i++ {
 				press(h, key(k))
 			}
-			if h.activeID() != j.from || h.focus != focusContent {
+			if h.activeID() != j.from || h.focus == focusSidebar {
 				t.Fatalf("%s %s: back on %s, focus %v; want %s", j.name, k, h.activeID(), h.focus, j.from)
 			}
 			backOut(t, h, k, 10, j.name)
@@ -105,7 +383,9 @@ func (h *home) Update2(k tea.KeyMsg) tea.Cmd {
 func TestHelpSignInEscReturnsToHelp(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "help"}), 80, 24)
 	drain(h, h.activate(), 0)
-	press(h, key("enter"))
+	// Help opens on its tab bar; enter goes into the steps, enter again
+	// opens the first.
+	press(h, key("enter"), key("enter"))
 	if !h.showSignin || !strings.Contains(h.View(), "Welcome to AudD") {
 		t.Fatalf("the Sign in step opens the sign-in:\n%s", h.View())
 	}
@@ -118,96 +398,44 @@ func TestHelpSignInEscReturnsToHelp(t *testing.T) {
 		t.Fatalf("Help, with the Sign in step selected:\n%s", v)
 	}
 	press(h, key("esc"))
+	if h.focus != focusTabs || !strings.Contains(h.View(), ">Getting started<") {
+		t.Fatalf("then esc goes to the tab bar:\n%s", h.View())
+	}
+	press(h, key("esc"))
 	if h.focus != focusSidebar || !strings.Contains(h.View(), ">7 Help") {
 		t.Fatalf("then esc goes to the sidebar:\n%s", h.View())
 	}
 }
 
-func TestArrowsWalkPages(t *testing.T) {
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "help"}), 100, 30)
-	drain(h, h.activate(), 0)
-	s := h.subs["help"].(*helpSection)
-	press(h, key("right"), key("right"))
-	if s.page != 2 || s.details {
-		t.Fatalf("right walks to Commands: page %d", s.page)
+// [ and ] switch tabs from any level, without wrapping around.
+func TestBracketsSwitchTabs(t *testing.T) {
+	h := navHome(t, homeOpts{start: "streams"})
+	s := h.subs["streams"].(*streamsSection)
+	press(h, key("a"))
+	if !s.adding {
+		t.Fatal("a opens the add form")
 	}
-	press(h, key("right"))
-	if !s.details {
-		t.Fatal("right on Commands opens the details")
+	press(h, key("esc"), key("]"))
+	if s.page != 1 || h.focus != focusTabs {
+		t.Fatalf("] from the page: page %d focus %v", s.page, h.focus)
 	}
-	press(h, key("left"))
-	if s.details || s.page != 2 {
-		t.Fatal("left closes the details")
+	press(h, key("["), key("["))
+	if s.page != 0 || !strings.Contains(h.View(), "first tab") {
+		t.Fatalf("[ stops at the first tab:\n%s", h.View())
 	}
-	s.setPage(5)
-	press(h, key("right"))
-	if s.page != 5 {
-		t.Fatal("right stops at the last page")
+	// In the Commands filter, [ and ] are typed once it has text.
+	h = navHome(t, homeOpts{start: "help"})
+	hs := h.subs["help"].(*helpSection)
+	// Typing on the Commands tab bar goes into its filter.
+	press(h, key("]"), key("]"))
+	h.View()
+	press(h, typeText("st")...)
+	if h.focus != focusContent || hs.picker.filter.Value() != "st" {
+		t.Fatalf("typing on the tab bar: focus %v filter %q", h.focus, hs.picker.filter.Value())
 	}
-	for want := 4; want >= 0; want-- {
-		press(h, key("left"))
-		if s.page != want || h.focus != focusContent {
-			t.Fatalf("left: page %d, want %d", s.page, want)
-		}
-	}
-	press(h, key("left"))
-	if h.focus != focusSidebar {
-		t.Fatal("left on the first page goes back")
-	}
-
-	h = sized(newTestHome(t, &fakeRun{}, homeOpts{start: "streams"}), 100, 30)
-	drain(h, h.activate(), 0)
-	st := h.subs["streams"].(*streamsSection)
-	for want := 1; want <= 3; want++ {
-		press(h, key("right"))
-		if st.page != want {
-			t.Fatalf("streams right: page %d, want %d", st.page, want)
-		}
-	}
-	press(h, key("right"))
-	if st.page != 3 {
-		t.Fatal("streams: right stops at the last page")
-	}
-	// In a page's form, left at its start leaves the form first.
-	press(h, key("enter"))
-	if !st.inForm {
-		t.Fatal("enter goes into the form")
-	}
-	press(h, key("left"))
-	if st.inForm || st.page != 3 {
-		t.Fatalf("left on the first choice leaves the form: inForm %v page %d", st.inForm, st.page)
-	}
-	for want := 2; want >= 0; want-- {
-		press(h, key("left"))
-		if st.page != want {
-			t.Fatalf("streams left: page %d, want %d", st.page, want)
-		}
-	}
-	press(h, key("left"))
-	if h.focus != focusSidebar {
-		t.Fatal("streams: left on the first page goes back")
-	}
-
-	for _, loggedIn := range []bool{false, true} {
-		h = sized(newTestHome(t, &fakeRun{}, homeOpts{start: "account", loggedIn: loggedIn}), 100, 30)
-		drain(h, h.activate(), 0)
-		ac := h.subs["account"].(*accountSection)
-		for want := 1; want < len(accountPages); want++ {
-			press(h, key("right"))
-			if ac.page != want {
-				t.Fatalf("account right: page %d, want %d", ac.page, want)
-			}
-		}
-		for want := len(accountPages) - 2; want >= 0; want-- {
-			press(h, key("left"))
-			if ac.page != want {
-				t.Fatalf("account left: page %d, want %d", ac.page, want)
-			}
-		}
-		press(h, key("left"))
-		if h.focus != focusSidebar {
-			t.Fatal("account: left on the first page goes back")
-		}
+	press(h, key("]"))
+	if hs.page != 2 || hs.picker.filter.Value() != "st]" {
+		t.Fatalf("] typed in the filter: page %d filter %q", hs.page, hs.picker.filter.Value())
 	}
 }
 
@@ -243,10 +471,10 @@ func TestMouse(t *testing.T) {
 	if h.activeID() != "streams" || h.focus != focusSidebar {
 		t.Fatalf("click on a sidebar item: %s %v", h.activeID(), h.focus)
 	}
-	// A page of the strip.
+	// A tab: the keys go to the tab bar.
 	click(t, h, "Recorder")
-	if st := h.subs["streams"].(*streamsSection); st.page != 2 || h.focus != focusContent {
-		t.Fatalf("click on a page: %d %v", st.page, h.focus)
+	if st := h.subs["streams"].(*streamsSection); st.page != 2 || h.focus != focusTabs {
+		t.Fatalf("click on a tab: %d %v", st.page, h.focus)
 	}
 
 	// Form fields: a checkbox, the Source choice, a button.
@@ -261,7 +489,7 @@ func TestMouse(t *testing.T) {
 	if !s.mic() {
 		t.Fatal("click on Source switches it")
 	}
-	click(t, h, "Microphone")
+	click(t, h, "‹ Microphone")
 	click(t, h, "Show the plan")
 	f.waitFor(t, "recognize song.mp3 --return spotify --dry-run")
 
@@ -270,7 +498,7 @@ func TestMouse(t *testing.T) {
 	drain(h, h.activate(), 0)
 	click(t, h, "No match")
 	ex := h.subs["history"].(*historySection).pane.ex
-	if l := ex.top(); l.cursor != 1 || l.detail {
+	if l := ex.top(); l.cursor != 1 || l.detail || h.focus != focusContent {
 		t.Fatalf("click selects the row: cursor %d", l.cursor)
 	}
 	click(t, h, "No match")
@@ -279,8 +507,8 @@ func TestMouse(t *testing.T) {
 	}
 	press(h, key("esc"))
 	click(t, h, "Jobs")
-	if ex.tab != tabJobs {
-		t.Fatal("click on an explorer tab")
+	if ex.tab != tabJobs || h.focus != focusTabs {
+		t.Fatal("click on the Jobs tab")
 	}
 
 	// Help: a tab, a Commands row, and the wheel on the guide.
@@ -358,8 +586,183 @@ func TestFocusIsVisible(t *testing.T) {
 		t.Fatalf("content focus:\n%s", v)
 	}
 	press(h, key("esc"))
+	h.flash = ""
 	v = h.View()
 	if !strings.Contains(v, ">6 Settings") || strings.Contains(v, "     >") || strings.Contains(v, "esc back") {
 		t.Fatalf("sidebar focus:\n%s", v)
+	}
+}
+
+// The first-run tip states the model; esc or a click hides it for good,
+// remembered in the profile.
+func TestFirstRunTip(t *testing.T) {
+	h := navHome(t, homeOpts{tip: true})
+	if !strings.Contains(h.View(), tipText) {
+		t.Fatalf("no tip:\n%s", h.View())
+	}
+	if n := strings.Count(h.View(), "\n") + 1; n != 30 {
+		t.Fatalf("%d lines with the tip", n)
+	}
+	press(h, key("right"), key("esc"))
+	if strings.Contains(h.View(), tipText) {
+		t.Fatal("esc hides the tip")
+	}
+	cfg, err := config.LoadFrom(h.a.Cfg.Path)
+	if err != nil || !cfg.Profile("default").UITipSeen {
+		t.Fatalf("the tip is remembered in the profile: %v", err)
+	}
+	h = navHome(t, homeOpts{tip: true})
+	click(t, h, "Menu on the left")
+	if h.tip {
+		t.Fatal("a click hides the tip")
+	}
+	if h = navHome(t, homeOpts{}); strings.Contains(h.View(), tipText) {
+		t.Fatal("no tip once it was seen")
+	}
+}
+
+// Typed text goes into the field: q there is a letter, not quit.
+func TestQInTextFieldTypes(t *testing.T) {
+	h := navHome(t, homeOpts{start: "recognize"})
+	_, cmd := h.Update(key("q"))
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("q in a text field quits")
+		}
+	}
+	if v := recognizeOf(h).form.value("input"); v != "q" {
+		t.Fatalf("q is typed: %q", v)
+	}
+}
+
+// A key that does nothing says so instead of nothing happening.
+func TestUnknownKeyFlash(t *testing.T) {
+	for _, c := range []struct {
+		start string
+		focus focusArea
+	}{{"settings", focusContent}, {"streams", focusTabs}, {"", focusSidebar}} {
+		h := navHome(t, homeOpts{start: c.start})
+		if h.focus != c.focus {
+			t.Fatalf("%s: focus %v", c.start, h.focus)
+		}
+		v0 := h.View()
+		press(h, key("z"))
+		v := h.View()
+		if v == v0 || !strings.Contains(footerText(v), "z does nothing here · ? shows the keys") {
+			t.Fatalf("%s: no feedback for z:\n%s", c.start, v)
+		}
+	}
+}
+
+// Leaving a form and coming back keeps what was typed.
+func TestFormKeptAfterLeaving(t *testing.T) {
+	h := navHome(t, homeOpts{start: "streams"})
+	s := h.subs["streams"].(*streamsSection)
+	press(h, key("a"))
+	press(h, typeText("https://radio.example/1")...)
+	press(h, key("esc"), key("esc"), key("esc"))
+	if h.focus != focusSidebar {
+		t.Fatalf("esc ×3 reaches the sidebar: %v", h.focus)
+	}
+	press(h, key("right"), key("a"))
+	if got := s.add.value("url"); got != "https://radio.example/1" || !strings.Contains(h.View(), "https://radio.example/1") {
+		t.Fatalf("the add form lost its URL: %q", got)
+	}
+
+	h = navHome(t, homeOpts{start: "recognize"})
+	press(h, typeText("song.mp3")...)
+	press(h, key("esc"), key("2"), key("1"))
+	if got := recognizeOf(h).form.value("input"); got != "song.mp3" {
+		t.Fatalf("Recognize lost its input: %q", got)
+	}
+
+	h = navHome(t, homeOpts{})
+	drain(h, h.openPalette("streams add"), 0)
+	press(h, typeText("https://radio.example/2")...)
+	press(h, key("esc"), key("esc"))
+	if h.paletteO {
+		t.Fatal("esc twice closes the palette")
+	}
+	drain(h, h.openPalette("streams add"), 0)
+	if got := h.palette.cf.form.value("arg:0"); got != "https://radio.example/2" {
+		t.Fatalf("the palette form lost its value: %q", got)
+	}
+}
+
+// Enter in a filled Input recognizes it: the plan first, then the run.
+func TestEnterInInputRuns(t *testing.T) {
+	f := &fakeRun{}
+	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f.reply("recognize song.mp3", warriorsDoc, "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
+	drain(h, h.activate(), 0)
+	press(h, typeText("song.mp3")...)
+	press(h, key("enter"))
+	f.waitFor(t, "recognize song.mp3 --dry-run")
+	f.waitFor(t, "recognize song.mp3")
+	waitView(t, h, "Warriors")
+}
+
+// A disabled button shows why, and pressing it says so.
+func TestDisabledButtonSaysWhy(t *testing.T) {
+	f := &fakeRun{}
+	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
+	drain(h, h.activate(), 0)
+	s := recognizeOf(h)
+	s.form.focusName("recognize")
+	if v := h.View(); !strings.Contains(v, "Enter a file, URL, or folder first") {
+		t.Fatalf("the disabled button gives no reason:\n%s", v)
+	}
+	press(h, key("enter"))
+	if len(f.commands()) != 0 || s.form.err != "Enter a file, URL, or folder first" {
+		t.Fatalf("pressing it ran %q:\n%s", f.commands(), h.View())
+	}
+}
+
+// q (and ctrl+c) while a recognition runs asks first.
+func TestQuitAsksWhileRunning(t *testing.T) {
+	release := make(chan struct{})
+	f := &fakeRun{}
+	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f.on("recognize song.mp3 --format", func(args []string, io RunIO) int {
+		<-release
+		return 0
+	})
+	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
+	drain(h, h.activate(), 0)
+	defer func() {
+		// Let the run finish before the test's fakes are put back.
+		close(release)
+		drain(h, h.runs.wait(h.last), 0)
+		h.waitRuns(5 * time.Second)
+	}()
+	press(h, typeText("song.mp3")...)
+	press(h, key("enter"))
+	deadline := time.Now().Add(3 * time.Second)
+	for h.runningCommand() == "" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if h.runningCommand() == "" {
+		t.Fatalf("the recognition did not start: %q", f.commands())
+	}
+	press(h, key("esc"))
+	_, cmd := h.Update(key("q"))
+	if cmd != nil || !h.quitAsk || !strings.Contains(h.View(), "Quit audd?") || !strings.Contains(h.View(), "audd recognize song.mp3") {
+		t.Fatalf("q asks while a run is in progress:\n%s", h.View())
+	}
+	press(h, key("n"))
+	if h.quitAsk || !strings.Contains(h.View(), "Still running") {
+		t.Fatalf("any other key keeps it running:\n%s", h.View())
+	}
+	_, cmd = h.Update(key("ctrl+c"))
+	if cmd != nil || !h.quitAsk {
+		t.Fatal("ctrl+c asks too")
+	}
+	_, cmd = h.Update(key("ctrl+c"))
+	if cmd == nil {
+		t.Fatal("ctrl+c again quits")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("ctrl+c again quits")
 	}
 }

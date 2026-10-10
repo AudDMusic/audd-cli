@@ -1,24 +1,24 @@
 AudD  ·  profile default
-                 │  Getting started   Guide   Commands  [Keys]  Exit codes and …
- 1 Recognize     │ Everywhere
- 2 Now playing   │   ctrl+k or :    command palette: run any command
- 3 Streams       │   1-7            jump to a section
- 4 History       │   ↑/↓ j/k        move in the sidebar
- 5 Account       │   enter          open the section
- 6 Settings      │   esc, ←         back (← from the left-most item)
-*7 Help          >   ←/→            tabs and pages
-                 │   click, wheel   select or press; scroll
-                 │   y              copy the command shown at the bottom
-                 │   ?              keys for this screen
-                 │   F1             help
-                 │   q              quit (ctrl+c always quits)
+                 │ Help › >Keys<
+ 1 Recognize     │  Getting started  Guide  Commands >Keys< Exit codes  Links 
+ 2 Now playing   │ Moving around
+ 3 Streams       │   Menu on the left, page on the right. Arrows move, Enter
+ 4 History       │   goes in, Esc comes back.
+ 5 Account       │   The menu is the sidebar; Help, Streams, History, and
+ 6 Settings      │   Account have a tab bar above their page. A key that does
+*7 Help          >   nothing where you press it says so at the bottom.
                  │ 
-                 │ Mouse
-                 │   Click a section, a page, a row, a field, or a button; click
-                 │   a selected row again to open it. The wheel scrolls. To
-                 │   select text with the mouse, hold Shift (Option in iTerm2).
-                 │   AUDD_NO_MOUSE=1 turns the mouse off.
- ctrl+k commands │ 
- ? keys  q quit  │ Recognize
-esc back  ↑/↓ scroll  ←/→ [ ] pages
+                 │   ↑/↓            move in the menu, a list, or a form
+                 │   → or enter     go in: open the section, the page, the sele…
+                 │   ← or esc       come back one level (in typed text ← moves …
+                 │   ←/→            on a tab bar: switch tabs
+                 │   ↑              from the top of a page: back to its tab bar
+                 │   [ ]            previous or next tab, from anywhere in the …
+                 │   → space enter  change a choice ‹ like this ›; ← still goes…
+                 │ 
+                 │ Everywhere
+                 │   1-7            jump to a section
+ ctrl+k commands │   ctrl+k or :    run any command
+ ? keys  q quit  │   y              copy the command shown at the bottom
+←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

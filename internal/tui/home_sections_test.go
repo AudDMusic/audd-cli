@@ -65,6 +65,8 @@ func TestStreamsSectionPages(t *testing.T) {
 	f.reply("streams recorder status", "Running:        yes (pid 4242)\nStore:          /data/streams-default.db\n", "", 0)
 	f.reply("streams history", "TIME   STREAM  SONG\n12:00  1       Imagine Dragons — Warriors\n", "", 0)
 	snap(t, "streams_list", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si")
+	// ↓ from the tab bar goes into the list: its first row has the keys.
+	snap(t, "streams_list_row", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("down"), key("down"), "$ audd streams list")
 	snap(t, "streams_callback", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), "Callback URL: https")
 	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "pid 4242")
 
@@ -95,7 +97,7 @@ func TestStreamsExportWritesFile(t *testing.T) {
 	f.reply("streams export", `{"type":"result","radio_id":1}`+"\n"+`{"type":"result","radio_id":2}`+"\n", "", 0)
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	drain(h, h.activate(), 0)
-	press(h, key("["))
+	press(h, key("]"), key("]"), key("]"))
 	s := h.subs["streams"].(*streamsSection)
 	s.dataForm.get("kind").setValue("export")
 	s.dataForm.get("since").setValue("all")

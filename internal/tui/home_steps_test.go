@@ -25,9 +25,12 @@ func TestEveryGettingStartedStepGoesBack(t *testing.T) {
 			continue
 		}
 		press(h, key("esc"))
-		if h.focus != focusSidebar || !strings.Contains(h.View(), ">7 Help") && !strings.Contains(h.View(), "Help") {
-			t.Errorf("step %d: second esc did not reach the sidebar", i)
+		if h.focus != focusTabs {
+			t.Errorf("step %d: the next esc did not reach Help's tab bar", i)
 		}
-		t.Logf("step %d %q -> %s -> back to Help -> sidebar: ok", i, gettingStarted[i].title, landed)
+		press(h, key("esc"))
+		if h.focus != focusSidebar || !strings.Contains(h.View(), ">7 Help") {
+			t.Errorf("step %d: then esc did not reach the sidebar", i)
+		}
 	}
 }

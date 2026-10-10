@@ -93,7 +93,7 @@ func (s *recognizeSection) setupDone(m listenSetupMsg) {
 			opts = append(opts, d.Value)
 		}
 		cur := s.form.get("device")
-		*cur = *enumField("device", "Device", "Input device (←/→ to choose)", opts)
+		*cur = *enumField("device", "Device", "Input device (→ or space to choose)", opts)
 	}
 	s.sync()
 }
@@ -118,7 +118,7 @@ func (s *recognizeSection) micKeys() []keyHelp {
 	case "running":
 		return []keyHelp{{"s or esc", "stop"}}
 	case "result":
-		k := []keyHelp{{"r", "listen again"}, {"esc", "back"}}
+		k := []keyHelp{{"r", "listen again"}, {"esc", "back to the form"}}
 		if s.rec.link != "" {
 			k = append(k, keyHelp{"o", "open the link"}, keyHelp{"c", "copy it"})
 		}
@@ -127,7 +127,7 @@ func (s *recognizeSection) micKeys() []keyHelp {
 		}
 		return k
 	}
-	return []keyHelp{{"↑/↓", "field"}, {"←/→", "choose"}, {"space", "toggle"}, {"enter", "listen"}, {"esc", "sidebar"}}
+	return []keyHelp{{"↑/↓", "field"}, {"enter", "listen"}, {"→/space", "change a choice"}}
 }
 
 // startListen records and recognizes.

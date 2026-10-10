@@ -252,7 +252,7 @@ func TestUIRotateToken(t *testing.T) {
 	e.loginByPaste()
 	s := e.ui("ui", "--section", "account")
 	s.wait("Paid until")
-	s.press("[", "[")
+	s.press("]", "]", "]")
 	s.wait("0123…cdef")
 	s.press("R")
 	s.wait("Type rotate")

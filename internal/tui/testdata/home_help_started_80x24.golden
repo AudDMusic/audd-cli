@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │ [Getting started]  Guide   Commands   Keys   Exit codes and …
- 1 Recognize     │ Getting started
- 2 Now playing   │ 
- 3 Streams       │ › 1. Sign in
- 4 History       │      Sign in to your AudD account (or paste an API token) so
- 5 Account       │      audd can recognize music and show your account.
- 6 Settings      │      $ audd login
-*7 Help          > 
+                 │ Help › >Getting started<
+ 1 Recognize     │ >Getting started< Guide  Commands  Keys  Exit codes  Links 
+ 2 Now playing   │ Getting started
+ 3 Streams       │ 
+ 4 History       │ · 1. Sign in
+ 5 Account       │      Sign in to your AudD account (or paste an API token) so
+ 6 Settings      │      audd can recognize music and show your account.
+*7 Help          >      $ audd login
+                 │ 
                  │   2. Recognize a file
                  │      Pick a file, URL, or folder and recognize it. This fills
                  │      in AudD's example song.
@@ -17,8 +18,7 @@ AudD  ·  profile default
                  │      seconds and identify the song.
                  │      $ audd listen
                  │ 
-                 │   4. Add a stream
- ctrl+k commands │      Have AudD monitor a radio or other live stream, then
- ? keys  q quit  │      watch it in Now playing.
-←/esc back  ↑/↓ step  enter go  ←/→ [ ] pages
+ ctrl+k commands │   4. Add a stream
+ ? keys  q quit  │      Have AudD monitor a radio or other live stream, then
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd login                                                              y copy
