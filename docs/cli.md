@@ -6,17 +6,30 @@ on a terminal and JSON when its output is piped.
 
 Get your API token at https://dashboard.audd.io, or run `audd login`.
 
-## Install and sign in
+## Install
+
+| Where | Command |
+| --- | --- |
+| Node.js | `npm install -g @audd/cli` |
+| Python | `pipx install audd-cli` or `uv tool install audd-cli` |
+| macOS (Homebrew) | `brew install auddmusic/tap/audd` |
+| macOS, Linux (script) | `curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh \| sh` |
+| Windows (Scoop) | `scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket` then `scoop install auddmusic/audd` |
+| Go | `go install github.com/AudDMusic/audd-cli/cmd/audd@latest` |
+| Any system | download an archive from https://github.com/AudDMusic/audd-cli/releases and put `audd` on your `PATH` |
+
+The install script puts `audd` in `~/.local/bin` and checks the download
+against the release's checksums.
+
+Run it without installing:
 
 ```sh
-npx @audd/cli recognize song.mp3                 # run without installing (or: uvx audd-cli)
-brew install auddmusic/tap/audd                  # macOS
-curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh | sh
-                                                 # macOS and Linux, into ~/.local/bin
+npx @audd/cli recognize song.mp3          # Node.js
+uvx audd-cli recognize song.mp3           # Python
+docker run --rm -e AUDD_API_TOKEN -v "$PWD:/work" ghcr.io/auddmusic/audd-cli recognize song.mp3
 ```
 
-Other ways (Scoop on Windows, Docker, `go install`, pipx, `uv tool`) are listed at
-https://github.com/AudDMusic/audd-cli#install.
+## Sign in
 
 ```sh
 audd login                      # sign in; fetches your API token for you
