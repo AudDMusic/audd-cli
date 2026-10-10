@@ -45,15 +45,24 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	l := m.top()
 	switch s {
 	case "q", "ctrl+c":
+		if m.embedded {
+			return m, nil
+		}
 		return m, tea.Quit
 	case "?":
+		if m.embedded {
+			return m, nil
+		}
 		m.help = true
 		return m, nil
 	case "tab", "right":
-		return m, m.switchTab((m.tab + 1) % 4)
+		return m, m.switchTab(m.nextTab(1))
 	case "shift+tab", "left":
-		return m, m.switchTab((m.tab + 3) % 4)
+		return m, m.switchTab(m.nextTab(-1))
 	case "1", "2", "3", "4":
+		if m.embedded {
+			return m, nil
+		}
 		return m, m.switchTab(tabID(s[0] - '1'))
 	}
 	if m.tab == tabUsage {
@@ -216,6 +225,9 @@ func (m *explorer) resumeJob(l *level, retry bool) tea.Cmd {
 			return nil
 		}
 		id = r.key
+	}
+	if m.onResume != nil {
+		return m.onResume(id, retry)
 	}
 	a, ctx := m.a, m.ctx
 	// The command's context: Ctrl-C stops the resumed job the way it stops

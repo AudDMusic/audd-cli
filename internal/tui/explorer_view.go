@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -23,8 +24,16 @@ func (m *explorer) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
-	m.arts.beginView()
+	if !m.embedded {
+		m.arts.beginView()
+	}
 	bodyH := m.h - 3
+	if m.embedded {
+		bodyH = m.h - 1 // the status line
+		if len(m.allowed) > 1 {
+			bodyH--
+		}
+	}
 	var body string
 	switch {
 	case m.help:
@@ -33,6 +42,13 @@ func (m *explorer) View() string {
 		body = m.usageView()
 	default:
 		body = m.levelView(m.top(), bodyH)
+	}
+	if m.embedded {
+		page := fit(body, m.w, bodyH) + "\n" + m.statusLine()
+		if len(m.allowed) > 1 {
+			page = m.tabBar() + "\n" + page
+		}
+		return page
 	}
 	page := m.tabBar() + "\n" + fit(body, m.w, bodyH) + "\n" + m.statusLine() + "\n" + m.keysLine()
 	page = m.arts.finishView(page, m.w)
@@ -46,6 +62,12 @@ func (m *explorer) tabBar() string {
 	var parts []string
 	for i, t := range tabTitles {
 		label := fmt.Sprintf(" %d %s ", i+1, t)
+		if m.embedded {
+			if !slices.Contains(m.allowed, tabID(i)) {
+				continue
+			}
+			label = " " + t + " "
+		}
 		if tabID(i) == m.tab {
 			s := m.st.Bold.Reverse(true)
 			if !m.color {
@@ -56,6 +78,9 @@ func (m *explorer) tabBar() string {
 		} else {
 			parts = append(parts, m.st.Dim.Render(label))
 		}
+	}
+	if m.embedded {
+		return truncate(strings.Join(parts, " "), m.w)
 	}
 	return spread(strings.Join(parts, " "), m.st.Dim.Render("audd browse"), m.w)
 }
@@ -83,15 +108,40 @@ func (m *explorer) statusLine() string {
 }
 
 func (m *explorer) keysLine() string {
+	return truncate(m.st.Dim.Render(strings.Join(m.keyList(), "  ")), m.w)
+}
+
+// keyList is the key hints for the current view. Embedded, it leaves out
+// what the surrounding screen handles (help, quit, a single tab).
+func (m *explorer) keyList() []string {
 	var keys []string
 	l := m.top()
+	tabs := !m.embedded || len(m.allowed) > 1
+	tail := func(k ...string) []string {
+		if tabs {
+			k = append(k, "tab next")
+		}
+		if !m.embedded {
+			k = append(k, "? help", "q quit")
+		}
+		return k
+	}
 	switch {
 	case m.help:
 		keys = []string{"any key: close help"}
 	case m.tab == tabUsage:
-		keys = []string{"tab next", "r refresh", "e export", "? help", "q quit"}
+		if tabs {
+			keys = append(keys, "tab next")
+		}
+		keys = append(keys, "r refresh", "e export")
+		if !m.embedded {
+			keys = append(keys, "? help", "q quit")
+		}
 	case l != nil && l.detail:
-		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC", "q quit"}
+		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC"}
+		if !m.embedded {
+			keys = append(keys, "q quit")
+		}
 	default:
 		keys = []string{"↑/↓ move", "enter open", "/ filter", "o open", "c copy"}
 		switch l.kind {
@@ -100,9 +150,9 @@ func (m *explorer) keysLine() string {
 		case "jobs", "items":
 			keys = append(keys, "r resume", "R retry failed")
 		}
-		keys = append(keys, "e export", "tab next", "? help", "q quit")
+		keys = append(keys, tail("e export")...)
 	}
-	return truncate(m.st.Dim.Render(strings.Join(keys, "  ")), m.w)
+	return keys
 }
 
 func (m *explorer) helpView() string {

@@ -30,8 +30,14 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k.String() {
 	case "q", "ctrl+c":
+		if m.embedded {
+			return m, nil
+		}
 		return m, tea.Quit
 	case "?":
+		if m.embedded {
+			return m, nil
+		}
 		m.help = true
 	case "right", "l", "tab":
 		if len(m.stations) > 0 {

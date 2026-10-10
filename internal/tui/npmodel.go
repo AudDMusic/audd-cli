@@ -54,9 +54,31 @@ type npModel struct {
 	flash  string
 	flashN int
 	osc    string // clipboard sequence to emit with the next frame
+
+	// embedded: part of interactive mode (see explorer.embedded).
+	embedded bool
+}
+
+// newEmbeddedNowPlaying is the now-playing screen for interactive mode,
+// drawing covers with the screen's art store.
+func newEmbeddedNowPlaying(ctx context.Context, a *app.App, feed Feed, stations []Station, opts NowPlayingOptions, arts *artStore) *npModel {
+	m := newNowPlayingModelArts(ctx, a, feed, stations, nil, opts, arts)
+	m.embedded = true
+	return m
+}
+
+// takeOSC returns and clears the clipboard sequence waiting to be sent.
+func (m *npModel) takeOSC() string {
+	s := m.osc
+	m.osc = ""
+	return s
 }
 
 func newNowPlayingModel(ctx context.Context, a *app.App, feed Feed, stations []Station, radioIDs []int, opts NowPlayingOptions) *npModel {
+	return newNowPlayingModelArts(ctx, a, feed, stations, radioIDs, opts, setupArt(a, opts.NoArt))
+}
+
+func newNowPlayingModelArts(ctx context.Context, a *app.App, feed Feed, stations []Station, radioIDs []int, opts NowPlayingOptions, arts *artStore) *npModel {
 	st := a.Out.Styles()
 	now := a.Now
 	if now == nil {
@@ -65,7 +87,7 @@ func newNowPlayingModel(ctx context.Context, a *app.App, feed Feed, stations []S
 	m := &npModel{
 		ctx: ctx, feed: feed, radioIDs: radioIDs, now: now, interval: opts.Interval, notify: opts.Notify,
 		lastKeys: map[int]string{}, lastList: now(),
-		arts: setupArt(a, opts.NoArt),
+		arts: arts,
 		st:   st, r: st.Renderer, color: !a.Out.Options().NoColor,
 		w: 100, h: 30,
 	}

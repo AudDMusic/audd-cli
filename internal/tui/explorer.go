@@ -340,9 +340,57 @@ type explorer struct {
 	st    output.Styles
 	r     *lipgloss.Renderer
 	color bool
+
+	// embedded is set when the explorer is part of interactive mode: it
+	// shows only the allowed tabs, never quits, and leaves cover art,
+	// the clipboard, and help to the screen around it.
+	embedded bool
+	allowed  []tabID
+	// onResume, when set, resumes a job (r, R) instead of quitting.
+	onResume func(id string, retry bool) tea.Cmd
 }
 
 func newExplorer(ctx context.Context, a *app.App, d ExplorerData, t tabID, arg string) *explorer {
+	return newExplorerArts(ctx, a, d, t, arg, setupArt(a, false))
+}
+
+// newEmbeddedExplorer is an explorer showing only tabs, for interactive
+// mode. arts is the art store of the screen it is part of.
+func newEmbeddedExplorer(ctx context.Context, a *app.App, d ExplorerData, tabs []tabID, arts *artStore) *explorer {
+	m := newExplorerArts(ctx, a, d, tabs[0], "", arts)
+	m.embedded = true
+	m.allowed = append([]tabID(nil), tabs...)
+	return m
+}
+
+// capturing reports whether a prompt is open, so every key goes to it.
+func (m *explorer) capturing() bool {
+	return m.purpose != inputNone || m.confirm != "" || m.exportAs
+}
+
+// takeOSC returns and clears the clipboard sequence waiting to be sent.
+func (m *explorer) takeOSC() string {
+	s := m.osc
+	m.osc = ""
+	return s
+}
+
+// nextTab is the tab d steps away among the tabs shown.
+func (m *explorer) nextTab(d int) tabID {
+	tabs := m.allowed
+	if len(tabs) == 0 {
+		tabs = []tabID{tabRecent, tabJobs, tabStreams, tabUsage}
+	}
+	i := 0
+	for j, t := range tabs {
+		if t == m.tab {
+			i = j
+		}
+	}
+	return tabs[(i+d+len(tabs))%len(tabs)]
+}
+
+func newExplorerArts(ctx context.Context, a *app.App, d ExplorerData, t tabID, arg string, arts *artStore) *explorer {
 	st := a.Out.Styles()
 	now := a.Now
 	if now == nil {
@@ -352,7 +400,7 @@ func newExplorer(ctx context.Context, a *app.App, d ExplorerData, t tabID, arg s
 	ti.Prompt = ""
 	ti.Cursor.SetMode(cursor.CursorStatic)
 	m := &explorer{ctx: ctx, a: a, d: d, tab: t, w: 100, h: 30, now: now, input: ti,
-		st: st, r: st.Renderer, color: !a.Out.Options().NoColor, arts: setupArt(a, false)}
+		st: st, r: st.Renderer, color: !a.Out.Options().NoColor, arts: arts}
 	m.tabs[tabRecent] = []*level{{kind: "recent", title: "Recognized with audd", cols: recentCols, loading: true}}
 	m.tabs[tabJobs] = []*level{{kind: "jobs", title: "Jobs", cols: jobCols, loading: true}}
 	m.tabs[tabStreams] = []*level{{kind: "streams", title: "Streams", cols: streamCols, loading: true}}

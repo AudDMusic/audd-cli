@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,7 +17,9 @@ func (m *npModel) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
-	m.arts.beginView()
+	if !m.embedded {
+		m.arts.beginView()
+	}
 	bodyH := m.bodyHeight()
 	var body string
 	switch {
@@ -37,6 +40,9 @@ func (m *npModel) View() string {
 	}
 	footer := m.footerLine()
 	page := header + "\n" + fit(body, m.w, bodyH) + "\n" + footer
+	if m.embedded {
+		return page
+	}
 	page = m.arts.finishView(page, m.w)
 	if m.osc != "" {
 		page = m.osc + page
@@ -71,6 +77,14 @@ func (m *npModel) footerLine() string {
 	if m.flash != "" {
 		return truncate(m.st.Dim.Render(m.flash), m.w)
 	}
+	if m.embedded {
+		return ""
+	}
+	return truncate(m.st.Dim.Render(strings.Join(m.keyList(), "  ")), m.w)
+}
+
+// keyList is the key hints for the current view.
+func (m *npModel) keyList() []string {
 	var keys []string
 	switch {
 	case m.help:
@@ -83,7 +97,10 @@ func (m *npModel) footerLine() string {
 	default:
 		keys = []string{"←/→/↑/↓ select", "enter zoom", "o open", "c copy link", "h history", "? help", "q quit"}
 	}
-	return truncate(m.st.Dim.Render(strings.Join(keys, "  ")), m.w)
+	if m.embedded {
+		keys = slices.DeleteFunc(keys, func(k string) bool { return k == "? help" || k == "q quit" })
+	}
+	return keys
 }
 
 func (m *npModel) helpView() string {
