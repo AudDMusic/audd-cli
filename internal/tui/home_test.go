@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -225,11 +226,24 @@ func drive(t *testing.T, h *home, w, ht int, steps ...any) string {
 	t.Helper()
 	tm := teatest.NewTestModel(t, h, teatest.WithInitialTermSize(w, ht))
 	out := tm.Output()
+	// Everything the program printed since the last wait: a frame can
+	// carry the text of several waits.
+	var seen bytes.Buffer
 	for _, st := range steps {
 		switch v := st.(type) {
 		case string:
-			teatest.WaitFor(t, out, func(b []byte) bool { return bytes.Contains(b, []byte(v)) },
-				teatest.WithDuration(5*time.Second), teatest.WithCheckInterval(10*time.Millisecond))
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				b, _ := io.ReadAll(out)
+				seen.Write(b)
+				if bytes.Contains(seen.Bytes(), []byte(v)) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("the screen never showed %q; last frame:\n%s", v, lastFrame(seen.Bytes()))
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
 		case tea.KeyMsg:
 			tm.Send(v)
 		case []tea.KeyMsg:
@@ -240,6 +254,14 @@ func drive(t *testing.T, h *home, w, ht int, steps ...any) string {
 	}
 	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
 	return tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second)).View()
+}
+
+// lastFrame is the end of the program's output, for failure messages.
+func lastFrame(b []byte) string {
+	if len(b) > 3000 {
+		b = b[len(b)-3000:]
+	}
+	return string(b)
 }
 
 // typeText is the key messages for typing s.
@@ -291,7 +313,7 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 	var msg tea.Msg
 	select {
 	case msg = <-done:
-	case <-time.After(300 * time.Millisecond):
+	case <-time.After(time.Second):
 		return // a tick or a long wait
 	}
 	switch m := msg.(type) {

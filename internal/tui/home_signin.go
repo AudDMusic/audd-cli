@@ -95,17 +95,31 @@ func (s *signinSection) keys() []keyHelp {
 	switch s.step {
 	case "login":
 		if s.panel.running && s.panel.pending != nil {
-			k := []keyHelp{{"o", "open the page"}, {"c", "copy it"}}
-			if s.panel.pending["method"] != "device" {
-				k = append(k, keyHelp{"p", "paste the address"})
-			}
-			return append(k, keyHelp{"esc", "cancel"})
+			return s.keysFor(s.panel)
 		}
 		return []keyHelp{{"esc", "back"}}
 	case "paste":
 		return []keyHelp{{"enter", "save"}, {"esc", "back"}}
 	}
 	return []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}}
+}
+
+// keysFor are the keys while p waits for a sign-in to be approved.
+func (s *signinSection) keysFor(p *cmdPanel) []keyHelp {
+	k := []keyHelp{{"o", "open the page"}, {"c", "copy it"}}
+	if p.pending["method"] != "device" {
+		k = append(k, keyHelp{"p", "paste the address"})
+	}
+	return append(k, keyHelp{"esc", "cancel"})
+}
+
+// choices is how many choices the screen offers: the Account section
+// only offers the sign-in (a token alone does not reach the account).
+func (s *signinSection) choices() int {
+	if s.heading != "" {
+		return 1
+	}
+	return len(signinChoices)
 }
 
 func (s *signinSection) update(msg tea.Msg) tea.Cmd {
@@ -146,9 +160,9 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 	}
 	switch k.String() {
 	case "down", "j", "tab":
-		s.choice = (s.choice + 1) % len(signinChoices)
+		s.choice = (s.choice + 1) % s.choices()
 	case "up", "k", "shift+tab":
-		s.choice = (s.choice + len(signinChoices) - 1) % len(signinChoices)
+		s.choice = (s.choice + s.choices() - 1) % s.choices()
 	case "enter":
 		switch s.choice {
 		case 0:
@@ -188,11 +202,12 @@ func (s *signinSection) view(w, h int) string {
 	}
 	if s.heading != "" {
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
+		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
 	} else {
 		b.WriteString(st.Bold.Render("Welcome to AudD") + "\n\n")
 		b.WriteString(output.Wrap("audd recognizes music in files, URLs, and from the microphone, monitors streams, and manages your account. To start, choose how audd gets your API token:", w) + "\n\n")
 	}
-	for i, c := range signinChoices {
+	for i, c := range signinChoices[:s.choices()] {
 		mark := "  "
 		title := c.title
 		if i == s.choice {

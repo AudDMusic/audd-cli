@@ -17,7 +17,6 @@ func (s *stubSection) command() string        { return "" }
 func (s *stubSection) capturing() bool        { return false }
 func (s *stubSection) back() bool             { return false }
 
-func newAccountSection(h *home) section  { return &stubSection{h, "Account"} }
 func newSettingsSection(h *home) section { return &stubSection{h, "Settings"} }
 func newHelpSection(h *home) section     { return &stubSection{h, "Help"} }
 
