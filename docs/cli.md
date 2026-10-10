@@ -63,8 +63,8 @@ permissions; `audd auth status` shows what was approved.
 ## Interactive mode
 
 On a terminal, `audd` with no arguments (or `audd ui`) opens a full-screen
-interface: Recognize, Now playing, Streams, History, Account, Settings, and
-Help. Recognize takes a file, URL, or folder, or switches its Source to the
+interface: Recognize, Now playing, Streams, Recognitions, Account, Settings,
+and Help. Recognize takes a file, URL, or folder, or switches its Source to the
 microphone (`audd listen`). The bottom line shows the command each action
 runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its
 arguments and flags; `?` lists the keys of the screen, and `q` quits.
@@ -72,18 +72,27 @@ arguments and flags; `?` lists the keys of the screen, and `q` quits.
 Interactive mode runs the same commands, with the same limits and
 confirmations: it asks before spending more than one request and never adds
 `--yes`. `audd ui --section <name>` opens a section (`recognize`,
-`now-playing`, `streams`, `history`, `account`, `settings`, `help`).
+`now-playing`, `streams`, `recognitions`, `account`, `settings`, `help`).
 
 Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes
 back. On the sidebar, up and down pick a section and right or Enter opens it.
-Help, Streams, History, and Account have a tab bar: left and right switch
-tabs, and down or Enter goes into the page. On a page, up and down move
+Help, Streams, Recognitions, and Account have a tab bar: left and right
+switch tabs, and down or Enter goes into the page. On a page, up and down move
 through the list or form, right or Enter opens the selected item, and up from
 the top goes back to the tab bar. Left and Esc go back one level: from details
 to the list, to the tab bar, then to the sidebar (or to the screen a Help step
 or a hint came from). Inside typed text left moves the cursor; on a choice,
-right, Space, or Enter changes it. `[` and `]` switch tabs from anywhere. The
-path at the top of the page shows where you are.
+left and right change it, and left on its first option goes back. Letters and
+digits go into a text field only while it has the cursor: Esc leaves the
+field and ctrl+u clears it. `[` and `]` switch tabs from anywhere. The path at
+the top of the page shows where you are, and the line above the key hints
+says what just happened.
+
+Each letter has one meaning everywhere: `o` opens in the browser, `c`
+copies, `r` refreshes, `d` removes (after asking), `e` edits, `x` exports,
+`s` stops. Changing the account's callback URL, removing a stream, and
+unsetting a setting ask first and say what happens; `q` asks first while a
+command is running.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in

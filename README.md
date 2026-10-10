@@ -70,7 +70,7 @@ audd recognize song.mp3 --return apple_music,spotify --format json | jq .result.
 Run `audd` with no arguments on a terminal, or `audd ui`, for a full-screen interface to everything audd does:
 
 - **Recognize**: files, URLs, and folders, with the plan shown before any requests are spent; switch Source to Microphone to identify the music playing near you.
-- **Now playing**, **Streams**, and **History**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
+- **Now playing**, **Streams**, and **Recognitions**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
 - **Account** and **Settings**: plan, usage, payment links, the API token, profiles, and every `audd config` key.
 - **Help**: getting started, the CLI guide, every command, and every key.
 
@@ -79,10 +79,10 @@ The bottom line shows the command each action runs, and `y` copies it. `ctrl+k` 
 Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back:
 
 - **Sidebar**: ↑/↓ pick a section, → or Enter opens it (`1`-`7` jump straight to one).
-- **Tab bar** (Help, Streams, History, Account): ←/→ switch tabs, ↓ or Enter goes into the page.
+- **Tab bar** (Help, Streams, Recognitions, Account): ←/→ switch tabs, ↓ or Enter goes into the page.
 - **Page**: ↑/↓ move through the list or form, → or Enter opens the selected item; ↑ from the top goes back to the tab bar.
 
-← and Esc always go back one level, and the path at the top of the page shows where you are. Inside typed text ← moves the cursor; on a choice such as Source, →, Space, or Enter changes it. `[` and `]` switch tabs from anywhere. A key that does nothing where you press it says so at the bottom, and `q` asks first while a command is running. The mouse works too: click sections, tabs, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
+← and Esc always go back one level, and the path at the top of the page shows where you are. Inside typed text ← moves the cursor; on a choice such as Source, ←/→ change it. Letters and digits go into a text field only while it has the cursor (Esc leaves it, ctrl+u clears it), and each letter means one thing everywhere: `o` opens in the browser, `c` copies, `r` refreshes, `d` removes after asking. `[` and `]` switch tabs from anywhere. A key that does nothing where you press it says so above the hints, and `q` asks first while a command is running. The mouse works too: click sections, tabs, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
 
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help instead, so scripts and agents get plain output.
 
