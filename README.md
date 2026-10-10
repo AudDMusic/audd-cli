@@ -1,6 +1,6 @@
 # AudD CLI
 
-`audd` is the command-line tool for [AudD](https://audd.io) music recognition. It recognizes music in files, URLs, folders, long recordings, and from the microphone; records and reports on your monitored streams; and manages your AudD account. It prints tables on a terminal and JSON when piped, so it works the same for people, scripts, and AI agents.
+`audd` is the command-line tool for [AudD](https://audd.io) music recognition. It recognizes music in files, URLs, folders, long recordings, and from the microphone; records and reports on your monitored streams; and manages your AudD account. It prints tables on a terminal and JSON when piped, so people, scripts, and AI agents can all use it.
 
 ## Install
 
@@ -49,7 +49,7 @@ On a terminal a match prints as a card with the cover art, artist, title, album,
 }
 ```
 
-No match is not an error: `result` is `null` and the exit code is 0.
+When nothing matches, `result` is `null` and the exit code is 0.
 
 `--return apple_music,spotify` adds metadata from those services (also `deezer` and `musicbrainz`):
 
@@ -59,12 +59,12 @@ audd recognize song.mp3 --return apple_music,spotify --format json | jq .result.
 
 ## Signing in and tokens
 
-`audd login` signs you in to your AudD account. Signing in gives `audd` your API token and enables the account commands (`account`, `usage`, `billing`, `token rotate`, `token refresh-local`). There are two ways to approve the sign-in, and `audd` picks one:
+`audd login` signs you in to your AudD account. Signing in gives `audd` your API token and enables the account commands (`account`, `usage`, `billing`, `token rotate`, `token refresh-local`). `audd` picks one of two ways to approve the sign-in:
 
 - **Browser**: on a desktop (macOS, Windows, or Linux with a display), `audd` opens the sign-in page and also prints its URL. If the browser is on another machine, approve there and paste back the address the browser was sent to.
 - **Code**: over SSH, in containers, and in scripts and agents, `audd` prints a page and a short code. Open the page on any device, check that it shows the same code, and approve. The code expires in 15 minutes.
 
-`audd login --browser` and `audd login --device` choose the method yourself. On the approval page you can untick any permission; `audd auth status` shows what was approved, and a command that needs one you unticked (payment links, rotating the token) asks for it again when you use it.
+To choose the method yourself, use `audd login --browser` or `audd login --device`. On the approval page you can untick any permission; `audd auth status` shows what was approved, and a command that needs one you unticked (payment links, rotating the token) asks for it again when you use it.
 
 Without a terminal, `audd login` prints a `login_pending` JSON line with `verification_uri_complete` and `user_code` for an agent to show you, then waits until you approve.
 

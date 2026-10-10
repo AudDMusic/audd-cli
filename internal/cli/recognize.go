@@ -109,7 +109,7 @@ you pass --fail-on-no-match (exit 1; in a batch, when any file has no match).`,
 	fl.StringVar(&f.maxFiles, "max-files", "", "for folders, globs, and lists: at most N files, or none")
 	agent.SetRequiredWhen(fl, "limit", "with --enterprise (N chunks per file, or none)")
 	agent.SetRequiredWhen(fl, "max-files", "for a batch: a folder, a glob, several arguments, or a list on stdin (N files, or none)")
-	fl.StringVar(&f.at, "at", "", "send a clip starting at this time, e.g. 90, 1:30, or 1m30s (needs ffmpeg)")
+	fl.StringVar(&f.at, "at", "", "send a clip starting at this time, such as 90, 1:30, or 1m30s (needs ffmpeg)")
 	fl.StringVar(&f.duration, "duration", "", "clip length for --at (default 12s)")
 	fl.BoolVar(&f.tracklist, "tracklist", false, "with --enterprise: merge consecutive matches into tracks with start and end times")
 	fl.StringVar(&f.ret, "return", "", "extra metadata: "+strings.Join(api.Providers, ", ")+" (comma-separated)")

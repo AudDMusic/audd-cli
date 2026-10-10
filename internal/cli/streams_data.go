@@ -148,8 +148,8 @@ last ~30), so the list is up to date.
 
 Periods when a stream was not recorded (no recorder ran for it, or the
 recorder could not reach AudD for longer than the recent results cover) are
-listed as gaps ("not recorded"), so missing plays are never silent. Without
---id, a period missing for any stream on the account is a gap.`,
+listed as gaps ("not recorded"), so you can see where plays may be missing.
+Without --id, a period missing for any stream on the account is a gap.`,
 		Example: `  audd streams history
   audd streams history --id 1 --since 24h
   audd streams history --since 2026-10-01 --limit 0 --format csv > plays.csv`,

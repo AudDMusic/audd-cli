@@ -184,8 +184,9 @@ func newJobsBrowseCmd(a *app.App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "browse <id>",
 		Short: "Explore a job's results interactively",
-		Long:  "Open the interactive explorer on this job. Without a terminal it prints the job like audd jobs show.",
-		Args:  cobra.ExactArgs(1),
+		Long: `Open the interactive explorer on this job. Without a terminal, it prints the
+job as audd jobs show does.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			st, err := jobsOpen()
 			if err != nil {
@@ -222,9 +223,8 @@ files whose request may have reached AudD, are retried only with
 --retry-failed.
 
 Results stream as each file finishes: with --format json or jsonl (the
-default when piped) that is JSONL, one "result" line per file and a final
-"summary" line, not one JSON document. audd jobs show prints the whole job
-as one document.`,
+default when piped) the output is JSON lines: one "result" line per file and
+a final "summary" line. For the whole job as one document, use audd jobs show.`,
 		Args:        cobra.ExactArgs(1),
 		Annotations: map[string]string{AnnotationStreaming: "true"},
 		Example: `  audd jobs resume k7m2xq
@@ -304,7 +304,7 @@ job. Running jobs are kept.`,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&olderThan, "older-than", "30d", "delete jobs not updated for this long (e.g. 12h, 7d)")
+	cmd.Flags().StringVar(&olderThan, "older-than", "30d", "delete jobs not updated for this long, such as 12h or 7d")
 	cmd.Flags().BoolVar(&all, "all", false, "delete every job that is not running")
 	return cmd
 }

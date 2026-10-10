@@ -26,13 +26,14 @@ func init() {
 func newBillingCmd(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "billing",
-		Short: "Plans, payments, and payment links",
+		Short: "Show plans and payments, and get payment links",
 		Long: `See plans, payment history, and what you owe, and get payment links.
 
 subscribe, renew, and buy never charge anything: they print a Stripe payment
 link that you open and approve in the browser (--open opens it for you).
 If you unticked the billing:pay permission when signing in, they ask you
 to approve it.
+
 subscribe takes a plan from the PLAN column of audd billing plans, such as
 startup_plan. Needs audd login.`,
 		Example: `  audd billing plans

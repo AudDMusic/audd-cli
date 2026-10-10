@@ -401,7 +401,7 @@ whenever you log in, and prints the command that turns it on.`,
 			})
 		},
 	}
-	start.Flags().BoolVar(&install, "install-service", false, "install a login service (systemd user unit, launchd agent, or scheduled task) that runs the recorder from when you log in; turn it on with the command it prints")
+	start.Flags().BoolVar(&install, "install-service", false, "install a login service (systemd user unit, launchd agent, or scheduled task) that starts the recorder when you log in; it prints the command that turns the service on")
 
 	stop := &cobra.Command{
 		Use:   "stop",

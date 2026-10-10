@@ -156,7 +156,7 @@ func newAuthCmd(a *app.App) *cobra.Command {
 your API token without copying it by hand.
 
 On a desktop, signing in opens your browser. Over SSH, in containers, and
-for scripts and agents, the CLI shows a page and a short code instead:
+for scripts and agents, audd shows a page and a short code instead:
 open the page on any device, check the code, and approve.
 
 Recognition does not need a sign-in: set AUDD_API_TOKEN, pass --token, or run
@@ -188,20 +188,20 @@ func newLoginCmd(a *app.App, use string) *cobra.Command {
 		Use:   use,
 		Short: "Sign in to your AudD account",
 		Long: `Sign in to your AudD account. There are two ways to approve the sign-in,
-and the CLI picks one for you:
+and audd picks one for you:
 
-  Browser: on a desktop (macOS, Windows, or Linux with a display), the CLI
+  Browser: on a desktop (macOS, Windows, or Linux with a display), audd
   opens your browser, prints the sign-in URL, and waits. If the browser is
   on another machine, approve there, copy the address it was sent to (it
   starts with http://127.0.0.1), and paste it into the terminal.
 
-  Code: over SSH, in a container, or without a display, the CLI prints a
+  Code: over SSH, in a container, or without a display, audd prints a
   page and a code. Open the page on any device (your phone works), check
   that it shows the same code, and approve. The code expires in 15 minutes.
 
---browser and --device choose the method yourself.
+To choose the method yourself, pass --browser or --device.
 
-Without a terminal (scripts and agents), the CLI uses a code and prints a
+Without a terminal (scripts and agents), audd uses a code and prints a
 JSON login_pending record with verification_uri, verification_uri_complete,
 user_code, expires_in_seconds, and interval, then keeps waiting until the
 sign-in is approved, denied, or expires. Agents show the user the URL and
@@ -211,14 +211,14 @@ keeps one document.
 A browser sign-in that is waiting in another process can be finished with:
   audd auth login --complete '<redirect URL>'
 
-The sign-in asks for everything the CLI uses: to read your profile,
+The sign-in asks for everything audd uses: to read your profile,
 account, usage, billing, and API token, to create payment links, and to
 rotate the API token. On the approval page you can untick any of them;
 audd auth status shows what was approved. Commands that need one you
 unticked (payment links, rotating the API token) ask for it again when you
 use them.
 
-After signing in, the CLI saves your API token for this profile.
+After signing in, audd saves your API token for this profile.
 Tokens from --token, AUDD_API_TOKEN, and audd config set token take
 precedence over it.`,
 		Example: `  audd login
@@ -357,8 +357,9 @@ func newStatusCmd(a *app.App, use string) *cobra.Command {
 		Use:   use,
 		Short: "Show the signed-in account and which API token is in use",
 		Long: `Show the signed-in account (email and sign-in methods), the permissions
-it approved (and any it unticked), and which API token audd uses (and where it comes from: --token,
-AUDD_API_TOKEN, audd config set token, or audd login). The token is masked.
+approved and unticked at sign-in, and the API token audd uses, masked, with
+where it comes from: --token, AUDD_API_TOKEN, audd config set token, or
+audd login.
 
 Exits with code 3 when there is neither a sign-in nor an API token.`,
 		Example: "  audd auth status\n  audd whoami --format json",
@@ -600,9 +601,9 @@ func newLogoutCmd(a *app.App, use string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: "Sign out and remove the saved sign-in",
-		Long: `Sign out: revoke the sign-in on the server and remove it, and the API token
-fetched by audd login, from this machine. A token you set with
-audd config set token stays. The API token itself is not rotated. A
+		Long: `Sign out: revoke the sign-in on the server and remove it from this
+machine, along with the API token that audd login saved. A token you set with
+audd config set token stays. The API token is not rotated. A
 background stream recorder that used the token from the sign-in is stopped.`,
 		Example: "  audd logout\n  audd auth logout --profile work\n  audd auth logout --all",
 		Args:    cobra.NoArgs,

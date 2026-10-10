@@ -235,9 +235,11 @@ By default AudD sends a stream's result when the song ends, with when it
 started and how long it played (play_length). With --start, results arrive
 when songs start instead: audd now-playing can then show the song that is on
 right now, but results no longer include the play length, so reports cannot
-count airtime for that stream. Stream results include the track length (for a progress bar) only with
-Apple Music, Spotify, or Deezer metadata: audd streams callback set <url>
---return apple_music turns it on.`,
+count airtime for that stream.
+
+Stream results include the track length, used for the progress bar, only
+with Apple Music, Spotify, or Deezer metadata. Turn it on with
+audd streams callback set <url> --return apple_music.`,
 		Example: `  audd streams add https://radio.example/stream.mp3 --id 1
   audd streams add twitch:somechannel --id 2 --start`,
 		Args: cobra.ExactArgs(1),

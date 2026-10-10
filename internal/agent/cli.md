@@ -38,7 +38,7 @@ shows which one is in use. Recognition and `token show` need only a token;
   a code. Open the page on any device, check the code, and approve. The code
   expires in 15 minutes.
 
-`--browser` or `--device` picks the method yourself. Without a terminal it
+Pass `--browser` or `--device` to pick the method. Without a terminal it
 uses a code and prints a `login_pending` JSON record with `verification_uri`,
 `verification_uri_complete`, `user_code`, `expires_in_seconds`, and
 `interval`, then waits until the sign-in is approved, denied, or expires.
@@ -62,7 +62,7 @@ to pick another moment, or `--enterprise` to scan a whole recording.
 `--return` adds metadata from `apple_music`, `spotify`, `deezer`, and
 `musicbrainz`.
 
-No match is not an error: the result is `null` and the exit code is 0. Pass
+When nothing matches, the result is `null` and the exit code is 0. Pass
 `--fail-on-no-match` to exit 1 instead. In a batch it exits 1 when any file
 has no match; failed files take precedence (exit 7).
 
@@ -95,8 +95,8 @@ list read from stdin needs `--yes` whenever it would spend requests: the list
 takes up stdin, so `audd` cannot ask.
 `--dry-run` works without `--max-files`.
 
-Every batch is a job saved after each file. Ctrl-C or a dropped connection
-loses nothing finished:
+Every batch is a job saved after each file, so Ctrl-C or a dropped connection
+loses no finished files:
 
 ```sh
 audd jobs list
@@ -151,7 +151,7 @@ audd streams report --by artist --since 30d
 audd streams export --since 7d --format csv > plays.csv
 ```
 
-`audd now-playing` is a terminal take on the AudD widget (widget.audd.tech): the
+`audd now-playing` is a terminal version of the AudD widget (widget.audd.tech): the
 latest song on each stream with its cover art, and the songs played before it.
 With `--once`, a stream whose results can't be read is listed with an `"error"`
 object; the command fails (exit 5) only when no stream can be read. With
@@ -268,8 +268,8 @@ approve in the browser.
   fields, before anything is sent; a field one result lacks (no ISRC, say)
   prints as null.
 - `--quiet` hides notes and progress on stderr. In table output it also
-  prints only the essential line (`Imagine Dragons — Warriors`); JSON
-  output stays the same.
+  prints only the song line (`Imagine Dragons — Warriors`); JSON
+  output is unchanged.
 - Errors go to stderr. In JSON mode they look like
   `{"schema_version":1,"error":{"code":"...","api_code":0,"message":"...","hint":"...","retryable":false}}`;
   `hint` is usually the next command to run.
