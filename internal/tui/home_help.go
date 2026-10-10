@@ -489,7 +489,7 @@ func (s *helpSection) view(w, h int) string {
 			mark = "› "
 			label = st.Bold.Render(label)
 		}
-		b.WriteString(truncate(mark+padRight(label, 36)+st.Accent.Render(l.url), w) + "\n")
+		b.WriteString(truncate(mark+padRight(label, min(36, w/2))+st.Accent.Render(l.url), w) + "\n")
 	}
 	b.WriteString("\n" + st.Dim.Render("Enter opens the link, c copies it."))
 	return bar + b.String()

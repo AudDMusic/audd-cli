@@ -1,22 +1,22 @@
 AudD  ·  profile default
                  │  Getting started  [Guide]  Commands   Keys   Exit codes and output   Links 
  1 Recognize     │   Install and sign in     │ AUDD CLI
- 2 Listen        │   Recognize music         │ 
- 3 Now playing   │     Whole recordings (ent…│ audd recognizes music in files, URLs, folders, long recordings, and from
- 4 Streams       │     Folders, globs, and l…│ the microphone; monitors streams; and manages your AudD account. It
- 5 History       │     Results cache         │ prints tables on a terminal and JSON when its output is piped.
- 6 Account       │   Limits and confirmations│ 
- 7 Settings      │   Streams                 │ Get your API token at https://dashboard.audd.io, or run audd login.
-*8 Help          │     Background recorder   │ 
-                 │     Cover art             │ Install and sign in
-                 │   Custom catalog          │ 
-                 │   Account                 │   npx @audd/cli recognize song.mp3                 # run without install…
-                 │   Output for scripts and …│   brew install auddmusic/tap/audd                  # macOS
-                 │     Exit codes            │   curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/downl…
-                 │   Agents                  │                                                    # macOS and Linux, in…
-                 │   Settings                │ 
-                 │   Updates and privacy     │ Other ways (Scoop on Windows, Docker, go install, pipx, uv tool) are
-                 │                           │ listed at https://github.com/AudDMusic/audd-cli#install.
+ 2 Listen        │   Interactive mode        │ 
+ 3 Now playing   │   Recognize music         │ audd recognizes music in files, URLs, folders, long recordings, and from
+ 4 Streams       │     Whole recordings (ent…│ the microphone; monitors streams; and manages your AudD account. It
+ 5 History       │     Folders, globs, and l…│ prints tables on a terminal and JSON when its output is piped.
+ 6 Account       │     Results cache         │ 
+ 7 Settings      │   Limits and confirmations│ Get your API token at https://dashboard.audd.io, or run audd login.
+*8 Help          │   Streams                 │ 
+                 │     Background recorder   │ Install and sign in
+                 │     Cover art             │ 
+                 │   Custom catalog          │   npx @audd/cli recognize song.mp3                 # run without install…
+                 │   Account                 │   brew install auddmusic/tap/audd                  # macOS
+                 │   Output for scripts and …│   curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/downl…
+                 │     Exit codes            │                                                    # macOS and Linux, in…
+                 │   Agents                  │ 
+                 │   Settings                │ Other ways (Scoop on Windows, Docker, go install, pipx, uv tool) are
+                 │   Updates and privacy     │ listed at https://github.com/AudDMusic/audd-cli#install.
                  │                           │ 
                  │                           │   audd login                      # sign in; fetches your API token for …
                  │                           │   export AUDD_API_TOKEN=your-api-token   # or set the token directly (CI…
@@ -35,6 +35,6 @@ AudD  ·  profile default
                  │                           │ • Code: over SSH, in containers, and without a terminal, it prints a page
                  │                           │   and a code. Open the page on any device, check the code, and approve.
  ctrl+k commands │                           │   The code expires in 15 minutes.
- ? keys  q quit  │ 11%
+ ? keys  q quit  │ 10%
 ↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
 $ audd docs cli                                                                                                   y copy

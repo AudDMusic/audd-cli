@@ -57,6 +57,19 @@ When nothing matches, `result` is `null` and the exit code is 0.
 audd recognize song.mp3 --return apple_music,spotify --format json | jq .result.spotify.uri
 ```
 
+## Interactive mode
+
+Run `audd` with no arguments on a terminal, or `audd ui`, for a full-screen interface to everything audd does:
+
+- **Recognize** and **Listen**: files, URLs, folders, and the microphone, with the plan shown before any requests are spent.
+- **Now playing**, **Streams**, and **History**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
+- **Account** and **Settings**: plan, usage, payment links, the API token, profiles, and every `audd config` key.
+- **Help**: getting started, the CLI guide, every command, and every key.
+
+The bottom line shows the command each action runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its arguments and flags. Limits and confirmations work as on the command line: interactive mode asks before spending more than one request and never adds `--yes`. `audd ui --section streams` opens a section directly.
+
+Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help instead, so scripts and agents get plain output.
+
 ## Signing in and tokens
 
 `audd login` signs you in to your AudD account. Signing in gives `audd` your API token and enables the account commands (`account`, `usage`, `billing`, `token rotate`, `token refresh-local`). `audd` picks one of two ways to approve the sign-in:
@@ -277,6 +290,7 @@ func init() {
 - Do not set `PersistentPreRunE` on the root. Subcommands may set their own; the root's still runs first.
 - Return `*output.Error` (via `output.Errf`) for expected failures so the exit code and hint are right. Any other error from `RunE` exits with 1.
 - Write results through `a.Out` (`Result`, `Event`, `Info`, `Confirm`), never directly to `os.Stdout`.
+- Interactive mode runs commands in-process and builds a form for each one from its `Use` line (`<arg>` required, `[arg]` optional, `...` repeats) and flags. `TestPaletteCoversEveryCommand` fails when a command has an argument or flag type the form cannot show.
 
 ### Hooks and factories
 
@@ -286,6 +300,7 @@ func init() {
 | --- | --- | --- |
 | `app.RunBatch` | `internal/jobs` | `init()` |
 | `app.RunExplorer` | `internal/tui` | `init()` |
+| `app.RunHome` | `internal/tui` | `init()` |
 | `app.RenderResult` | `internal/tui` (plain text until then) | `init()` |
 | `app.EnsureRecorder` | `internal/streams` | `init()` |
 | `App.APIClient` | `internal/api` | a `cli.Register` callback |
