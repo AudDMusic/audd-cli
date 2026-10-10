@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/AudDMusic/audd-cli/internal/output"
@@ -19,7 +20,8 @@ type cmdPanel struct {
 	args    []string
 	res     *runResult
 	running bool
-	lines   []string // streamed stdout lines
+	lines   []string       // streamed stdout lines
+	pending map[string]any // a sign-in the run waits for
 	scroll  scrollView
 	// render turns a finished run into text for width w; nil shows
 	// stdout as is.
@@ -28,6 +30,24 @@ type cmdPanel struct {
 	live func(lines []string, w int) string
 	// empty is shown before the first run.
 	empty string
+
+	// While a sign-in is pending in the browser: the redirect address
+	// pasted from another machine (p), finished with auth login --complete.
+	pasting  bool
+	pasteIn  textinput.Model
+	complete *run
+}
+
+// capturing reports whether the paste field is open.
+func (p *cmdPanel) capturing() bool { return p.pasting }
+
+// back closes the paste field.
+func (p *cmdPanel) back() bool {
+	if p.pasting {
+		p.pasting = false
+		return true
+	}
+	return false
 }
 
 func newPanel(h *home) *cmdPanel { return &cmdPanel{h: h} }
@@ -40,6 +60,7 @@ func (p *cmdPanel) start(req runReq) tea.Cmd {
 	p.args = req.args
 	p.res = nil
 	p.lines = nil
+	p.pending = nil
 	p.running = true
 	p.scroll.off = 0
 	cmd := p.h.start(req)
@@ -62,9 +83,20 @@ func (p *cmdPanel) handle(msg tea.Msg) (mine, done bool) {
 		if m.run != p.run {
 			return false, false
 		}
+		if m.pending != nil {
+			p.pending = m.pending
+			return true, false
+		}
 		p.lines = append(p.lines, m.line)
 		return true, false
 	case runDoneMsg:
+		if p.complete != nil && m.run == p.complete {
+			p.complete = nil
+			if m.res.err != nil {
+				p.h.flash = "Could not finish the sign-in: " + m.res.err.Message
+			}
+			return true, false
+		}
 		if m.run != p.run {
 			return false, false
 		}
@@ -87,6 +119,45 @@ func (p *cmdPanel) command() string {
 // opens it in the palette.
 func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 	s := k.String()
+	if p.pasting {
+		switch s {
+		case "esc":
+			p.pasting = false
+			return nil
+		case "enter":
+			p.pasting = false
+			v := strings.TrimSpace(p.pasteIn.Value())
+			if v == "" {
+				return nil
+			}
+			cmd := p.h.start(runReq{args: []string{"auth", "login", "--complete", v}})
+			p.complete = p.h.lastRun()
+			return cmd
+		}
+		var cmd tea.Cmd
+		p.pasteIn, cmd = p.pasteIn.Update(k)
+		return cmd
+	}
+	if p.running && p.pending != nil {
+		u := pendingURL(p.pending)
+		switch s {
+		case "o":
+			if err := openURL(u); err != nil {
+				return p.h.setFlash("Could not open the browser: " + err.Error())
+			}
+			return p.h.setFlash("Opened " + u)
+		case "c":
+			return p.h.copy(u, "the sign-in address")
+		case "p":
+			if p.pending["method"] != "device" {
+				p.pasting = true
+				p.pasteIn = newInput()
+				p.pasteIn.Prompt = "Address: "
+				return p.pasteIn.Focus()
+			}
+		}
+		return nil
+	}
 	if s == "enter" && p.res != nil && p.res.err != nil && strings.HasPrefix(p.res.err.Hint, "audd ") {
 		return p.h.openPaletteLine(p.res.err.Hint)
 	}
@@ -96,6 +167,13 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 
 func (p *cmdPanel) text(w int) string {
 	st := p.h.st
+	if p.running && p.pending != nil {
+		t := pendingText(st, p.pending, w)
+		if p.pasting {
+			t += "\n\n" + p.pasteIn.View()
+		}
+		return t
+	}
 	if p.running {
 		if p.live != nil {
 			return p.live(p.lines, w)
@@ -153,3 +231,33 @@ func (p *cmdPanel) view(w, h int) string {
 
 // lastRun is the run start created most recently.
 func (h *home) lastRun() *run { return h.last }
+
+// pendingText tells how to approve a sign-in the run is waiting for.
+func pendingText(st output.Styles, doc map[string]any, w int) string {
+	var b strings.Builder
+	if doc["method"] == "device" {
+		uri := str(doc["verification_uri_complete"])
+		if uri == "" {
+			uri = str(doc["verification_uri"])
+		}
+		b.WriteString("To sign in, open this page on any device:\n\n  " + st.Accent.Render(uri) + "\n\n")
+		b.WriteString("Check that it shows this code, then approve:\n\n    " + st.Bold.Render(spaced(str(doc["user_code"]))) + "\n\n")
+		b.WriteString(st.Dim.Render(output.Wrap("Only approve a sign-in you started yourself. o opens the page, c copies it.", w)))
+		return b.String()
+	}
+	b.WriteString("Sign in to AudD in your browser. If it did not open, visit:\n\n  " + st.Accent.Render(str(doc["url"])) + "\n\n")
+	b.WriteString(st.Dim.Render(output.Wrap("Waiting for the browser. o opens the page, c copies it. If the browser is on another machine, approve there and paste the address it was sent to with p.", w)))
+	return b.String()
+}
+
+// pendingURL is the page to open for a sign-in.
+func pendingURL(doc map[string]any) string {
+	for _, k := range []string{"verification_uri_complete", "verification_uri", "url"} {
+		if s := str(doc[k]); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func spaced(code string) string { return strings.Join(strings.Split(code, ""), " ") }

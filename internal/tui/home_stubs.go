@@ -25,7 +25,6 @@ func newHistorySection(h *home) section    { return &stubSection{h, "History"} }
 func newAccountSection(h *home) section    { return &stubSection{h, "Account"} }
 func newSettingsSection(h *home) section   { return &stubSection{h, "Settings"} }
 func newHelpSection(h *home) section       { return &stubSection{h, "Help"} }
-func newSigninSection(h *home) section     { return &stubSection{h, "Sign in"} }
 
 type paletteOpenMsg struct{ path, line string }
 

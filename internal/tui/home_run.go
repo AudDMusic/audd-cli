@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -46,6 +47,9 @@ type (
 	runLineMsg struct {
 		run  *run
 		line string
+		// pending is a login_pending record (a sign-in to approve), from
+		// stdout or stderr.
+		pending map[string]any
 	}
 	runAskMsg struct {
 		run      *run
@@ -121,12 +125,21 @@ func (h *home) start(req runReq) tea.Cmd {
 		defer h.runs.wg.Done()
 		defer cancel()
 		var errBuf syncBuf
+		send := func(m runLineMsg) {
+			select {
+			case r.events <- m:
+			case <-ctx.Done():
+			}
+		}
 		lw := &lineWriter{fn: func(line string) {
-			if req.stream {
-				select {
-				case r.events <- runLineMsg{run: r, line: line}:
-				case <-ctx.Done():
-				}
+			pending := loginPendingDoc(line)
+			if req.stream || pending != nil {
+				send(runLineMsg{run: r, line: line, pending: pending})
+			}
+		}}
+		ew := &lineWriter{fn: func(line string) {
+			if pending := loginPendingDoc(line); pending != nil {
+				send(runLineMsg{run: r, pending: pending})
 			}
 		}}
 		ask := func(q string) bool {
@@ -144,8 +157,9 @@ func (h *home) start(req runReq) tea.Cmd {
 				return false
 			}
 		}
-		code := HomeRun(ctx, args, RunIO{Stdin: strings.NewReader(req.stdin), Stdout: lw, Stderr: &errBuf, Ask: ask, Width: width})
+		code := HomeRun(ctx, args, RunIO{Stdin: strings.NewReader(req.stdin), Stdout: lw, Stderr: io.MultiWriter(&errBuf, ew), Ask: ask, Width: width})
 		lw.flush()
+		ew.flush()
 		res := parseResult(code, lw.all.String(), errBuf.String())
 		select {
 		case r.events <- runDoneMsg{run: r, res: res}:
@@ -249,6 +263,9 @@ func parseResult(code int, stdout, stderr string) runResult {
 				res.err = doc.Error
 				continue
 			}
+			if loginPendingDoc(t) != nil {
+				continue
+			}
 		}
 		res.notes = append(res.notes, strings.TrimRight(l, " "))
 	}
@@ -260,6 +277,17 @@ func parseResult(code int, stdout, stderr string) runResult {
 		res.err = &runError{Code: "unexpected", Message: msg}
 	}
 	return res
+}
+
+// loginPendingDoc is line as a login_pending record, or nil.
+func loginPendingDoc(line string) map[string]any {
+	if !strings.Contains(line, `"login_pending"`) {
+		return nil
+	}
+	if m := parseDoc(line); m != nil && m["type"] == "login_pending" {
+		return m
+	}
+	return nil
 }
 
 // noteLines are the non-JSON lines of stderr.
