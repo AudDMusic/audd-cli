@@ -43,5 +43,6 @@ as flat rows: a column per field and a row per song.`,
 		},
 	}
 	cmd.Flags().StringVar(&tab, "tab", "recent", "tab to open: "+strings.Join(tui.Tabs(), ", "))
+	_ = cmd.RegisterFlagCompletionFunc("tab", cobra.FixedCompletions(tui.Tabs(), cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }

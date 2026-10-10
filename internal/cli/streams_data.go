@@ -352,6 +352,7 @@ When some streams were not recorded for part of the range, the report says so
 		},
 	}
 	cmd.Flags().StringVar(&by, "by", "song", "group by song, artist, label, or station")
+	_ = cmd.RegisterFlagCompletionFunc("by", cobra.FixedCompletions([]string{"song", "artist", "label", "station"}, cobra.ShellCompDirectiveNoFileComp))
 	cmd.Flags().StringVar(&since, "since", "30d", `how far back: 24h, 7d, 30d, a date, or "all"`)
 	cmd.Flags().IntVar(&top, "top", 0, "only the N rows with the most plays (0: all)")
 	return cmd

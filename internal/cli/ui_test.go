@@ -8,6 +8,7 @@ import (
 
 	"github.com/AudDMusic/audd-cli/internal/app"
 	"github.com/AudDMusic/audd-cli/internal/testutil"
+	"github.com/AudDMusic/audd-cli/internal/tui"
 )
 
 // audd with no arguments and no terminal prints the root help, exactly as
@@ -77,5 +78,15 @@ func TestUIWithoutTerminal(t *testing.T) {
 	r = testutil.Exec(t, Main, "", "ui", "--section", "nowhere")
 	if r.Code != 2 || !strings.Contains(r.Stderr, "unknown section") {
 		t.Fatalf("unknown section: %d %s", r.Code, r.Stderr)
+	}
+}
+
+// Every command can be run from the interactive mode palette: each of
+// its arguments and flags has a form field. A new command or flag type
+// without one fails here.
+func TestPaletteCoversEveryCommand(t *testing.T) {
+	root := newRoot(app.New(), IO{}, &runState{})
+	if p := tui.FormProblems(root); len(p) > 0 {
+		t.Fatalf("commands the palette cannot build a form for:\n%s", strings.Join(p, "\n"))
 	}
 }

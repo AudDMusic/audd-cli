@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │  Getting started   Guide   Commands   Keys  [Exit codes and …
+ 1 Recognize     │ Exit codes
+ 2 Listen        │   0    ok           success, including no match
+ 3 Now playing   │   1    unexpected   unexpected error, or no match with
+ 4 Streams       │                     --fail-on-no-match
+ 5 History       │   2    usage        invalid arguments or input, or a missing
+ 6 Account       │                     tool such as ffmpeg
+ 7 Settings      │   3    auth         missing or rejected API token, or sign-in
+*8 Help          │                     needed (audd login)
+                 │   4    quota        quota, plan, or feature not available on
+                 │                     the account
+                 │   5    network      network or server error; retrying may
+                 │                     help
+                 │   6    safety       a bound is missing (--limit,
+                 │                     --max-files), a confirmation is needed
+                 │                     (--yes), --max-requests was reached, or
+                 │                     an unfinished job for the same files
+                 │                     needs --resume or --new
+                 │   7    partial      a batch finished with some files failed
+ ctrl+k commands │   8    threshold    usage --check found fewer remaining
+ ? keys  q quit  │                     requests than --min-remaining
+↑/↓ scroll  [ ] pages
+$ audd commands --json                                                    y copy

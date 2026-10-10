@@ -1,0 +1,40 @@
+AudD  ·  profile default
+                 │ [Getting started]  Guide   Commands   Keys   Exit codes and output   Links 
+ 1 Recognize     │ Getting started
+ 2 Listen        │ 
+ 3 Now playing   │ › 1. Sign in
+ 4 Streams       │      Sign in to your AudD account (or paste an API token) so audd can recognize music and show your
+ 5 History       │      account.
+ 6 Account       │      $ audd login
+ 7 Settings      │ 
+*8 Help          │   2. Recognize a file
+                 │      Pick a file, URL, or folder and recognize it. This fills in AudD's example song.
+                 │      $ audd recognize https://audd.tech/example.mp3
+                 │ 
+                 │   3. Listen
+                 │      Record a few seconds from the microphone and identify the song.
+                 │      $ audd listen
+                 │ 
+                 │   4. Add a stream
+                 │      Have AudD monitor a radio or other live stream, then watch it in Now playing.
+                 │      $ audd streams add <url> --id 1
+                 │ 
+                 │   5. Run any command
+                 │      Press ctrl+k to search every command and run it from a form.
+                 │      $ audd commands
+                 │ 
+                 │ Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+↑/↓ step  enter go  [ ] pages
+$ audd login                                                                                                      y copy

@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │  Getting started  [Guide]  Commands   Keys   Exit codes and …
+ 1 Recognize     │ AUDD CLI
+ 2 Listen        │ 
+ 3 Now playing   │ audd recognizes music in files, URLs, folders, long
+ 4 Streams       │ recordings, and from the microphone; monitors streams; and
+ 5 History       │ manages your AudD account. It prints tables on a terminal and
+ 6 Account       │ JSON when its output is piped.
+ 7 Settings      │ 
+*8 Help          │ Get your API token at https://dashboard.audd.io, or run audd
+                 │ login.
+                 │ 
+                 │ Install and sign in
+                 │ 
+                 │   npx @audd/cli recognize song.mp3                 # run wit…
+                 │   brew install auddmusic/tap/audd                  # macOS
+                 │   curl -fsSL https://github.com/AudDMusic/audd-cli/releases/…
+                 │                                                    # macOS a…
+                 │ 
+                 │ Other ways (Scoop on Windows, Docker, go install, pipx, uv
+ ctrl+k commands │ tool) are listed at
+ ? keys  q quit  │ 5%
+↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
+$ audd docs cli                                                           y copy

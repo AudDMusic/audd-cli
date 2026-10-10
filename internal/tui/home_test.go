@@ -183,6 +183,9 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 		}
 		return fakeBackend{}, nil
 	}
+	oldCmds := HomeCommands
+	HomeCommands = fakeTree
+	t.Cleanup(func() { HomeCommands = oldCmds })
 	HomeApp = func(flags app.GlobalFlags) (*app.App, error) {
 		n := *a
 		n.Flags = flags
@@ -398,3 +401,5 @@ func TestHomeHeader(t *testing.T) {
 	}
 	_ = errors.New
 }
+
+func ctrlK() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlK} }

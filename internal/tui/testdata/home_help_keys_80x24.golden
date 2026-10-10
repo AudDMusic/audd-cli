@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │  Getting started   Guide   Commands  [Keys]  Exit codes and …
+ 1 Recognize     │ Everywhere
+ 2 Listen        │   ctrl+k or :    command palette: run any command
+ 3 Now playing   │   1-8            jump to a section
+ 4 Streams       │   ↑/↓ j/k        move in the sidebar
+ 5 History       │   enter          open the section
+ 6 Account       │   esc            back (to the sidebar)
+ 7 Settings      │   y              copy the command shown at the bottom
+*8 Help          │   ?              keys for this screen
+                 │   F1             help
+                 │   q              quit (ctrl+c always quits)
+                 │ 
+                 │ Recognize
+                 │   ↑/↓ tab        move between fields
+                 │   space          tick a box
+                 │   ctrl+o         pick a file or folder
+                 │   enter          next field, or press a button
+                 │   s              stop a batch
+                 │   o, c, d        result: open, copy the link, details
+ ctrl+k commands │ 
+ ? keys  q quit  │ Listen
+↑/↓ scroll  [ ] pages
+ctrl+k runs any audd command

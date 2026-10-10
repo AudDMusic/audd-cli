@@ -107,10 +107,12 @@ type batchState struct {
 }
 
 func (b *batchState) add(line string) {
-	m := parseDoc(line)
-	if m == nil {
-		return
+	if m := parseDoc(line); m != nil {
+		b.addDoc(m)
 	}
+}
+
+func (b *batchState) addDoc(m map[string]any) {
 	switch m["type"] {
 	case "event":
 		if b.jobID == "" {

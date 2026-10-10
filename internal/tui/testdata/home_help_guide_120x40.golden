@@ -1,0 +1,40 @@
+AudD  ·  profile default
+                 │  Getting started  [Guide]  Commands   Keys   Exit codes and output   Links 
+ 1 Recognize     │   Install and sign in     │ AUDD CLI
+ 2 Listen        │   Recognize music         │ 
+ 3 Now playing   │     Whole recordings (ent…│ audd recognizes music in files, URLs, folders, long recordings, and from
+ 4 Streams       │     Folders, globs, and l…│ the microphone; monitors streams; and manages your AudD account. It
+ 5 History       │     Results cache         │ prints tables on a terminal and JSON when its output is piped.
+ 6 Account       │   Limits and confirmations│ 
+ 7 Settings      │   Streams                 │ Get your API token at https://dashboard.audd.io, or run audd login.
+*8 Help          │     Background recorder   │ 
+                 │     Cover art             │ Install and sign in
+                 │   Custom catalog          │ 
+                 │   Account                 │   npx @audd/cli recognize song.mp3                 # run without install…
+                 │   Output for scripts and …│   brew install auddmusic/tap/audd                  # macOS
+                 │     Exit codes            │   curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/downl…
+                 │   Agents                  │                                                    # macOS and Linux, in…
+                 │   Settings                │ 
+                 │   Updates and privacy     │ Other ways (Scoop on Windows, Docker, go install, pipx, uv tool) are
+                 │                           │ listed at https://github.com/AudDMusic/audd-cli#install.
+                 │                           │ 
+                 │                           │   audd login                      # sign in; fetches your API token for …
+                 │                           │   export AUDD_API_TOKEN=your-api-token   # or set the token directly (CI…
+                 │                           │   audd config set token your-api-token   # or store it in the system cre…
+                 │                           │ 
+                 │                           │ The API token is taken from, in order: --token, AUDD_API_TOKEN, audd
+                 │                           │ config set token, and the token audd login fetched. audd auth status
+                 │                           │ shows which one is in use. Recognition and token show need only a token;
+                 │                           │ account, usage, billing, token rotate, and token refresh-local need audd
+                 │                           │ login.
+                 │                           │ 
+                 │                           │ audd login picks one of two ways to approve the sign-in:
+                 │                           │ 
+                 │                           │ • Browser: on a desktop, it opens the browser and prints the URL. If the
+                 │                           │   browser is on another machine, paste back the address it was sent to.
+                 │                           │ • Code: over SSH, in containers, and without a terminal, it prints a page
+                 │                           │   and a code. Open the page on any device, check the code, and approve.
+ ctrl+k commands │                           │   The code expires in 15 minutes.
+ ? keys  q quit  │ 11%
+↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
+$ audd docs cli                                                                                                   y copy

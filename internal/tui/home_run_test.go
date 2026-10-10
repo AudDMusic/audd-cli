@@ -161,3 +161,18 @@ func TestParseResult(t *testing.T) {
 		t.Fatalf("parseLines: %d", n)
 	}
 }
+
+// stubSection is a section that shows its name, for tests.
+type stubSection struct {
+	h    *home
+	name string
+}
+
+func (s *stubSection) title() string          { return s.name }
+func (s *stubSection) init() tea.Cmd          { return nil }
+func (s *stubSection) update(tea.Msg) tea.Cmd { return nil }
+func (s *stubSection) view(w, h int) string   { return s.h.st.Bold.Render(s.name) }
+func (s *stubSection) keys() []keyHelp        { return nil }
+func (s *stubSection) command() string        { return "" }
+func (s *stubSection) capturing() bool        { return false }
+func (s *stubSection) back() bool             { return false }

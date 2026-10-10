@@ -1,0 +1,40 @@
+AudD  ·  profile default
+                 │  Getting started   Guide   Commands   Keys  [Exit codes and output]  Links 
+ 1 Recognize     │ Exit codes
+ 2 Listen        │   0    ok           success, including no match
+ 3 Now playing   │   1    unexpected   unexpected error, or no match with --fail-on-no-match
+ 4 Streams       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
+ 5 History       │   3    auth         missing or rejected API token, or sign-in needed (audd login)
+ 6 Account       │   4    quota        quota, plan, or feature not available on the account
+ 7 Settings      │   5    network      network or server error; retrying may help
+*8 Help          │   6    safety       a bound is missing (--limit, --max-files), a confirmation is needed (--yes),
+                 │                     --max-requests was reached, or an unfinished job for the same files needs
+                 │                     --resume or --new
+                 │   7    partial      a batch finished with some files failed
+                 │   8    threshold    usage --check found fewer remaining requests than --min-remaining
+                 │   130  interrupted  stopped with Ctrl-C; a batch keeps finished files (audd jobs resume continues it)
+                 │ 
+                 │ Output for scripts
+                 │ Piped output is JSON (one document, or JSON lines for streaming commands); --format picks table,
+                 │ json, jsonl, or csv. Errors go to stderr as {"error":{"code","message","hint","retryable"}}. audd
+                 │ commands --json describes every command.
+                 │ 
+                 │ api_response
+                 │   {"schema_version":1, ...the fields of the API's JSON response}: the response as AudD sent it, with
+                 │   "schema_version" added
+                 │ 
+                 │ commands
+                 │   this reference
+                 │ 
+                 │ docs
+                 │   The page's markdown as is, piped or not; with --format json,
+                 │   {"schema_version":1,"topic","source","markdown"}. Without a topic, the list of topics
+                 │ 
+                 │ error
+                 │   printed to stderr when a command fails in a machine format
+                 │ 
+                 │ list
+ ctrl+k commands │   one JSON document with the rows under "items": {"schema_version":1,"items":[...]}
+ ? keys  q quit  │ 
+↑/↓ scroll  [ ] pages
+$ audd commands --json                                                                                            y copy

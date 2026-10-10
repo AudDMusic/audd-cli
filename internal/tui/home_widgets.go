@@ -374,7 +374,13 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 		}
 		b.WriteString("\n")
 		if cur && x.help != "" {
-			b.WriteString(truncate("  "+strings.Repeat(" ", lw)+st.Dim.Render(x.help), w) + "\n")
+			pad := strings.Repeat(" ", lw+2)
+			if x.kind == fBool {
+				pad = "      "
+			}
+			for _, l := range strings.Split(output.Wrap(x.help, max(10, w-len(pad))), "\n") {
+				b.WriteString(truncate(pad+st.Dim.Render(l), w) + "\n")
+			}
 		}
 	}
 	if len(buttons) > 0 {

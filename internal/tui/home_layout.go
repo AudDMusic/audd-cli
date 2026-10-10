@@ -165,7 +165,7 @@ func (h *home) hintsLine() string {
 	case h.keysO:
 		keys = []keyHelp{{"any key", "close"}, {"F1", "full help"}}
 	case h.paletteO:
-		keys = append(h.palette.keys(), keyHelp{"esc", "close"})
+		keys = h.palette.keys()
 	case h.focus == focusSidebar:
 		keys = []keyHelp{{"↑/↓", "section"}, {"enter", "open"}, {"1-8", "jump"}, {"ctrl+k", "commands"}, {"?", "keys"}, {"q", "quit"}}
 	default:

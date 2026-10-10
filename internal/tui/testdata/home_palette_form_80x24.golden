@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │ audd streams add  Add a stream to monitor
+ 1 Recognize     │ 
+ 2 Listen        │ › url*                                                      
+ 3 Now playing   │   --id*   ·
+ 4 Streams       │   [ ] --start
+ 5 History       │ 
+ 6 Account       │   [ Run ]
+ 7 Settings      │ 
+ 8 Help          │ * required. The command runs as shown at the bottom; it asks
+                 │ here before anything that needs a confirmation.
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+↑/↓ field  space toggle  enter next / run  esc back
+$ audd streams add '<url>'                                                y copy
