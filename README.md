@@ -6,18 +6,25 @@
 
 | Where | Command |
 | --- | --- |
-| Any system with Node.js | `npx @audd/cli recognize song.mp3` (no install) or `npm install -g @audd/cli` |
-| Any system with Python | `uvx audd-cli recognize song.mp3` (no install), `pipx install audd-cli`, or `uv tool install audd-cli` |
+| Node.js | `npm install -g @audd/cli` |
+| Python | `pipx install audd-cli` or `uv tool install audd-cli` |
 | macOS (Homebrew) | `brew install auddmusic/tap/audd` |
 | macOS, Linux (script) | `curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket` then `scoop install auddmusic/audd` |
-| Docker | `docker run --rm -e AUDD_API_TOKEN -v "$PWD:/work" ghcr.io/auddmusic/audd-cli recognize song.mp3` |
 | Go | `go install github.com/AudDMusic/audd-cli/cmd/audd@latest` |
 | Manually | download an archive from [Releases](https://github.com/AudDMusic/audd-cli/releases) and put `audd` on your `PATH` |
 
 Every package contains the same single binary for macOS, Linux, and Windows on x86-64 and ARM64. The install script downloads the release archive for your system, checks it against the release's SHA-256 checksums, and puts `audd` in `~/.local/bin` without sudo (`AUDD_INSTALL_DIR` and `AUDD_VERSION` change the folder and version).
 
 `--at` clips and `audd listen` use [ffmpeg](https://ffmpeg.org) (or sox for `listen`) when it is installed; other commands need no extra tools. The Docker image has no ffmpeg.
+
+### Run it without installing
+
+```sh
+npx @audd/cli recognize song.mp3          # Node.js
+uvx audd-cli recognize song.mp3           # Python
+docker run --rm -e AUDD_API_TOKEN -v "$PWD:/work" ghcr.io/auddmusic/audd-cli recognize song.mp3
+```
 
 ## Quickstart
 
