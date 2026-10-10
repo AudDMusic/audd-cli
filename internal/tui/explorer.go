@@ -459,7 +459,7 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 	if l == nil {
 		return nil
 	}
-	kind, arg := l.kind, l.arg
+	kind, arg, embedded := l.kind, l.arg, m.embedded
 	return func() tea.Msg {
 		msg := rowsMsg{tab: t, kind: kind, arg: arg}
 		switch kind {
@@ -492,6 +492,12 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 			ids, _ := parseStreamIDs(arg)
 			stations, err := selectStations(ctx, d.Feed, ids)
 			if err != nil {
+				// Embedded, an account without streams is an empty list
+				// with its "press a to add one" note.
+				if embedded && output.AsError(err).Code == "no_streams" {
+					msg.rows = []row{}
+					break
+				}
 				msg.err = err
 				break
 			}

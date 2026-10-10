@@ -172,11 +172,17 @@ type runState struct {
 	running bool
 }
 
+// cobraSettings sets cobra's package settings once: interactive mode runs
+// commands in-process, several at a time.
+var cobraSettings sync.Once
+
 func newRoot(a *app.App, stdio IO, st *runState) *cobra.Command {
-	cobra.EnableTraverseRunHooks = true
-	// Commands are listed in the order they are added (most used first),
-	// not alphabetically; see orderCommands for the top level.
-	cobra.EnableCommandSorting = false
+	cobraSettings.Do(func() {
+		cobra.EnableTraverseRunHooks = true
+		// Commands are listed in the order they are added (most used
+		// first), not alphabetically; see orderCommands for the top level.
+		cobra.EnableCommandSorting = false
+	})
 	root := &cobra.Command{
 		Use:   "audd",
 		Short: "Recognize music and manage AudD from the command line",
