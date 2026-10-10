@@ -38,7 +38,8 @@ results cache, and stream store. --max-requests passed here is a ceiling
 for the whole session: each billed call counts against it (an enterprise
 scan at its limit), and calls that would go over it are refused.
 Payment links are only returned for the user to open; nothing is charged.
-The API token is never shown or rotated by a tool.
+token_rotate returns the command for the user to run: no tool shows or
+rotates the API token.
 
 Add it to Claude Code:
   claude mcp add audd -- audd mcp
