@@ -10,15 +10,15 @@ AudD  ·  profile default
 *8 Help          │ Get your API token at https://dashboard.audd.io, or run audd
                  │ login.
                  │ 
-                 │ Install and sign in
+                 │ Install
                  │ 
-                 │   npx @audd/cli recognize song.mp3                 # run wit…
-                 │   brew install auddmusic/tap/audd                  # macOS
-                 │   curl -fsSL https://github.com/AudDMusic/audd-cli/releases/…
-                 │                                                    # macOS a…
-                 │ 
-                 │ Other ways (Scoop on Windows, Docker, go install, pipx, uv
- ctrl+k commands │ tool) are listed at
- ? keys  q quit  │ 5%
+                 │   Where                   Command
+                 │   Node.js                 npm install -g @audd/cli
+                 │   Python                  pipx install audd-cli or uv tool
+                 │                           install audd-cli
+                 │   macOS (Homebrew)        brew install auddmusic/tap/audd
+                 │   macOS, Linux (script)   curl -fsSL
+ ctrl+k commands │                           https://github.com/AudDMusic/audd-…
+ ? keys  q quit  │ 4%
 ↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
 $ audd docs cli                                                           y copy

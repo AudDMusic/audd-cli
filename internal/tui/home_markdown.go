@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
@@ -37,6 +39,95 @@ func inlineMD(s string, st output.Styles) string {
 	})
 }
 
+// splitTableRow splits a markdown table row into cells. A "\|" is a pipe
+// inside a cell, not a cell boundary.
+func splitTableRow(row string) []string {
+	row = strings.TrimSpace(row)
+	row = strings.TrimPrefix(row, "|")
+	if strings.HasSuffix(row, "|") && !strings.HasSuffix(row, "\\|") {
+		row = row[:len(row)-1]
+	}
+	var cells []string
+	var cur strings.Builder
+	for i := 0; i < len(row); i++ {
+		switch {
+		case row[i] == '\\' && i+1 < len(row) && row[i+1] == '|':
+			cur.WriteByte('|')
+			i++
+		case row[i] == '|':
+			cells = append(cells, strings.TrimSpace(cur.String()))
+			cur.Reset()
+		default:
+			cur.WriteByte(row[i])
+		}
+	}
+	return append(cells, strings.TrimSpace(cur.String()))
+}
+
+// renderTable lays out table rows in aligned columns that fit a w-wide
+// pane, wrapping the widest columns when they don't fit.
+func renderTable(rows [][]string, w int, st output.Styles) []string {
+	cols := 0
+	for _, r := range rows {
+		cols = max(cols, len(r))
+	}
+	cells := make([][]string, len(rows))
+	widths := make([]int, cols)
+	for i, r := range rows {
+		cells[i] = make([]string, cols)
+		for j := range cols {
+			if j < len(r) {
+				cells[i][j] = inlineMD(r[j], st)
+			}
+			widths[j] = max(widths[j], ansi.StringWidth(cells[i][j]))
+		}
+	}
+	const indent, gap = 2, 3
+	avail := max(cols*4, w-indent-gap*(cols-1))
+	for {
+		total := 0
+		widest := 0
+		for j, cw := range widths {
+			total += cw
+			if cw > widths[widest] {
+				widest = j
+			}
+		}
+		if total <= avail || widths[widest] <= 4 {
+			break
+		}
+		widths[widest] = max(4, widths[widest]-(total-avail))
+	}
+	var out []string
+	for i, r := range cells {
+		wrapped := make([][]string, cols)
+		height := 1
+		for j, c := range r {
+			wrapped[j] = strings.Split(output.Wrap(c, widths[j]), "\n")
+			height = max(height, len(wrapped[j]))
+		}
+		for k := range height {
+			var b strings.Builder
+			b.WriteString(strings.Repeat(" ", indent))
+			for j := range cols {
+				part := ""
+				if k < len(wrapped[j]) {
+					part = ansi.Truncate(wrapped[j][k], widths[j], "…")
+				}
+				if i == 0 {
+					part = st.Bold.Render(part)
+				}
+				b.WriteString(part)
+				if j < cols-1 {
+					b.WriteString(strings.Repeat(" ", widths[j]-ansi.StringWidth(part)+gap))
+				}
+			}
+			out = append(out, strings.TrimRight(b.String(), " "))
+		}
+	}
+	return out
+}
+
 // renderMarkdown lays out a markdown document for a w-wide pane: headings,
 // wrapped paragraphs, lists, code blocks, and tables as they are. It
 // returns the lines and the headings.
@@ -44,7 +135,15 @@ func renderMarkdown(md string, w int, st output.Styles) ([]string, []mdHeading) 
 	var out []string
 	var heads []mdHeading
 	var para []string
+	var table [][]string
+	flushTable := func() {
+		if len(table) > 0 {
+			out = append(out, renderTable(table, w, st)...)
+			table = nil
+		}
+	}
 	flush := func() {
+		flushTable()
 		if len(para) == 0 {
 			return
 		}
@@ -103,15 +202,13 @@ func renderMarkdown(md string, w int, st output.Styles) ([]string, []mdHeading) 
 			}
 			out = append(out, style.Render(label))
 		case strings.HasPrefix(trimmed, "|"):
-			flush()
+			if len(para) > 0 {
+				flush()
+			}
 			if mdTblSep.MatchString(trimmed) {
 				continue
 			}
-			cells := strings.Split(strings.Trim(trimmed, "|"), "|")
-			for i := range cells {
-				cells[i] = inlineMD(strings.TrimSpace(cells[i]), st)
-			}
-			out = append(out, "  "+strings.Join(cells, "  │  "))
+			table = append(table, splitTableRow(trimmed))
 		case strings.HasPrefix(trimmed, "- "), strings.HasPrefix(trimmed, "* "):
 			flush()
 			para = append(para, trimmed)
