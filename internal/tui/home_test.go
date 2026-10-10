@@ -403,3 +403,31 @@ func TestHomeHeader(t *testing.T) {
 }
 
 func ctrlK() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlK} }
+
+func TestLeftReturnsToSidebar(t *testing.T) {
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{}), 120, 40)
+	press(h, key("esc"))
+	for _, id := range []string{"recognize", "now-playing", "history", "streams", "account", "settings", "help"} {
+		h.show(id, false)
+		h.focus = focusSidebar
+		press(h, key("right"))
+		if h.focus != focusContent {
+			t.Fatalf("%s: right opens the section", id)
+		}
+		press(h, key("left"))
+		if h.focus != focusSidebar {
+			t.Fatalf("%s: left right after right goes back to the sidebar", id)
+		}
+	}
+	// With text typed, left moves the cursor first.
+	h.show("recognize", true)
+	press(h, typeText("ab")...)
+	press(h, key("left"))
+	if h.focus != focusContent {
+		t.Fatal("left inside typed text stays in the field")
+	}
+	press(h, key("left"), key("left"))
+	if h.focus != focusSidebar {
+		t.Fatal("left at the start of the field goes back to the sidebar")
+	}
+}

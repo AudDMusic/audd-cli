@@ -395,3 +395,10 @@ func (s *recognizeSection) planBlock(w int) string {
 	}
 	return styleLines(s.h.st.Dim, output.Wrap(s.plan, w)) + "\n\n"
 }
+
+func (s *recognizeSection) leftExits() bool {
+	if s.browser != nil {
+		return false
+	}
+	return s.phase != "form" || s.form.leftExits()
+}

@@ -768,3 +768,19 @@ func fuzzyScore(q, s string) (int, bool) {
 	}
 	return score - len(sr), true
 }
+
+// leftExits reports whether left has nothing to do in the form: the
+// cursor is at the start of a text field, or a choice is on its first
+// option.
+func (f *form) leftExits() bool {
+	c := f.current()
+	switch {
+	case c == nil:
+		return true
+	case c.isText():
+		return c.input.Position() == 0
+	case c.kind == fEnum:
+		return c.choice == 0
+	}
+	return true
+}

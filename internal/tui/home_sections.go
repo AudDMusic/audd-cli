@@ -789,3 +789,35 @@ func (s *streamsSection) back() bool {
 	}
 	return false
 }
+
+func (s *nowPlayingSection) leftExits() bool {
+	return s.np == nil || !s.np.history && s.np.sel == 0
+}
+
+// leftExits: left switches the explorer's tabs, so it leaves from the
+// first one.
+func (p *explorerPane) leftExits() bool {
+	if p.ex == nil {
+		return true
+	}
+	if p.ex.capturing() {
+		return false
+	}
+	return len(p.ex.allowed) <= 1 || p.ex.tab == p.ex.allowed[0]
+}
+
+func (s *historySection) leftExits() bool { return s.resume || s.pane.leftExits() }
+
+func (s *streamsSection) leftExits() bool {
+	switch {
+	case s.page == 0 && s.adding:
+		return s.add.leftExits()
+	case s.page == 0:
+		return s.pane.leftExits()
+	case s.inForm && s.page == 1:
+		return s.cbForm.leftExits()
+	case s.inForm && s.page == 3:
+		return s.dataForm.leftExits()
+	}
+	return true
+}

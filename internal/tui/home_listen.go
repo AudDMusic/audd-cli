@@ -251,3 +251,7 @@ func (s *listenSection) view(w, h int) string {
 	}
 	return b.String()
 }
+
+func (s *listenSection) leftExits() bool {
+	return s.phase != "form" || s.form.leftExits()
+}

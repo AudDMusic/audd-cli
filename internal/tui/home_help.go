@@ -617,3 +617,15 @@ func (s *helpSection) command() string {
 	}
 	return ""
 }
+
+func (s *helpSection) leftExits() bool {
+	switch {
+	case s.searching:
+		return false
+	case s.page == 2 && s.details:
+		return false
+	case s.page == 2:
+		return s.picker.filter.Position() == 0
+	}
+	return true
+}

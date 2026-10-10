@@ -465,6 +465,10 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 		return h.show("help", true)
 	}
 	cur := h.active()
+	if h.focus == focusContent && s == "left" && leftExits(cur) {
+		h.focus = focusSidebar
+		return nil
+	}
 	if h.focus == focusContent && cur.capturing() {
 		if s == "esc" && !cur.back() {
 			h.focus = focusSidebar
@@ -620,4 +624,20 @@ func (h *home) waitRuns(d time.Duration) {
 	case <-done:
 	case <-time.After(d):
 	}
+}
+
+// leftExiter is a section that uses the left key in some states (a text
+// cursor, tabs, streams) and says when there is nothing further left, so
+// left goes back to the sidebar.
+type leftExiter interface {
+	leftExits() bool
+}
+
+// leftExits reports whether left returns to the sidebar from s. Sections
+// that don't say keep left only while they are capturing keys.
+func leftExits(s section) bool {
+	if le, ok := s.(leftExiter); ok {
+		return le.leftExits()
+	}
+	return !s.capturing()
 }
