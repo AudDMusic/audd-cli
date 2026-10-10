@@ -558,7 +558,7 @@ func (p *palette) view(w, h int) string {
 		c := p.cf.info.cmd
 		b.WriteString(st.Bold.Render("audd "+p.cf.info.path) + "  " + st.Dim.Render(c.Short) + "\n\n")
 		b.WriteString(p.cf.form.view(w, st, p.h.color))
-		b.WriteString("\n\n" + st.Dim.Render(output.Wrap("* required. The command runs as shown at the bottom; it asks here before anything that needs a confirmation.", w)))
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("* required. The command runs as shown at the bottom; it asks here before anything that needs a confirmation.", w)))
 		return b.String()
 	}
 	head := st.Dim.Render(truncate("$ "+displayCommand(p.argv), w)) + "\n\n"

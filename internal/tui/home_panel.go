@@ -196,7 +196,7 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 	if res.err != nil {
 		b.WriteString(errorText(st, res.err, w))
 		if len(res.notes) > 0 {
-			b.WriteString("\n" + st.Dim.Render(output.Wrap(strings.Join(res.notes, "\n"), w)))
+			b.WriteString("\n" + styleLines(st.Dim, output.Wrap(strings.Join(res.notes, "\n"), w)))
 		}
 		return b.String()
 	}
@@ -206,7 +206,7 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 		b.WriteString(strings.TrimRight(res.stdout, "\n"))
 	}
 	if len(res.notes) > 0 {
-		b.WriteString("\n\n" + st.Dim.Render(output.Wrap(strings.Join(res.notes, "\n"), w)))
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(strings.Join(res.notes, "\n"), w)))
 	}
 	return b.String()
 }
@@ -214,7 +214,7 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 // errorText is an error as the command line shows it, for a pane.
 func errorText(st output.Styles, e *runError, w int) string {
 	var b strings.Builder
-	b.WriteString(st.Warn.Render(output.Wrap("Error: "+e.Message, w)))
+	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+e.Message, w)))
 	if e.Hint != "" {
 		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
 		if strings.HasPrefix(e.Hint, "audd ") {
@@ -242,11 +242,11 @@ func pendingText(st output.Styles, doc map[string]any, w int) string {
 		}
 		b.WriteString("To sign in, open this page on any device:\n\n  " + st.Accent.Render(uri) + "\n\n")
 		b.WriteString("Check that it shows this code, then approve:\n\n    " + st.Bold.Render(spaced(str(doc["user_code"]))) + "\n\n")
-		b.WriteString(st.Dim.Render(output.Wrap("Only approve a sign-in you started yourself. o opens the page, c copies it.", w)))
+		b.WriteString(styleLines(st.Dim, output.Wrap("Only approve a sign-in you started yourself. o opens the page, c copies it.", w)))
 		return b.String()
 	}
 	b.WriteString("Sign in to AudD in your browser. If it did not open, visit:\n\n  " + st.Accent.Render(str(doc["url"])) + "\n\n")
-	b.WriteString(st.Dim.Render(output.Wrap("Waiting for the browser. o opens the page, c copies it. If the browser is on another machine, approve there and paste the address it was sent to with p.", w)))
+	b.WriteString(styleLines(st.Dim, output.Wrap("Waiting for the browser. o opens the page, c copies it. If the browser is on another machine, approve there and paste the address it was sent to with p.", w)))
 	return b.String()
 }
 

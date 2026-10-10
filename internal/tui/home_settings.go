@@ -223,12 +223,12 @@ func (s *settingsSection) view(w, h int) string {
 		b.WriteString(truncate("    "+st.Dim.Render(r.desc), w) + "\n")
 	}
 	if s.edit != nil {
-		b.WriteString("\n" + st.Dim.Render(output.Wrap(s.edit.help+"; esc cancels.", w)) + "\n")
+		b.WriteString("\n" + styleLines(st.Dim, output.Wrap(s.edit.help+"; esc cancels.", w)) + "\n")
 	}
 	if s.panel.res != nil && s.panel.res.err != nil {
 		b.WriteString("\n" + errorText(st, s.panel.res.err, w) + "\n")
 	}
-	b.WriteString("\n" + st.Dim.Render(output.Wrap(fmt.Sprintf("Settings apply to profile %s and are saved in %s. Environment variables (env) win over the file.", s.profile, s.path), w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap(fmt.Sprintf("Settings apply to profile %s and are saved in %s. Environment variables (env) win over the file.", s.profile, s.path), w)))
 	return b.String()
 }
 

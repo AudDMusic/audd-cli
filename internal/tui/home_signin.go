@@ -215,10 +215,10 @@ func (s *signinSection) view(w, h int) string {
 			title = st.Bold.Render(title)
 		}
 		b.WriteString(mark + title + "\n")
-		b.WriteString(st.Dim.Render(indent(output.Wrap(c.help, max(10, w-4)), "    ")) + "\n\n")
+		b.WriteString(styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    ")) + "\n\n")
 	}
 	if s.heading == "" {
-		b.WriteString(st.Dim.Render(output.Wrap("You can also look around first: the sections on the left work once a token is set.", w)))
+		b.WriteString(styleLines(st.Dim, output.Wrap("You can also look around first: the sections on the left work once a token is set.", w)))
 	}
 	return b.String()
 }

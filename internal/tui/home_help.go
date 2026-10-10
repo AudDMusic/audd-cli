@@ -429,10 +429,10 @@ func (s *helpSection) view(w, h int) string {
 				title = st.Bold.Render(title)
 			}
 			b.WriteString(mark + title + "\n")
-			b.WriteString(st.Dim.Render(indent(output.Wrap(step.text, max(10, w-5)), "     ")) + "\n")
+			b.WriteString(styleLines(st.Dim, indent(output.Wrap(step.text, max(10, w-5)), "     ")) + "\n")
 			b.WriteString("     " + st.Accent.Render(truncate("$ "+step.cmd, w-5)) + "\n\n")
 		}
-		b.WriteString(st.Dim.Render(output.Wrap("Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.", w)))
+		b.WriteString(styleLines(st.Dim, output.Wrap("Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.", w)))
 		return bar + b.String()
 	case 1:
 		outlineW := 0

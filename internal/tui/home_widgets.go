@@ -387,7 +387,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 		b.WriteString("\n  " + strings.Join(buttons, "  ") + "\n")
 	}
 	if f.err != "" {
-		b.WriteString("\n" + st.Warn.Render(output.Wrap(f.err, w)) + "\n")
+		b.WriteString("\n" + styleLines(st.Warn, output.Wrap(f.err, w)) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

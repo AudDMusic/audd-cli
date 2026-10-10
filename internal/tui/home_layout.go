@@ -233,3 +233,15 @@ func (h *home) box(s string, w int) string {
 	}
 	return st.Render(s)
 }
+
+// styleLines styles each line of s on its own. Rendering a block at once
+// pads every line to the longest one, which can push lines past the pane.
+func styleLines(st lipgloss.Style, s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = st.Render(l)
+		}
+	}
+	return strings.Join(lines, "\n")
+}

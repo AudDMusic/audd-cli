@@ -421,7 +421,7 @@ func (h *home) askView(w, ht int) string {
 	if len(s.msg.notes) > 0 {
 		b.WriteString("\n")
 	}
-	b.WriteString(h.st.Warn.Render(output.Wrap(s.msg.question, w)) + "\n\n")
+	b.WriteString(styleLines(h.st.Warn, output.Wrap(s.msg.question, w)) + "\n\n")
 	b.WriteString(h.st.Dim.Render("$ "+displayCommand(s.msg.run.req.args)) + "\n\n")
 	if s.typed != "" {
 		b.WriteString(fmt.Sprintf("Type %s and press Enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))

@@ -409,7 +409,7 @@ func (s *accountSection) view(w, h int) string {
 		}
 		b.WriteString(mark + label + "\n")
 	}
-	b.WriteString("\n" + st.Dim.Render(output.Wrap("Enter switches to a profile. To add one, sign in with it: audd login --profile NAME.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Enter switches to a profile. To add one, sign in with it: audd login --profile NAME.", w)))
 	if s.confirm != "" {
 		b.WriteString("\n\n" + st.Warn.Render(fmt.Sprintf("Sign out of profile %s? Its saved sign-in and API token are removed. [y/N]", cur)))
 	}
@@ -471,7 +471,7 @@ func (s *accountSection) billingView(w, h int) string {
 		}
 		b.WriteString(truncate(mark+line, w) + "\n")
 	}
-	b.WriteString("\n" + st.Dim.Render(output.Wrap("Payment links never charge anything: you review and pay in the browser.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Payment links never charge anything: you review and pay in the browser.", w)))
 	return b.String()
 }
 
@@ -495,7 +495,7 @@ func (s *accountSection) tokenView(w, h int) string {
 	} else if s.token.running {
 		b.WriteString(st.Dim.Render("Loading…") + "\n")
 	}
-	b.WriteString("\n" + st.Dim.Render(output.Wrap("v shows the whole token, h hides it again, c copies it without showing it. R rotates it: the current token stops working everywhere. f fetches it from your account again.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows the whole token, h hides it again, c copies it without showing it. R rotates it: the current token stops working everywhere. f fetches it from your account again.", w)))
 	return b.String()
 }
 

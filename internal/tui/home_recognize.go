@@ -375,7 +375,7 @@ func (s *recognizeSection) view(w, h int) string {
 			b.WriteString(s.rec.text)
 		}
 		if len(res.notes) > 0 {
-			b.WriteString("\n\n" + st.Dim.Render(output.Wrap(strings.Join(res.notes, "\n"), w)))
+			b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(strings.Join(res.notes, "\n"), w)))
 		}
 		return b.String()
 	}
@@ -393,5 +393,5 @@ func (s *recognizeSection) planBlock(w int) string {
 	if s.plan == "" {
 		return ""
 	}
-	return s.h.st.Dim.Render(output.Wrap(s.plan, w)) + "\n\n"
+	return styleLines(s.h.st.Dim, output.Wrap(s.plan, w)) + "\n\n"
 }

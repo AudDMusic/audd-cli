@@ -242,7 +242,7 @@ func (s *listenSection) view(w, h int) string {
 	b.WriteString(st.Bold.Render("Identify the music playing near you") + "\n\n")
 	if s.tools != nil && s.tools.FFmpeg == "" && s.tools.Sox == "" {
 		e := media.MissingTool("ffmpeg", "listening to the microphone")
-		b.WriteString(st.Warn.Render(output.Wrap(e.Message+" (sox works too)", w)) + "\n")
+		b.WriteString(styleLines(st.Warn, output.Wrap(e.Message+" (sox works too)", w)) + "\n")
 		b.WriteString(output.Wrap("Try: "+e.Hint, w) + "\n\n")
 	}
 	b.WriteString(s.form.view(w, st, s.h.color))
