@@ -70,7 +70,7 @@ error before running it again.`,
 			if err := requireToken(a); err != nil {
 				return err
 			}
-			if a.Out.Options().StdinTTY {
+			if a.Out.CanAsk() {
 				if err := a.Out.Confirm(fmt.Sprintf("Add %s to your custom catalog as audio_id %d? A song already under that ID is replaced.", in.Name(), id), a.Flags.Yes); err != nil {
 					return err
 				}

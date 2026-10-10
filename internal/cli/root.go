@@ -83,6 +83,11 @@ type IO struct {
 	StderrWidth int
 	// StdoutWidth is the terminal width of Out; 0 reads it from the terminal.
 	StdoutWidth int
+	// Ask, when set, answers confirmations (interactive mode); see
+	// output.PrinterOptions.Ask.
+	Ask func(question string) bool
+	// NoUpdateNotice skips the release check (runs inside interactive mode).
+	NoUpdateNotice bool
 }
 
 // Execute runs audd with os.Args and the real terminal; it returns the exit code.
@@ -127,6 +132,7 @@ func Run(ctx context.Context, args []string, stdio IO) int {
 	a.Out = output.NewPrinter(stdio.Out, stdio.Err, output.PrinterOptions{
 		StdoutTTY: stdio.StdoutTTY, StderrTTY: stdio.StderrTTY, StdinTTY: stdio.StdinTTY,
 		Stdin: stdio.In, NoColor: true, StderrWidth: stdio.StderrWidth, StdoutWidth: stdio.StdoutWidth,
+		Ask: stdio.Ask,
 	})
 	st := &runState{}
 	root := newRoot(a, stdio, st)
@@ -137,8 +143,10 @@ func Run(ctx context.Context, args []string, stdio IO) int {
 	if err := unknownSubcommand(root, args); err != nil {
 		return a.Out.Error(err)
 	}
-	notice := startUpdateNotice(root, args, stdio)
-	defer notice()
+	if !stdio.NoUpdateNotice {
+		notice := startUpdateNotice(root, args, stdio)
+		defer notice()
+	}
 	err := root.ExecuteContext(ctx)
 	if err == nil {
 		return output.ExitOK
@@ -360,6 +368,7 @@ func setup(a *app.App, cmd *cobra.Command, stdio IO) error {
 		Stdin:       stdio.In,
 		StderrWidth: stdio.StderrWidth,
 		StdoutWidth: stdio.StdoutWidth,
+		Ask:         stdio.Ask,
 	})
 	if cmd.Annotations[AnnotationStreaming] == "true" {
 		a.Out.SetStreaming()

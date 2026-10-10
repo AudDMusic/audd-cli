@@ -58,7 +58,7 @@ func chooseResume(a *app.App, st *Store, opts app.BatchOptions, p Params) (*Job,
 		return prev, nil
 	case opts.DryRun:
 		return nil, nil
-	case a.Out.Options().StdinTTY && !opts.Yes && !a.Flags.Yes:
+	case a.Out.CanAsk() && !opts.Yes && !a.Flags.Yes:
 		q := fmt.Sprintf("Job %s ran this command before and has %d of %d files left. Resume it?", prev.ID, prev.Remaining, prev.Total)
 		if a.Out.Confirm(q, false) == nil {
 			return prev, nil

@@ -35,6 +35,10 @@ type PrinterOptions struct {
 
 	// Stdin is read by Confirm. Defaults to os.Stdin.
 	Stdin io.Reader
+
+	// Ask, when set, answers Confirm's questions instead of the terminal
+	// (interactive mode runs commands in-process and asks in its own UI).
+	Ask func(question string) bool
 }
 
 // Printer writes results to stdout and notes, progress, and errors to stderr,
@@ -555,12 +559,22 @@ func (p *Printer) StdinLines() *LineReader {
 	return p.lines
 }
 
+// CanAsk reports whether Confirm can put a question to a person: stdin is
+// a terminal, or an Ask hook is set.
+func (p *Printer) CanAsk() bool { return p.opts.StdinTTY || p.opts.Ask != nil }
+
 // Confirm asks a yes/no question on stderr. yes=true (from --yes) skips the
 // question. Without a TTY on stdin it returns confirmation_required (exit 6).
 // Any answer other than y/yes returns "declined" (exit 6).
 func (p *Printer) Confirm(question string, yes bool) error {
 	if yes {
 		return nil
+	}
+	if p.opts.Ask != nil {
+		if p.opts.Ask(question) {
+			return nil
+		}
+		return &Error{Code: "declined", Message: "cancelled", Exit: ExitSafety}
 	}
 	if !p.opts.StdinTTY {
 		return &Error{
