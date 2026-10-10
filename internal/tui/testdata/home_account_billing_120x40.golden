@@ -1,12 +1,12 @@
 AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests left
                  │ Account › Billing
- 1 Recognize     │  Account  Usage >Billing< API token  Profiles 
+ 1 Recognize     │  Overview  Usage >Billing< API token  Profiles 
  2 Now playing   │ Requests over the allowance  0
  3 Streams       │ Amount owed                  $0.00
  4 Recognitions  │ 
 *5 Account       > Plans
- 6 Settings      │ · Startup    $450.00/month  100,000 requests  (your plan)
- 7 Help          │   Pro        $900.00/month  250,000 requests
+ 6 Settings      │ · Startup    $450/mo  100k requests  (your plan)  [ Renew ]
+ 7 Help          │   Pro        $900/mo  250k requests  [ Subscribe ]
                  │ 
                  │ Enter gets a payment link for the selected plan (on your plan: renews it). Payment links never charge
                  │ anything: you review and pay in the browser.
@@ -34,7 +34,7 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ 
+ ? keys  q quit  │ [ Buy requests ]  [ Payments ]  [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd billing subscribe startup_plan                                                                             y copy

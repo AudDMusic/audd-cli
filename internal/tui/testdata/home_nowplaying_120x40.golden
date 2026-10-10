@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Now playing
- 1 Recognize     │ Now playing                                                                            1 of 3 streams
+ 1 Recognize     │                                                                                        1 of 3 streams
 *2 Now playing   > 
  3 Streams       │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
  4 Recognitions  │ ┃ Stream 1                                       ┃│ Stream 2                                       │
@@ -34,7 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ 
+ ? keys  q quit  │ [ History ]  [ Open link (o) ]  [ Copy link (c) ]  [ Refresh (r) ]
 
-←/→/↑/↓ select  enter zoom in  ←/esc back  h history  o open link  ? keys
+←/→/↑/↓ select  enter zoom in  esc back  tab buttons  ? keys
 $ audd now-playing                                                                                                y copy

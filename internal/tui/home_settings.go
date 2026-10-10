@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -53,7 +54,10 @@ func (s *settingsSection) load() {
 	p := cfg.Profile(name)
 	s.profile, s.path = name, cfg.Path
 	s.rows = s.rows[:0]
-	for _, k := range config.Keys {
+	// The token comes last: it is changed least, and with care.
+	keys := append([]string{}, config.Keys...)
+	keys = append(slices.DeleteFunc(keys, func(k string) bool { return k == "token" }), "token")
+	for _, k := range keys {
 		r := settingRow{key: k, desc: config.KeyDescriptions[k]}
 		if k == "token" {
 			t, src, err := config.ResolveToken(s.h.flags.Token, name, s.h.a.Secrets)
@@ -61,7 +65,7 @@ func (s *settingsSection) load() {
 			case err != nil:
 				r.value, r.source = "(could not read)", ""
 			case t == "":
-				r.value, r.source = "(not set)", config.SettingDefault
+				r.value, r.source = "not set", ""
 			default:
 				r.value, r.source = config.MaskToken(t), tokenSourceWords(src, s.h.testToken)
 			}
@@ -105,7 +109,7 @@ func (s *settingsSection) notEditable(r settingRow) string {
 // isDefault reports whether a setting has its default value (nothing to
 // unset).
 func (s *settingsSection) isDefault(r settingRow) bool {
-	return r.source == config.SettingDefault
+	return r.source == config.SettingDefault || r.key == "token" && r.value == "not set"
 }
 
 func (s *settingsSection) selected() *settingRow {
@@ -167,6 +171,7 @@ func (s *settingsSection) askUnset() tea.Cmd {
 	return s.h.askFirst(&confirmState{
 		owner:    "settings",
 		question: fmt.Sprintf("Unset %s in profile %s?", key, s.profile),
+		action:   "Unset " + key,
 		notes:    []string{what},
 		command:  "audd config unset " + key,
 		cancel:   "Kept " + key,
@@ -226,7 +231,6 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 			s.edit = nil
 			return nil
 		case "enter":
-			args := s.setArgs()
 			v := s.edit.value()
 			switch {
 			case v == s.orig:
@@ -238,15 +242,11 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 				s.edit.problem = s.edit.check()
 				return nil
 			}
-			s.edit = nil
-			if args[2] == "format" && v == "auto" {
-				return s.panel.start(runReq{args: []string{"config", "unset", "format"}})
+			return s.askSave(v)
+		case "left":
+			if s.edit.kind == fEnum && s.edit.choice == 0 {
+				return s.h.setFlash("This is the first option · esc leaves")
 			}
-			req := runReq{args: args}
-			if args[2] == "token" {
-				req.stdin = v
-			}
-			return s.panel.start(req)
 		case "ctrl+u":
 			if s.edit.isText() {
 				s.edit.input.SetValue("")
@@ -269,32 +269,87 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	switch ks {
-	case "down", "j":
+	case "down":
 		s.cur = min(len(s.rows)-1, s.cur+1)
-	case "up", "k":
+	case "up":
 		s.cur = max(0, s.cur-1)
-	case "enter", "e", "right":
-		if r := s.selected(); r != nil {
-			if why := s.notEditable(*r); why != "" {
-				return s.h.setFlash(why)
-			}
-		}
-		s.startEdit()
-	case "d":
-		if r := s.selected(); r != nil && !s.isDefault(*r) {
-			return s.askUnset()
-		}
-		return s.h.setFlash("This setting has its default value already")
-	case "r":
-		s.load()
+	case "enter", "right":
+		return s.edit1()
 	}
 	return nil
 }
 
+// edit1 starts editing the selected setting, or says why it can not be
+// changed here.
+func (s *settingsSection) edit1() tea.Cmd {
+	if r := s.selected(); r != nil {
+		if why := s.notEditable(*r); why != "" {
+			return s.h.setFlash(why)
+		}
+	}
+	s.startEdit()
+	return nil
+}
+
+// askSave asks before saving a new value, with the old and the new.
+func (s *settingsSection) askSave(v string) tea.Cmd {
+	r := *s.selected()
+	args := s.setArgs()
+	shown, old := v, r.value
+	if r.source != "" {
+		old += " (" + r.source + ")"
+	}
+	q := fmt.Sprintf("Set %s to %s?", r.key, v)
+	action := "Set " + r.key
+	if r.key == "token" {
+		shown = config.MaskToken(v)
+		q = "Replace the API token of profile " + s.profile + "?"
+		action = "Replace the token"
+	}
+	run := func() tea.Cmd {
+		s.edit = nil
+		if r.key == "format" && v == "auto" {
+			return s.panel.start(runReq{args: []string{"config", "unset", "format"}})
+		}
+		req := runReq{args: args}
+		if r.key == "token" {
+			req.stdin = v
+		}
+		return s.panel.start(req)
+	}
+	notes := []string{"Now: " + old, "New: " + shown}
+	if r.key == "token" {
+		notes = append(notes, "Commands in this profile use the new token from now on.")
+	}
+	return s.h.askFirst(&confirmState{
+		owner: "settings", question: q, notes: notes, action: action,
+		command: displayCommand(args), cancel: "Cancelled. " + r.key + " is unchanged.", yes: run,
+	})
+}
+
+// actions are the buttons for the selected setting.
+func (s *settingsSection) actions() []button {
+	if s.edit != nil {
+		return nil
+	}
+	var b []button
+	if r := s.selected(); r != nil {
+		if s.notEditable(*r) == "" {
+			b = append(b, button{"Edit", "e", s.edit1})
+			if !s.isDefault(*r) {
+				b = append(b, button{"Unset", "d", s.askUnset})
+			}
+		}
+	}
+	return append(b, button{"Reload", "r", func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
+}
+
+func (s *settingsSection) downExits() bool { return s.edit == nil && s.cur >= len(s.rows)-1 }
+
 func (s *settingsSection) view(w, h int) string {
 	st := s.h.st
 	var b strings.Builder
-	b.WriteString(st.Bold.Render("Settings") + st.Dim.Render("  profile "+s.profile) + "\n\n")
+	b.WriteString(st.Bold.Render("Profile "+s.profile) + "\n\n")
 	if s.err != nil {
 		e := output.AsError(s.err)
 		return b.String() + errorText(st, &runError{Message: e.Message, Hint: e.Hint}, w)
@@ -314,7 +369,10 @@ func (s *settingsSection) view(w, h int) string {
 			}
 		}
 		line := padRight(r.key, keyW+2) + val
-		if s.edit == nil || i != s.cur {
+		switch {
+		case s.edit != nil && i == s.cur:
+			line += "  " + st.Dim.Render("editing")
+		case r.source != "":
 			line += "  " + st.Dim.Render("("+r.source+")")
 		}
 		line = s.h.listRow(line, i == s.cur)
@@ -353,14 +411,10 @@ func (s *settingsSection) keys() []keyHelp {
 		return []keyHelp{{"type", "the value"}, {"enter", "save"}, {"esc", "cancel"}}
 	}
 	k := []keyHelp{{"↑/↓", "move"}}
-	r := s.selected()
-	if r != nil && s.notEditable(*r) == "" {
-		k = append(k, keyHelp{"→/enter/e", "change"})
+	if r := s.selected(); r != nil && s.notEditable(*r) == "" {
+		k = append(k, keyHelp{"→/enter", "edit"})
 	}
-	if r != nil && !s.isDefault(*r) && s.notEditable(*r) == "" {
-		k = append(k, keyHelp{"d", "unset"})
-	}
-	return append(k, keyHelp{"r", "reload"})
+	return k
 }
 
 func (s *settingsSection) crumbs() []string {
@@ -392,7 +446,7 @@ func (s *settingsSection) leftExits() bool {
 	case s.edit != nil && s.edit.isText():
 		return s.edit.input.Position() == 0
 	case s.edit != nil && s.edit.kind == fEnum:
-		return s.edit.choice == 0
+		return false // ← changes the choice; esc leaves
 	}
 	return true
 }

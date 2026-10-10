@@ -56,12 +56,17 @@ type field struct {
 	// lockable fields hold an existing value: they are read-only (locked)
 	// until enter or e, so a stray key does not change them.
 	lockable, locked bool
+	// orig is the saved value while it is being edited: esc puts it
+	// back.
+	orig string
 	// novalidate: a button that works whatever the fields say.
 	novalidate bool
 	// quiet: a disabled button whose reason the page says itself.
 	quiet bool
 	// placeholder is shown in an empty text field ("e.g. 30d").
 	placeholder string
+	// validate, when set, checks a typed value ("" when it is fine).
+	validate func(v string) string
 }
 
 func newInput() textinput.Model {
@@ -156,6 +161,11 @@ func (f *field) check() string {
 			return f.label + " is required"
 		}
 		return ""
+	}
+	if f.validate != nil {
+		if e := f.validate(v); e != "" {
+			return e
+		}
 	}
 	switch f.kind {
 	case fInt:
@@ -345,6 +355,13 @@ func (f *form) leaveField() bool {
 		return false
 	}
 	c.locked = true
+	if c.lockable {
+		// Editing a saved value: esc cancels, and the value is as it
+		// was.
+		c.input.SetValue(c.orig)
+		c.problem = ""
+		return true
+	}
 	c.problem = c.formatProblem()
 	return true
 }
@@ -357,6 +374,9 @@ func (f *form) validate() string {
 			f.cursor = i
 			f.focus()
 			x.problem = e
+			if x.isText() && !x.lockable {
+				x.locked = false // to type the fix right away
+			}
 			return e
 		}
 	}
@@ -368,6 +388,9 @@ func (f *form) fail(name, problem string) {
 	f.focusName(name)
 	if x := f.get(name); x != nil {
 		x.problem = problem
+		if !x.lockable {
+			x.locked = false
+		}
 	}
 }
 
@@ -476,10 +499,14 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		switch {
 		case s == "enter", s == "e" && c.lockable:
 			c.locked = false
+			c.orig = c.input.Value()
 			c.input.CursorEnd()
 			return "", c.input.Focus()
 		}
 		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
+			if c.lockable {
+				return "", f.h.setFlash("Press enter or e to edit " + c.label)
+			}
 			return "", f.h.setFlash("Press enter to type in " + c.label)
 		}
 		return "", nil
@@ -488,6 +515,11 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 	case "enter":
 		c.problem = c.formatProblem()
 		if b := f.firstButton(); b != nil {
+			// The form is sent: the keys leave the field (o, c, and the
+			// rest work on what comes next).
+			if !c.lockable {
+				c.locked = true
+			}
 			return f.press(b), nil
 		}
 		f.move(1)
@@ -523,7 +555,9 @@ func (f *form) rowKeys(primary string) []keyHelp {
 			k = append(k, keyHelp{"←/→", "buttons"})
 		}
 	case c.locked && c.lockable:
-		k = append(k, keyHelp{"enter/e", "change it"})
+		k = append(k, keyHelp{"enter/e", "edit"})
+	case c.lockable:
+		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel the edit"})
 	case c.locked:
 		k = append(k, keyHelp{"enter", "type in it"})
 	default:
@@ -595,7 +629,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			case off != "":
 				label = st.Dim.Render(label)
 			}
-			if off != "" && why == "" && !x.quiet {
+			if off != "" && why == "" && !x.quiet && cur {
 				why = off
 			}
 			buttons = append(buttons, f.h.mark(label, f.click(i)))
@@ -639,7 +673,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				}
 				switch {
 				case cur && x.lockable:
-					val += st.Dim.Render("  (enter or e to change)")
+					val += st.Dim.Render("  (enter or e to edit)")
 				case cur:
 					val += st.Dim.Render("  (enter to type)")
 				}
@@ -647,6 +681,10 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			b.WriteString(truncate(mark+label+val, w))
 		}
 		b.WriteString("\n")
+		if cur && x.lockable && !x.locked {
+			// Editing a saved value shows it.
+			b.WriteString(truncate(strings.Repeat(" ", lw+2)+st.Accent.Render("editing")+st.Dim.Render(" · enter saves, esc cancels"), w) + "\n")
+		}
 		if x.problem != "" {
 			b.WriteString(truncate(strings.Repeat(" ", lw+2)+st.Warn.Render(x.problem), w) + "\n")
 		}

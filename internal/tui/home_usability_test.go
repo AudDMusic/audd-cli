@@ -42,7 +42,7 @@ func TestLettersNeverReachAFieldWithoutTheKeys(t *testing.T) {
 	if got := s.cbForm.value("url"); got != "https://audd.tech/empty/" {
 		t.Fatalf("a read-only value changed: %q", got)
 	}
-	if !strings.Contains(h.View(), "(enter or e to change)") || !strings.Contains(footerText(h.View()), "enter/e change it") {
+	if !strings.Contains(h.View(), "(enter or e to edit)") || !strings.Contains(footerText(h.View()), "enter/e edit") {
 		t.Fatalf("the read-only field does not say how to change it:\n%s", h.View())
 	}
 	press(h, key("e"))
@@ -66,7 +66,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); foot != "y confirm  n/esc cancel" || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Confirm") {
+	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press  y confirm  n/esc cancel") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Confirm") || !strings.Contains(v, "[ Change the callback URL ]") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -77,10 +77,10 @@ func TestCallbackChangeAsks(t *testing.T) {
 		t.Fatal("the typed URL is kept after cancelling")
 	}
 	press(h, key("enter"), key("enter"))
-	if h.confirm == nil || len(f.commands()) > 1 && strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
-		t.Fatal("enter does not confirm")
+	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
+		t.Fatal("a double enter lands on Cancel")
 	}
-	press(h, key("y"))
+	press(h, key("enter"), key("y"))
 	f.waitFor(t, "streams callback set https://hooks.example/audd")
 }
 
@@ -311,7 +311,7 @@ func TestUsageLeadsToBilling(t *testing.T) {
 func TestSettingsEditor(t *testing.T) {
 	h := navHome(t, homeOpts{start: "settings"})
 	s := h.subs["settings"].(*settingsSection)
-	press(h, key("down"), key("enter"))
+	press(h, key("enter"))
 	if s.edit == nil || s.edit.value() != "auto" {
 		t.Fatalf("format starts on auto: %v", s.edit)
 	}

@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ 
+ ? keys  q quit  │ [ Stop ]  [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams recorder status                                            y copy

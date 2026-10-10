@@ -22,9 +22,9 @@ func TestSettingsSection(t *testing.T) {
 	f.reply("config unset", `{"schema_version":1}`, "", 0)
 	t.Setenv("AUDD_FORMAT", "")
 	h := newTestHome(t, f, homeOpts{start: "settings"})
-	// format: enter opens the choice, → picks json, enter saves.
-	v := drive(t, h, 120, 40, "background_recorder", key("down"), key("enter"), "‹ auto ›", key("right"), key("right"),
-		"$ audd config set format json", key("enter"), "Format set to json")
+	// format: enter opens the choice, → picks json, enter asks, y saves.
+	v := drive(t, h, 120, 40, "background_recorder", key("enter"), "‹ auto ›", key("right"), key("right"),
+		"$ audd config set format json", key("enter"), "Set format to json?", "Now: auto (default)", key("y"), "Format set to json")
 	f.waitFor(t, "config set format json")
 	if !strings.Contains(v, "(env)") && !strings.Contains(v, "(default)") {
 		t.Fatalf("sources:\n%s", v)
@@ -32,7 +32,9 @@ func TestSettingsSection(t *testing.T) {
 
 	// The token goes through stdin, never the command line.
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("enter"), "$ audd config set token -", typeText("abcdef0123456789"), key("enter"), "Token saved for profile default")
+	// The token row is last; changing the token always asks.
+	drive(t, h, 120, 40, "background_recorder", key("end"), key("down"), key("down"), key("down"), key("down"), key("enter"), "$ audd config set token -",
+		typeText("abcdef0123456789"), key("enter"), "Replace the API token of profile default?", key("y"), "Token saved for profile default")
 	f.waitFor(t, "config set token -")
 	for i, c := range f.commands() {
 		if c == "config set token -" && f.stdins[i] != "abcdef0123456789" {
@@ -40,7 +42,7 @@ func TestSettingsSection(t *testing.T) {
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("d"),
+	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("down"), key("down"), key("d"),
 		"Unset token in profile default?", "no API token for this profile", key("y"), "API token removed from profile default")
 	f.waitFor(t, "config unset token")
 }

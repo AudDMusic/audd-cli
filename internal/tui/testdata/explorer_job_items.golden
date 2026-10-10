@@ -3,7 +3,7 @@ $ audd recognize ./music --max-files 10
   #      State     Input                           Result
 > 1      done      a.mp3                           Massive Attack — Teardrop
   2      done      mix.mp3                         2 matches
-  3      failed    c.mp3                           Error: the connection was reset after upload
+  3      failed    c.mp3                           Error: The connection was reset after upload
 
 
 

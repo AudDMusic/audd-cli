@@ -240,6 +240,10 @@ type home struct {
 	tipKeys int
 	// keysScroll scrolls the keys overlay.
 	keysScroll scrollView
+	// btnActive: the page's buttons have the keys; btnCur is the
+	// focused one.
+	btnActive bool
+	btnCur    int
 
 	// Mouse: what each region of the last frame does when clicked.
 	zoneFns []func() tea.Cmd
@@ -375,6 +379,7 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 	if focus {
 		h.focus = focusContent
 	}
+	h.btnActive = false
 	cmd := h.activate()
 	h.pageEntered()
 	if h.focus == focusTabs && h.tabs() == nil {

@@ -32,9 +32,9 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
+                 │ Streams · 3 streams
  ctrl+k commands │ 
- ? keys  q quit  │ Streams · 3 streams
+ ? keys  q quit  │ [ Add a stream (a) ]  [ Refresh (r) ]  [ Export (x) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams list                                                                                               y copy

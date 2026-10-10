@@ -217,11 +217,11 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 // errorText is an error as the command line shows it, for a pane.
 func errorText(st output.Styles, e *runError, w int) string {
 	if e.Code == "declined" {
-		// Answering no is not an error.
-		return "Cancelled. Nothing was sent."
+		// Answering no is not an error; the status line says so.
+		return ""
 	}
 	var b strings.Builder
-	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+e.Message, w)))
+	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+capFirst(e.Message), w)))
 	if e.Hint != "" {
 		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
 		if strings.HasPrefix(e.Hint, "audd ") {
@@ -268,3 +268,12 @@ func pendingURL(doc map[string]any) string {
 }
 
 func spaced(code string) string { return strings.Join(strings.Split(code, ""), " ") }
+
+// capFirst starts a message with a capital letter.
+func capFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	return strings.ToUpper(string(r[0])) + string(r[1:])
+}

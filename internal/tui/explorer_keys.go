@@ -181,6 +181,19 @@ func (m *explorer) enter(l *level) tea.Cmd {
 	if r == nil {
 		return nil
 	}
+	if m.embedded && (l.kind == "jobs" || l.kind == "streams") && r.detail != nil {
+		// In interactive mode a job or a stream opens its page, with
+		// what can be done with it.
+		l.detail, l.dscroll = true, 0
+		return nil
+	}
+	return m.drill(l, r)
+}
+
+// drill opens what a job (its files) or a stream (its recent plays)
+// holds, or a row's details.
+func (m *explorer) drill(l *level, r *row) tea.Cmd {
+	l.detail = false
 	switch l.kind {
 	case "jobs":
 		nl := &level{kind: "items", arg: r.key, title: "Job " + r.key, cols: jobItemCols, loading: true}
@@ -255,7 +268,7 @@ func (m *explorer) streamAction(f func(ctx context.Context) error, done string) 
 	ctx := m.ctx
 	return func() tea.Msg {
 		if err := f(ctx); err != nil {
-			return actionMsg{flash: "Error: " + output.AsError(err).Message}
+			return actionMsg{flash: "Error: " + capFirst(output.AsError(err).Message)}
 		}
 		return actionMsg{flash: done, reload: true, tab: tabStreams}
 	}

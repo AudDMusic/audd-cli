@@ -477,6 +477,7 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 				return p.h.askFirst(&confirmState{
 					owner:    "palette",
 					question: c[0],
+					action:   c[2],
 					notes:    []string{c[1]},
 					command:  displayCommand(p.cf.argv()),
 					cancel:   "Cancelled. Nothing was changed.",
@@ -511,11 +512,11 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 // destructive are the commands the palette asks about first, with what
 // they do; commands that ask on their own (spending, rotating the
 // token) ask through their own confirmation.
-var destructive = map[string][2]string{
-	"cache clear":          {"Clear the cache?", "Every cached result is deleted; recognizing the same files again uses requests."},
-	"streams callback set": {"Change the callback URL?", "AudD sends every result of every stream on your account to the new address."},
-	"auth logout":          {"Sign out?", "The saved sign-in and API token of this profile are removed from this computer."},
-	"config unset":         {"Unset the setting?", "It goes back to its default."},
+var destructive = map[string][3]string{
+	"cache clear":          {"Clear the cache?", "Every cached result is deleted; recognizing the same files again uses requests.", "Clear the cache"},
+	"streams callback set": {"Change the callback URL?", "AudD sends every result of every stream on your account to the new address.", "Change the callback URL"},
+	"auth logout":          {"Sign out?", "The saved sign-in and API token of this profile are removed from this computer.", "Sign out"},
+	"config unset":         {"Unset the setting?", "It goes back to its default.", "Unset"},
 }
 
 func (p *palette) run() tea.Cmd {

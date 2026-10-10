@@ -14,9 +14,9 @@ AudD  ·  profile default
                  │   [ ] Send even if cached
                  │ 
                  │   [ Recognize ]  [ Show the plan ]
-                 │   Enter a file, URL, or folder first
                  │ 
                  │   A file, URL, folder, or glob; enter recognizes it. ctrl+o picks a file.
+                 │ 
                  │ 
                  │ 
                  │ 

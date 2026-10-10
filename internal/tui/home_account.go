@@ -7,10 +7,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
-var accountPages = []string{"Account", "Usage", "Billing", "API token", "Profiles"}
+var accountPages = []string{"Overview", "Usage", "Billing", "API token", "Profiles"}
 
 // accountSection is the account, usage, billing, API token, and profiles.
 type accountSection struct {
@@ -40,6 +41,11 @@ type accountSection struct {
 	revealed bool
 	copyRun  *run
 
+	// A different token, pasted on the API token page.
+	tokPasting bool
+	tokForm    *form
+	tokSet     *cmdPanel
+
 	// Profiles
 	profCur  int
 	prof     *cmdPanel
@@ -54,6 +60,11 @@ func newAccountSection(h *home) section {
 	n := &field{kind: fInt, name: "requests", label: "Requests", help: "Extra requests, in multiples of 1,000", required: true, input: newInput()}
 	s.buyIn = newForm(n, buttonField("buy", "Get the payment link"))
 	s.buyIn.h = h
+	tok := &field{kind: fText, name: "token", label: "API token", masked: true, required: true, input: newInput(),
+		need: "Paste the token first", help: "From https://dashboard.audd.io."}
+	s.tokForm = newForm(tok, buttonField("save", "Save the token"))
+	s.tokForm.h = h
+	s.tokSet = newPanel(h)
 	s.buyIn.get("buy").disabled = func() string {
 		if s.buyIn.value("requests") == "" {
 			return "Enter how many requests first"
@@ -224,6 +235,18 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
+	if mine, done := s.tokSet.handle(msg); mine {
+		if done && s.tokSet.res.ok() {
+			s.tokPasting = false
+			s.tokForm.get("token").setValue("")
+			s.h.signedOut = s.h.noToken()
+			return tea.Batch(s.h.setFlash("Token saved for profile "+s.h.profileName()), s.h.loadHeader(), s.showToken(false))
+		}
+		if done && s.tokSet.res.err != nil {
+			s.tokForm.err = s.tokSet.res.err.Message
+		}
+		return nil
+	}
 	for _, p := range []*cmdPanel{s.overview, s.owed, s.history} {
 		if mine, _ := p.handle(msg); mine {
 			return nil
@@ -248,9 +271,6 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 	_, ht := s.h.contentSize()
 	switch s.page {
 	case 0:
-		if ks == "r" {
-			return s.openPage(0)
-		}
 		return s.overview.key(k, ht)
 	case 1:
 		if ks == "enter" || ks == "right" {
@@ -263,15 +283,12 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		if s.token.pending != nil {
 			return s.token.key(k, ht)
 		}
-		switch ks {
-		case "v":
-			return s.showToken(!s.revealed)
-		case "c":
-			return s.token.start(runReq{args: []string{"token", "show", "--reveal"}, tag: "copy"})
-		case "g":
-			return s.token.start(runReq{args: []string{"token", "rotate"}, typed: "rotate", tag: "rotate"})
-		case "r":
-			return s.token.start(runReq{args: []string{"token", "refresh-local"}, tag: "refresh"})
+		if s.tokPasting {
+			if act, cmd := s.tokForm.update(k); act == "save" {
+				return s.askToken()
+			} else {
+				return cmd
+			}
 		}
 		return nil
 	case 4:
@@ -320,9 +337,9 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 		}
 	}
 	switch ks {
-	case "down", "j":
+	case "down":
 		s.planCur = min(len(s.plans)-1, s.planCur+1)
-	case "up", "k":
+	case "up":
 		s.planCur = max(0, s.planCur-1)
 	case "enter":
 		// Enter on the current plan renews it; on another, subscribes.
@@ -433,6 +450,7 @@ func (s *accountSection) askSignOut() tea.Cmd {
 	return s.h.askFirst(&confirmState{
 		owner:    "account",
 		question: fmt.Sprintf("Sign out of profile %s?", cur),
+		action:   "Sign out",
 		notes:    []string{"Its saved sign-in and API token are removed from this computer. audd cannot recognize music with this profile until you sign in or set a token again."},
 		command:  "audd auth logout",
 		cancel:   "Still signed in",
@@ -492,6 +510,8 @@ func (s *accountSection) leftExits() bool {
 		return s.usage.leftExits()
 	case s.page == 2 && s.buying:
 		return s.buyIn.leftExits()
+	case s.page == 3 && s.tokPasting:
+		return s.tokForm.leftExits()
 	}
 	return !s.capturing()
 }
@@ -594,11 +614,22 @@ func (s *accountSection) billingView(w, h int) string {
 	}
 	cur := s.currentPlan()
 	for i, p := range s.plans {
-		line := fmt.Sprintf("%-10s %s/month  %s requests", str(p["name"]),
-			money(num(p["monthly_price_cents"])), fmtInt(int(num(p["included_requests"]))))
+		line := fmt.Sprintf("%-10s %s/mo  %s requests", str(p["name"]),
+			shortMoney(num(p["monthly_price_cents"])), shortCount(int(num(p["included_requests"]))))
+		act := "Subscribe"
 		if i == cur {
 			line += "  (your plan)"
+			act = "Renew"
 		}
+		// The row's button: enter presses it.
+		btn := st.Dim.Render("[ " + act + " ]")
+		if i == s.planCur && s.h.pageHasKeys() && !s.h.btnActive {
+			btn = "[>" + act + "<]"
+			if s.h.color {
+				btn = st.Bold.Reverse(true).Render(" " + act + " ")
+			}
+		}
+		line += "  " + btn
 		b.WriteString(truncate(s.h.listRow(line, i == s.planCur), w) + "\n")
 	}
 	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Enter gets a payment link for the selected plan (on your plan: renews it). Payment links never charge anything: you review and pay in the browser.", w)))
@@ -625,7 +656,11 @@ func (s *accountSection) tokenView(w, h int) string {
 	} else if s.token.running {
 		b.WriteString(st.Dim.Render("Loading…") + "\n")
 	}
-	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows or hides the whole token, c copies it without showing it, r fetches it from your account again. g makes a new token: the current one stops working everywhere.", w)))
+	if s.tokPasting {
+		b.WriteString("\n" + st.Bold.Render("Paste a different token") + "\n\n" + s.tokForm.view(w, st, s.h.color))
+		return b.String()
+	}
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("New token makes a new one: the current token stops working everywhere it is used.", w)))
 	return b.String()
 }
 
@@ -635,9 +670,9 @@ func (s *accountSection) keys() []keyHelp {
 	}
 	switch s.page {
 	case 0:
-		return []keyHelp{{"↑/↓", "scroll"}, {"r", "refresh"}}
+		return []keyHelp{{"↑/↓", "scroll"}}
 	case 1:
-		return s.usage.keys()
+		return []keyHelp{{"enter", "billing"}}
 	case 2:
 		switch {
 		case s.pay.running && s.pay.pending != nil:
@@ -645,27 +680,128 @@ func (s *accountSection) keys() []keyHelp {
 		case s.buying:
 			return s.buyIn.rowKeys("get the link")
 		case s.payLink != "":
-			return []keyHelp{{"enter", "open in browser"}, {"o", "open in browser"}, {"c", "copy link"}, {"esc", "close"}}
+			return []keyHelp{{"esc", "close"}}
 		case s.showHist:
-			return []keyHelp{{"↑/↓", "scroll"}, {"m", "back to the plans"}}
+			return []keyHelp{{"↑/↓", "scroll"}}
 		}
 		act := "subscribe"
 		if s.planCur == s.currentPlan() {
 			act = "renew"
 		}
-		return []keyHelp{{"↑/↓", "plan"}, {"enter", act}, {"b", "buy requests"}, {"m", "payments"}, {"r", "refresh"}}
+		return []keyHelp{{"↑/↓", "plan"}, {"enter", act}}
 	case 3:
-		reveal := "reveal"
-		if s.revealed {
-			reveal = "hide"
+		if s.tokPasting {
+			return s.tokForm.rowKeys("save the token")
 		}
-		return []keyHelp{{"v", reveal}, {"c", "copy"}, {"r", "fetch again"}, {"g", "new token"}}
+		return nil
 	}
-	k := []keyHelp{{"↑/↓", "profile"}, {"enter", "switch"}}
-	if s.canSignOut() {
-		k = append(k, keyHelp{"l", "sign out"})
+	return []keyHelp{{"↑/↓", "profile"}, {"enter", "switch to it"}}
+}
+
+// actions are the buttons of each page.
+func (s *accountSection) actions() []button {
+	if s.needsLogin() {
+		return nil
 	}
-	return k
+	refresh := func(fn func() tea.Cmd) button {
+		return button{"Refresh", "r", func() tea.Cmd { return tea.Batch(fn(), s.h.setFlash("Refreshed")) }}
+	}
+	switch s.page {
+	case 0:
+		return []button{refresh(func() tea.Cmd { return s.openPage(0) })}
+	case 1:
+		return append([]button{{"Billing", "", func() tea.Cmd { return s.h.selectTab(2) }}}, s.usage.actions()...)
+	case 2:
+		switch {
+		case s.pay.running || s.buying:
+			return nil
+		case s.payLink != "":
+			link := s.payLink
+			return []button{
+				{"Open in browser", "o", func() tea.Cmd {
+					if err := openURL(link); err != nil {
+						return s.h.setFlash("Could not open the browser: " + err.Error())
+					}
+					return s.h.setFlash("Opened the payment page in your browser")
+				}},
+				{"Copy link", "c", func() tea.Cmd { return s.h.copy(link, "the payment link") }},
+				{"Close", "", func() tea.Cmd { s.payLink, s.pay.res = "", nil; return nil }},
+			}
+		case s.showHist:
+			return []button{{"Plans", "", func() tea.Cmd { s.showHist = false; return nil }}}
+		}
+		return []button{
+			{"Buy requests", "", func() tea.Cmd { s.buying = true; s.buyIn.focusName("requests"); return nil }},
+			{"Payments", "", func() tea.Cmd {
+				s.showHist = true
+				if s.history.res == nil {
+					return s.history.start(runReq{args: []string{"billing", "history"}, format: "table"})
+				}
+				return nil
+			}},
+			refresh(func() tea.Cmd { s.billing.res, s.owed.res = nil, nil; return s.openPage(2) }),
+		}
+	case 3:
+		if s.tokPasting || s.token.pending != nil {
+			return nil
+		}
+		show := button{"Show", "", func() tea.Cmd { return s.showToken(true) }}
+		if s.revealed {
+			show = button{"Hide", "", func() tea.Cmd { return s.showToken(false) }}
+		}
+		return []button{show,
+			{"Copy", "c", func() tea.Cmd {
+				return s.token.start(runReq{args: []string{"token", "show", "--reveal"}, tag: "copy"})
+			}},
+			{"New token…", "", func() tea.Cmd {
+				return s.token.start(runReq{args: []string{"token", "rotate"}, typed: "rotate", tag: "rotate"})
+			}},
+			{"Paste a different token…", "", func() tea.Cmd {
+				s.tokPasting = true
+				s.tokForm.focusName("token")
+				s.tokForm.resume()
+				return nil
+			}},
+		}
+	case 4:
+		if s.canSignOut() {
+			return []button{{"Sign out", "", s.askSignOut}}
+		}
+	}
+	return nil
+}
+
+// askToken asks before replacing the API token with the one pasted.
+func (s *accountSection) askToken() tea.Cmd {
+	v := s.tokForm.value("token")
+	old := "not set"
+	if s.tokView != nil {
+		old = str(s.tokView["token"])
+	}
+	return s.h.askFirst(&confirmState{
+		owner:    "account",
+		question: "Replace the API token of profile " + s.h.profileName() + "?",
+		notes:    []string{"Now: " + old, "New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
+		command:  "audd config set token -",
+		action:   "Replace the token",
+		cancel:   "Cancelled. The token is unchanged.",
+		yes: func() tea.Cmd {
+			return s.tokSet.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
+		},
+	})
+}
+
+// downExits: ↓ at the end of the page goes to its buttons.
+func (s *accountSection) downExits() bool {
+	switch s.page {
+	case 2:
+		return !s.buying && (s.showHist || s.payLink != "" || s.planCur >= len(s.plans)-1)
+	case 3:
+		return !s.tokPasting
+	case 4:
+		return s.profCur >= len(s.profiles())-1
+	}
+	return true
 }
 
 func (s *accountSection) command() string {
@@ -718,7 +854,7 @@ func (s *accountSection) capturing() bool {
 	case 2:
 		return s.buying && s.buyIn.capturing() || s.pay.capturing()
 	case 3:
-		return s.token.capturing()
+		return s.tokPasting && s.tokForm.capturing() || s.token.capturing()
 	}
 	return false
 }
@@ -748,9 +884,31 @@ func (s *accountSection) back() bool {
 			return true
 		}
 	case 3:
+		if s.tokPasting {
+			if !s.tokForm.leaveField() {
+				s.tokPasting = false
+			}
+			return true
+		}
 		if s.token.back() {
 			return true
 		}
 	}
 	return false
+}
+
+// shortMoney is a price without cents when it has none: $450, $4.50.
+func shortMoney(cents float64) string {
+	if int(cents)%100 == 0 {
+		return fmt.Sprintf("$%s", fmtInt(int(cents)/100))
+	}
+	return money(cents)
+}
+
+// shortCount is a count in thousands when it is round: 100k.
+func shortCount(n int) string {
+	if n >= 1000 && n%1000 == 0 {
+		return fmtInt(n/1000) + "k"
+	}
+	return fmtInt(n)
 }

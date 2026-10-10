@@ -157,24 +157,28 @@ func TestEmptyLists(t *testing.T) {
 	try(h, "batch")
 }
 
-// Enter never confirms a question; y does.
-func TestEnterDoesNotConfirm(t *testing.T) {
-	h := navHome(t, homeOpts{start: "settings"})
+// A question is a dialog with Cancel first and focused: enter on it
+// cancels (a double enter changes nothing), → and enter confirm.
+func TestDialogButtons(t *testing.T) {
+	f := &fakeRun{}
+	f.reply("config unset", `{"schema_version":1}`, "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "settings"}), 100, 30)
+	drain(h, h.activate(), 0)
+	s := h.subs["settings"].(*settingsSection)
+	for s.selected().key != "token" {
+		press(h, key("down"))
+	}
 	press(h, key("d"))
-	if h.confirm == nil {
-		t.Fatal("d asks first")
+	v := h.View()
+	if h.confirm == nil || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Unset token ]") || !strings.Contains(crumbText(v), "Settings › Confirm") {
+		t.Fatalf("the dialog:\n%s", v)
 	}
-	press(h, key("enter"), key("enter"))
-	if h.confirm == nil || !strings.Contains(statusText(h.View()), "Press y to confirm, or n to cancel") {
-		t.Fatalf("enter confirmed:\n%s", h.View())
+	press(h, key("enter"))
+	if h.confirm != nil || len(changed(f)) != 0 || strings.Count(h.View(), "Kept token") != 1 {
+		t.Fatalf("enter on Cancel cancels, said once:\n%s", h.View())
 	}
-	if !strings.Contains(h.View(), "[ Confirm ]") || !strings.Contains(crumbText(h.View()), "Settings › Confirm") {
-		t.Fatalf("the question:\n%s", h.View())
-	}
-	press(h, key("n"))
-	if h.confirm != nil || !strings.Contains(statusText(h.View()), "Kept token") {
-		t.Fatalf("n cancels:\n%s", h.View())
-	}
+	press(h, key("d"), key("right"), key("enter"))
+	f.waitFor(t, "config unset token")
 }
 
 // Signed in with a token only, Account still offers every way in; the
@@ -182,7 +186,7 @@ func TestEnterDoesNotConfirm(t *testing.T) {
 // token comes from in words; the commands shown carry --token test.
 func TestTestTokenAndSignIn(t *testing.T) {
 	h := navHome(t, homeOpts{start: "account"})
-	for _, want := range []string{"Paste an API token", "Try with the test token"} {
+	for _, want := range []string{"An API token is set", "Paste a different token", "Sign in to your account"} {
 		if !strings.Contains(h.View(), want) {
 			t.Fatalf("no %q:\n%s", want, h.View())
 		}
@@ -225,8 +229,8 @@ func TestRecognizeFormKeys(t *testing.T) {
 	}
 	press(h, key("right"), key("down"))
 	press(h, key("3"))
-	if h.activeID() != "recognize" || !strings.Contains(statusText(h.View()), "3 jumps to a section from the menu") {
-		t.Fatalf("a digit on a box: %s\n%s", h.activeID(), h.View())
+	if h.activeID() != "streams" {
+		t.Fatalf("a digit outside a text field jumps: %s", h.activeID())
 	}
 }
 
@@ -311,7 +315,11 @@ func TestEditStreamURL(t *testing.T) {
 	if h.subs["streams"].(*streamsSection).pane.ex.purpose != inputNone {
 		t.Fatal("e on the tab bar does nothing")
 	}
-	press(h, key("down"), key("e"))
+	press(h, key("down"), key("enter"))
+	if !strings.Contains(h.View(), "[ Edit URL (e) ]") || !strings.Contains(h.View(), "[ Remove (d) ]") {
+		t.Fatalf("a stream's page has its buttons:\n%s", h.View())
+	}
+	press(h, key("e"))
 	ex := h.subs["streams"].(*streamsSection).pane.ex
 	if ex.purpose != inputSetURL || ex.input.Value() != "https://radio.example/a.mp3" {
 		t.Fatalf("e starts from the URL: %q", ex.input.Value())
@@ -319,14 +327,99 @@ func TestEditStreamURL(t *testing.T) {
 	press(h, key("ctrl+u"))
 	press(h, typeText("not a url")...)
 	press(h, key("enter"))
-	if h.confirm != nil || !strings.Contains(statusText(h.View()), "not a stream URL") {
+	if h.confirm != nil || !strings.Contains(h.flash, "not a stream URL") {
 		t.Fatalf("a bad URL:\n%s", h.View())
 	}
-	press(h, key("down"), key("up"), key("e"), key("ctrl+u"))
+	press(h, key("e"), key("ctrl+u"))
 	press(h, typeText("https://radio.example/new.mp3")...)
 	press(h, key("enter"))
 	v := h.View()
 	if h.confirm == nil || !strings.Contains(v, "Now: https://radio.example/a.mp3") || !strings.Contains(v, "New: https://radio.example/new.mp3") {
 		t.Fatalf("the question:\n%s", v)
 	}
+}
+
+// Editing a saved value: esc puts the old value back, also in the
+// command at the bottom.
+func TestSavedValueEscReverts(t *testing.T) {
+	h, _ := callbackHome(t)
+	s := h.subs["streams"].(*streamsSection)
+	press(h, key("down"), key("enter"))
+	if !strings.Contains(h.View(), "editing") {
+		t.Fatalf("editing shows:\n%s", h.View())
+	}
+	press(h, key("ctrl+u"))
+	press(h, typeText("https://stray.example")...)
+	press(h, key("esc"))
+	if got := s.cbForm.value("url"); got != "https://audd.tech/empty/" || strings.Contains(h.View(), "stray") || s.cbForm.capturing() {
+		t.Fatalf("esc keeps %q:\n%s", got, h.View())
+	}
+}
+
+// After an export, o and c act on it, never typed into the file name.
+func TestKeysAfterExport(t *testing.T) {
+	dir := t.TempDir()
+	old := explorerExportDir
+	explorerExportDir = dir
+	t.Cleanup(func() { explorerExportDir = old })
+	var opened []string
+	oldOpen := openURL
+	openURL = func(u string) error { opened = append(opened, u); return nil }
+	t.Cleanup(func() { openURL = oldOpen })
+	f := &fakeRun{}
+	f.reply("streams export", "id\n1\n", "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 100, 30)
+	drain(h, h.activate(), 0)
+	press(h, key("]"), key("]"), key("]"), key("down"))
+	s := h.subs["streams"].(*streamsSection)
+	s.dataForm.get("kind").setValue("export")
+	s.syncData()
+	s.dataForm.focusName("file")
+	name := s.dataForm.value("file")
+	press(h, key("enter"))
+	f.waitFor(t, "streams export --since 7d")
+	pump(h, func() bool { return s.exportTo != "" })
+	press(h, key("o"))
+	if s.dataForm.value("file") != name || len(opened) != 1 || opened[0] != dir {
+		t.Fatalf("o after the export: file %q, opened %v", s.dataForm.value("file"), opened)
+	}
+}
+
+// ctrl+k in a command's form goes back to the list; again, it closes.
+func TestCtrlKFormToList(t *testing.T) {
+	h := navHome(t, homeOpts{start: "settings"})
+	drain(h, h.openPalette("streams add"), 0)
+	press(h, ctrlK())
+	if !h.paletteO || h.palette.phase != "list" {
+		t.Fatalf("ctrl+k in a form: open %v phase %s", h.paletteO, h.palette.phase)
+	}
+	press(h, ctrlK())
+	if h.paletteO || h.activeID() != "settings" || h.focus != focusContent {
+		t.Fatal("ctrl+k on the list closes the palette, back where it was")
+	}
+}
+
+// A different token is pasted on Account's API token page, and replacing
+// the token asks first.
+func TestPasteDifferentTokenAsks(t *testing.T) {
+	f := &fakeRun{}
+	f.reply("token show", `{"schema_version":1,"token":"0123…cdef","masked":true}`, "", 0)
+	f.reply("config set token", `{"schema_version":1}`, "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "account", loggedIn: true}), 100, 30)
+	drain(h, h.activate(), 0)
+	press(h, key("]"), key("]"), key("]"), key("down"))
+	pump(h, func() bool { return strings.Contains(h.View(), "0123…cdef") })
+	press(h, key("tab"))
+	for i := 0; i < 3; i++ {
+		press(h, key("right"))
+	}
+	press(h, key("enter"))
+	press(h, typeText("abcdefabcdefabcdef")...)
+	press(h, key("enter"))
+	if h.confirm == nil || !strings.Contains(h.View(), "Replace the API token of profile default?") {
+		t.Fatalf("no question:\n%s", h.View())
+	}
+	press(h, key("y"))
+	f.waitFor(t, "config set token -")
+	pump(h, func() bool { return strings.Contains(h.View(), "Token saved for profile default") })
 }

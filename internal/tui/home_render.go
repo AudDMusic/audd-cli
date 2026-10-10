@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"sort"
 	"strings"
 
@@ -110,6 +111,7 @@ type batchState struct {
 	selectable  bool
 	cursor, off int
 	detail      bool
+	title       string // a heading of its own ("3 matches in mix.mp3")
 }
 
 // selected is the result under the cursor.
@@ -151,6 +153,9 @@ func batchLink(m map[string]any) string {
 func (b *batchState) listView(st output.Styles, w, ht int, row func(label string, sel bool) string) string {
 	var out strings.Builder
 	head := b.view(st, w, 0, false)
+	if b.title != "" {
+		head = st.Bold.Render(b.title) + "\n"
+	}
 	if head != "" {
 		out.WriteString(head + "\n")
 	}
@@ -382,4 +387,42 @@ func tableOf(list []any, st output.Styles, w int, title string) string {
 		b.WriteString(truncate(cellsLine(r, widths), w) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// batchPage is a batch's results: a list to move through, or the details
+// of the selected one.
+func (h *home) batchPage(bs *batchState, w, ht int) string {
+	st := h.st
+	if bs.detail {
+		if m := bs.selected(); m != nil {
+			ds := detailStyles{title: st.Title.Inherit(st.Accent), dim: st.Dim, key: st.Key}
+			out := st.Dim.Render(truncate(str(m["input"]), w)) + "\n\n"
+			if m["result"] != nil && m["status"] != "no_match" {
+				raw, _ := json.Marshal(m["result"])
+				return out + resultDetail(raw, ds)
+			}
+			return out + resultSong(m)
+		}
+	}
+	return bs.listView(st, w, ht, func(label string, sel bool) string { return h.listRow(label, sel) })
+}
+
+// batchButtons are the buttons of a batch result's details.
+func (h *home) batchButtons(bs *batchState) []button {
+	if bs == nil || !bs.detail {
+		return nil
+	}
+	link := batchLink(bs.selected())
+	if link == "" {
+		return nil
+	}
+	return []button{
+		{"Open link", "o", func() tea.Cmd {
+			if err := openURL(link); err != nil {
+				return h.setFlash("Could not open the browser: " + err.Error())
+			}
+			return h.setFlash("Opened in your browser: " + link)
+		}},
+		{"Copy link", "c", func() tea.Cmd { return h.copy(link, "the link "+link) }},
+	}
 }

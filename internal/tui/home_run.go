@@ -355,6 +355,7 @@ type askState struct {
 	input    textinput.Model
 	typed    string
 	mismatch bool
+	cur      int // the focused button; 0 is Cancel
 }
 
 func newAskState(owner string, m runAskMsg, h *home) *askState {
@@ -367,6 +368,19 @@ func newAskState(owner string, m runAskMsg, h *home) *askState {
 		s.input = ti
 	}
 	return s
+}
+
+// action is the confirming button, named from the question: "Recognize
+// 2 files, using 2 requests?" is [ Recognize 2 files ].
+func (s *askState) action() string {
+	q := strings.TrimSuffix(strings.TrimSpace(s.msg.question), "?")
+	if i := strings.IndexAny(q, ",?.:"); i > 0 {
+		q = q[:i]
+	}
+	if q == "" || len(q) > 32 {
+		return "Confirm"
+	}
+	return q
 }
 
 // askWaiting is a confirmation that waits for the one on screen.
@@ -416,16 +430,30 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	switch key {
+	case "left", "shift+tab":
+		s.cur = 0
+		return nil
+	case "right", "tab":
+		s.cur = 1
+		return nil
+	case "enter":
+		return h.pressAsk(s.cur)
 	case "y", "Y":
+		return h.pressAsk(1)
+	case "n", "N":
+		return h.pressAsk(0)
+	}
+	return h.setFlash(key + " does nothing here · ←/→ choose, enter presses, esc cancels")
+}
+
+// pressAsk answers with button i: 0 is Cancel.
+func (h *home) pressAsk(i int) tea.Cmd {
+	if i == 1 {
 		h.answer(true)
 		return nil
-	case "n", "N":
-		h.answer(false)
-		return h.setFlash("Cancelled. Nothing was sent.")
-	case "enter":
-		return h.setFlash("Press y to confirm, or n to cancel")
 	}
-	return h.setFlash("y confirms, n or esc cancels")
+	h.answer(false)
+	return h.setFlash("Cancelled. Nothing was sent.")
 }
 
 // askView is the confirmation in the content pane.
@@ -448,10 +476,7 @@ func (h *home) askView(w, ht int) string {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}
 	} else {
-		yes := h.mark("[ Confirm ]", func() tea.Cmd { h.answer(true); return nil })
-		no := h.mark("[ Cancel ]", func() tea.Cmd { h.answer(false); return h.setFlash("Cancelled. Nothing was sent.") })
-		b.WriteString("  " + yes + "  " + no + "\n\n")
-		b.WriteString("Press y to confirm, n or esc to cancel.\n")
+		b.WriteString(h.dialogButtons([]string{"Cancel", s.action()}, s.cur, h.pressAsk) + "\n")
 	}
 	return b.String()
 }

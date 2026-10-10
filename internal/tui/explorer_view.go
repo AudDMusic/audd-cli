@@ -125,6 +125,11 @@ func (m *explorer) statusLine() string {
 		}
 		n := len(l.visible())
 		s := l.title + " · " + output.Plural(n, rowNoun(l.kind))
+		if r := l.selected(); r != nil && l.kind == "streams" && m.w < 100 && !l.detail && len(r.cells) > 4 {
+			// The URL column is left out on narrow screens: the selected
+			// stream's URL is here.
+			s += " · " + truncMiddle(r.cells[4], max(8, m.w-len([]rune(s))-3))
+		}
 		if l.filter != "" {
 			s += fmt.Sprintf(" matching %q", l.filter)
 		}
@@ -168,70 +173,23 @@ func (m *explorer) keyList() []string {
 	return keys
 }
 
-// embeddedKeys are the hints in interactive mode: only what applies to
-// the view and the selected row. The screen around it adds how to go
-// back and its own keys.
+// embeddedKeys are the hints in interactive mode: moving around. What
+// can be done is on the page's buttons.
 func (m *explorer) embeddedKeys() []string {
 	l := m.top()
 	switch {
 	case m.purpose != inputNone:
 		return []string{"enter done"}
-	case m.tab == tabUsage:
-		return []string{"→/enter plans and payments", "r refresh", "x export"}
-	case l == nil:
+	case m.tab == tabUsage || l == nil:
 		return nil
-	}
-	r := l.selected()
-	rowKeys := func() []string {
-		var k []string
-		if r == nil {
-			return k
-		}
-		if r.link != "" {
-			k = append(k, "o open link", "c copy link")
-		}
-		if r.copies["i"] != "" {
-			k = append(k, "i copy ISRC")
-		}
-		if r.copies["u"] != "" {
-			k = append(k, "u copy UPC")
-		}
-		return k
-	}
-	if l.detail {
-		return append([]string{"↑/↓ scroll"}, rowKeys()...)
+	case l.detail:
+		return []string{"↑/↓ scroll"}
 	}
 	keys := []string{"↑/↓ move"}
-	if r != nil && (r.detail != nil || l.kind == "jobs" || l.kind == "streams") {
+	if r := l.selected(); r != nil && r.detail != nil {
 		keys = append(keys, "→ open")
 	}
-	switch l.kind {
-	case "streams":
-		keys = append(keys, "a add")
-		if r != nil {
-			keys = append(keys, "e edit URL", "d remove")
-		}
-	case "jobs", "items":
-		if j := m.jobOf(l); j != nil {
-			if j.Status != "done" && j.Done < j.Total {
-				keys = append(keys, "t resume")
-			}
-			if j.Failed > 0 {
-				keys = append(keys, "f retry failed")
-			}
-			if l.kind == "jobs" {
-				keys = append(keys, "c copy the command")
-			}
-		}
-	}
-	if l.kind != "jobs" {
-		keys = append(keys, rowKeys()...)
-	}
-	keys = append(keys, "/ filter", "x export", "r refresh")
-	if len(m.allowed) > 1 {
-		keys = append(keys, "tab next tab")
-	}
-	return keys
+	return append(keys, "/ filter")
 }
 
 // jobOf is the job a level is about: the selected one on the list, the
@@ -334,8 +292,9 @@ func (m *explorer) levelView(l *level, h int) string {
 		}
 	case "jobs":
 		if m.w < 100 {
-			cols = cols[:4:4] // job, status, done, failed
-			cols = append(cols, jobCols[4])
+			// Job, status, done, and what it ran, which tells jobs apart.
+			cols = []column{jobCols[0], jobCols[1], {title: "Done", width: 7}, jobCols[5]}
+			pick = []int{0, 1, 2, 5}
 		}
 	}
 	var note string

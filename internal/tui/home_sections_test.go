@@ -53,7 +53,7 @@ func TestHistoryResumesJob(t *testing.T) {
 		`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"matched","result":{"artist":"Portishead","title":"Roads"}}`+"\n"+
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("f"), "Job k3x9: 3 recognized")
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("right"), key("enter"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -144,7 +144,7 @@ func TestStreamsAddAndRemove(t *testing.T) {
 	if s := h.subs["streams"].(*streamsSection); s.adding || !strings.Contains(h.View(), "Added stream 7") {
 		t.Fatalf("after adding:\n%s", h.View())
 	}
-	press(h, key("d"))
+	press(h, key("enter"), key("d"))
 	if v := h.View(); !strings.Contains(v, "Remove stream 1?") || !strings.Contains(v, "AudD stops monitoring it") || h.command() != "audd streams remove 1" || strings.Contains(v, "y copy") {
 		t.Fatalf("remove asks:\n%s", h.View())
 	}
@@ -162,7 +162,7 @@ func TestExplorerPaneError(t *testing.T) {
 		return ExplorerData{}, output.Errf(3, "no_token", "audd login", "no API token is set")
 	}
 	drain(h, h.activate(), 0)
-	if v := h.View(); !strings.Contains(v, "Error: no API token is set") {
+	if v := h.View(); !strings.Contains(v, "Error: No API token is set") {
 		t.Fatalf("%s", v)
 	}
 	_ = context.Background

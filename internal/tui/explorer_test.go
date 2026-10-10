@@ -154,7 +154,7 @@ func TestExplorerJobsTab(t *testing.T) {
 	m := explorerModel(t, "jobs", &fakeStreamsAPI{})
 	view := runModelUntil(t, m, "k3x9", "Teardrop", key("enter"))
 	testutil.Golden(t, "explorer_job_items", []byte(view))
-	if !strings.Contains(view, "2 matches") || !strings.Contains(view, "Error: the connection was reset") {
+	if !strings.Contains(view, "2 matches") || !strings.Contains(view, "Error: The connection was reset") {
 		t.Fatalf("items:\n%s", view)
 	}
 

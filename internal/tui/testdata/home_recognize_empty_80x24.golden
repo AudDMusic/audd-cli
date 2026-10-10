@@ -14,10 +14,10 @@ AudD  ·  profile default
                  │   [ ] Send even if cached
                  │ 
                  │   [ Recognize ]  [ Show the plan ]
-                 │   Enter a file, URL, or folder first
                  │ 
                  │   A file, URL, folder, or glob; enter recognizes it. ctrl+o
- ctrl+k commands │   picks a file.
+                 │   picks a file.
+ ctrl+k commands │ 
  ? keys  q quit  │ 
 
 ↑/↓ field  enter recognize  esc leave the field  ctrl+u clear

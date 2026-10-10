@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -178,9 +177,11 @@ func (s *recognizeSection) back() bool {
 		s.details = false
 		return true
 	case s.phase == "result":
-		// Back on the form, as it was; the old plan is gone.
+		// Back on the form, as it was, not typing in it; the old plan
+		// is gone.
 		s.phase = "form"
 		s.plan = ""
+		s.form.leaveField()
 		return true
 	case s.phase == "running" && s.mic():
 		s.panel.stop()
@@ -281,42 +282,110 @@ func (s *recognizeSection) command() string {
 }
 
 func (s *recognizeSection) keys() []keyHelp {
-	if s.browser == nil && s.mic() {
+	if s.browser == nil && s.mic() && s.phase != "result" {
 		return s.micKeys()
 	}
 	switch {
 	case s.browser != nil:
 		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "open or pick"}, {"←", "parent folder"}, {"s", "pick this folder"}, {"esc", "close"}}
 	case s.phase == "running":
-		return []keyHelp{{"s", "stop"}}
+		return nil
 	case s.phase == "result" && s.bs != nil && s.bs.detail:
-		return []keyHelp{{"o", "open link"}, {"c", "copy link"}, {"esc", "back to the list"}}
+		return []keyHelp{{"esc", "back to the list"}}
 	case s.phase == "result" && s.bs != nil:
-		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "details"}, {"o", "open link"}, {"c", "copy link"}, {"esc", "back to the form"}}
+		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "details"}, {"esc", "back to the form"}}
 	case s.phase == "result" && s.details:
-		k := []keyHelp{{"↑/↓", "scroll"}}
-		if s.rec.link != "" {
-			k = append(k, keyHelp{"o", "open link"}, keyHelp{"c", "copy link"})
-		}
-		return append(k, keyHelp{"esc", "back to the result"})
+		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "back to the result"}}
 	case s.phase == "result":
-		k := []keyHelp{}
-		if s.rec.view != nil {
-			k = append(k, keyHelp{"→/enter", "details"})
-		}
 		if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
-			k = []keyHelp{{"enter", "open " + res.err.Hint}}
+			return []keyHelp{{"enter", "open " + res.err.Hint}, {"esc", "back to the form"}}
 		}
-		if s.rec.link != "" {
-			k = append(k, keyHelp{"o", "open link"}, keyHelp{"c", "copy link"})
+		if s.rec.view != nil {
+			return []keyHelp{{"→/enter", "details"}, {"esc", "back to the form"}}
 		}
-		return append(k, keyHelp{"esc", "back to the form"})
+		if s.mic() {
+			return []keyHelp{{"enter", "listen again"}, {"esc", "back to the form"}}
+		}
+		return []keyHelp{{"esc", "back to the form"}}
 	}
-	k := s.form.rowKeys("recognize")
-	if c := s.form.current(); c != nil && c.name == "input" {
+	k := s.form.rowKeys(s.primary())
+	if c := s.form.current(); c != nil && c.name == "input" && !c.locked {
 		k = append(k, keyHelp{"ctrl+o", "pick a file"})
 	}
 	return k
+}
+
+// primary is what enter in a text field does: "recognize", "recognize
+// 3 files".
+func (s *recognizeSection) primary() string {
+	if s.mic() {
+		return "listen"
+	}
+	if n := s.batchCount(); n > 0 {
+		return "recognize " + output.Plural(n, "file")
+	}
+	return "recognize"
+}
+
+// actions are the result's buttons, and Stop while it runs.
+func (s *recognizeSection) actions() []button {
+	if s.browser != nil {
+		return nil
+	}
+	switch s.phase {
+	case "running":
+		return []button{{"Stop", "s", func() tea.Cmd {
+			s.panel.stop()
+			return s.h.setFlash("Stopping…")
+		}}}
+	case "result":
+	default:
+		return nil
+	}
+	link := s.rec.link
+	var b []button
+	switch {
+	case s.panel.res != nil && s.panel.res.err != nil:
+		return nil
+	case s.bs != nil && !s.bs.detail:
+		return nil
+	case s.bs != nil:
+		link = batchLink(s.bs.selected())
+	case s.rec.view != nil && !s.details:
+		b = append(b, button{"Details", "", func() tea.Cmd { s.details, s.dscroll.off = true, 0; return nil }})
+	case s.mic() && s.rec.view == nil:
+		b = append(b, button{"Listen again", "", s.startListen})
+	}
+	if link != "" {
+		b = append(b,
+			button{"Open link", "o", func() tea.Cmd { return s.openLink(link) }},
+			button{"Copy link", "c", func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
+	}
+	if s.mic() && s.rec.view != nil {
+		b = append(b, button{"Listen again", "", s.startListen})
+	}
+	return b
+}
+
+// downExits: ↓ at the end of a result goes to its buttons.
+func (s *recognizeSection) downExits() bool {
+	switch {
+	case s.phase != "result":
+		return s.phase == "running"
+	case s.bs != nil && !s.bs.detail:
+		return s.bs.cursor >= len(s.bs.results)-1
+	case s.details:
+		_, ht := s.h.contentSize()
+		return s.dscroll.off >= len(s.dscroll.lines)-ht+2
+	}
+	return true
+}
+
+func (s *recognizeSection) openLink(link string) tea.Cmd {
+	if err := openURL(link); err != nil {
+		return s.h.setFlash("Could not open the browser: " + err.Error())
+	}
+	return s.h.setFlash("Opened in your browser: " + link)
 }
 
 // validLimit accepts a whole number or the typed word none.
@@ -355,16 +424,23 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 
 // isBatch reports whether the input is a batch (folder, glob), the way
 // audd recognize decides.
-func (s *recognizeSection) isBatch() bool {
+func (s *recognizeSection) isBatch() bool { return s.batchCount() > 0 }
+
+// batchCount is how many files a batch input holds (0 when it is one
+// file or a URL).
+func (s *recognizeSection) batchCount() int {
 	in := s.form.value("input")
 	if in == "" || strings.Contains(in, "://") {
-		return false
+		return 0
 	}
 	inputs, batch, err := media.ExpandInputs([]string{in}, strings.NewReader(""))
 	for _, in := range inputs {
 		in.Cleanup()
 	}
-	return err == nil && batch
+	if err != nil || !batch {
+		return 0
+	}
+	return len(inputs)
 }
 
 // startPlan runs the dry run; with run set the recognition follows.
@@ -432,10 +508,6 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 	}
 	switch s.phase {
 	case "running":
-		if ks == "s" {
-			s.panel.stop()
-			return s.h.setFlash("Stopping…")
-		}
 		return nil
 	case "result":
 		return s.resultKey(ks)
@@ -444,8 +516,18 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		s.browser = newFileBrowser(s.form.value("input"))
 		return nil
 	}
+	ent := s.form.get("enterprise").on
 	act, cmd := s.form.update(k)
 	s.sync()
+	if now := s.form.get("enterprise").on; now != ent {
+		// Say what the box changed.
+		switch {
+		case now:
+			cmd = tea.Batch(cmd, s.h.setFlash("Enterprise on · set a Limit (12-second chunks per file)"))
+		case s.form.value("limit") != "":
+			cmd = tea.Batch(cmd, s.h.setFlash("Enterprise off · Limit no longer needed"))
+		}
+	}
 	switch act {
 	case "recognize":
 		return s.startPlan(true)
@@ -493,7 +575,13 @@ func (s *recognizeSection) finished() tea.Cmd {
 	if s.batch {
 		return nil
 	}
-	s.rec = parseRecognition(parseDoc(res.stdout))
+	doc := parseDoc(res.stdout)
+	s.rec = parseRecognition(doc)
+	if ms := enterpriseMatches(doc); len(ms) > 1 {
+		// Several matches in one file: a list, like a batch.
+		s.bs = &batchState{selectable: true, results: ms, title: output.Plural(len(ms), "match") + " in " + fileName(s.form.value("input"))}
+		return nil
+	}
 	if s.rec.view != nil {
 		return s.h.arts.want(s.h.ctx, *s.rec.view)
 	}
@@ -514,6 +602,10 @@ func (s *recognizeSection) view(w, h int) string {
 		if s.batch && s.bs != nil {
 			if s.panel.pending != nil {
 				return s.panel.view(w, h)
+			}
+			if len(s.bs.results) > 0 {
+				// The results replace the plan.
+				return s.bs.view(st, w, h, true)
 			}
 			return s.planBlock(w) + s.bs.view(st, w, h-strings.Count(s.planBlock(w), "\n"), true)
 		}
@@ -539,7 +631,7 @@ func (s *recognizeSection) view(w, h int) string {
 			b.WriteString(errorText(st, res.err, w))
 			return b.String()
 		}
-		if s.batch && s.bs != nil {
+		if s.bs != nil {
 			return s.batchView(w, h)
 		}
 		if !s.mic() {
@@ -547,12 +639,16 @@ func (s *recognizeSection) view(w, h int) string {
 		}
 		if s.rec.view != nil {
 			v := *s.rec.view
-			text := s.h.cardText(v, s.details, w, h-2)
+			text := s.h.cardText(v, false, w, h-2)
+			if s.details {
+				text = strings.Join(detailFields(v, st.Key), "\n")
+			}
 			lines := strings.Split(text, "\n")
 			for i, l := range lines {
 				// A click on the song link opens it.
 				if s.rec.link != "" && strings.Contains(ansi.Strip(l), s.rec.link) {
-					lines[i] = s.h.mark(l, func() tea.Cmd { return s.resultKey("o") })
+					link := s.rec.link
+					lines[i] = s.h.mark(l, func() tea.Cmd { return s.openLink(link) })
 				}
 			}
 			if s.details {
@@ -609,28 +705,10 @@ func (s *recognizeSection) planBlock(w int) string {
 
 // batchView is a batch's results: a list to move through, or the
 // details of one.
-func (s *recognizeSection) batchView(w, h int) string {
-	st := s.h.st
-	if s.bs.detail {
-		if m := s.bs.selected(); m != nil {
-			ds := detailStyles{title: st.Title.Inherit(st.Accent), dim: st.Dim, key: st.Key}
-			raw, _ := json.Marshal(m["result"])
-			out := st.Dim.Render(truncate(str(m["input"]), w)) + "\n\n" + resultSong(m)
-			if m["result"] != nil {
-				out += "\n\n" + resultDetail(raw, ds)
-			}
-			return out
-		}
-	}
-	return s.bs.listView(st, w, h, func(label string, sel bool) string { return s.h.listRow(label, sel) })
-}
+func (s *recognizeSection) batchView(w, h int) string { return s.h.batchPage(s.bs, w, h) }
 
-// resultKey handles a key on a result.
+// resultKey handles a key on a result: moving, and opening details.
 func (s *recognizeSection) resultKey(ks string) tea.Cmd {
-	link := s.rec.link
-	if s.bs != nil {
-		link = batchLink(s.bs.selected())
-	}
 	switch ks {
 	case "up", "down":
 		_, ht := s.h.contentSize()
@@ -646,31 +724,15 @@ func (s *recognizeSection) resultKey(ks string) tea.Cmd {
 			return s.h.openPaletteLine(res.err.Hint)
 		}
 		switch {
+		case s.bs != nil && s.bs.detail, s.details:
+			return s.h.setFlash("Tab goes to the buttons · esc goes back")
 		case s.bs != nil:
 			s.bs.detail = s.bs.selected() != nil
 		case s.mic() && ks == "enter" && s.rec.view == nil:
 			return s.startListen()
-		case s.details:
-			return s.h.setFlash("This is the whole result · esc goes back")
 		case s.rec.view != nil:
 			s.details, s.dscroll.off = true, 0
 		}
-		return nil
-	case "o":
-		if link == "" {
-			return s.h.setFlash("No link to open")
-		}
-		if err := openURL(link); err != nil {
-			return s.h.setFlash("Could not open the browser: " + err.Error())
-		}
-		return s.h.setFlash("Opened in your browser: " + link)
-	case "c":
-		if link == "" {
-			return s.h.setFlash("No link to copy")
-		}
-		return s.h.copy(link, link)
-	case "backspace":
-		s.back()
 	}
 	return nil
 }
@@ -686,4 +748,33 @@ func (s *recognizeSection) leftExits() bool {
 		return true
 	}
 	return s.form.leftExits()
+}
+
+// enterpriseMatches are the songs of an enterprise result, one line each
+// with where in the file it is, shaped like batch results.
+func enterpriseMatches(doc map[string]any) []map[string]any {
+	chunks, ok := doc["result"].([]any)
+	if !ok {
+		return nil
+	}
+	var out []map[string]any
+	for _, c := range chunks {
+		chunk, _ := c.(map[string]any)
+		songs, isChunk := chunk["songs"].([]any)
+		if !isChunk {
+			songs = []any{chunk}
+		}
+		for _, x := range songs {
+			song, ok := x.(map[string]any)
+			if !ok {
+				continue
+			}
+			at := str(chunk["offset"])
+			if tc := str(song["timecode"]); tc != "" {
+				at = strings.TrimSpace(at + " " + tc)
+			}
+			out = append(out, map[string]any{"input": at, "status": "matched", "result": song})
+		}
+	}
+	return out
 }

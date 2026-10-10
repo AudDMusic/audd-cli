@@ -117,11 +117,12 @@ type navState struct {
 	n      int
 	id     string
 	typing bool
+	btn    bool
 }
 
 func stateOf(h *home) navState {
 	items, _ := h.crumbs()
-	return navState{h.focus, len(items), h.activeID(), h.focus == focusContent && h.active().capturing()}
+	return navState{h.focus, len(items), h.activeID(), h.focus == focusContent && h.active().capturing(), h.btnActive}
 }
 
 // escClimbs presses esc and checks that it went up exactly one level,
@@ -139,8 +140,8 @@ func escClimbs(t *testing.T, h *home, what string) {
 	switch before.focus {
 	case focusContent:
 		ok = after.id == before.id && after.focus == focusContent && after.n == before.n-1 ||
-			// Leaving the field being typed in.
-			before.typing && !after.typing && after.focus == focusContent && after.n == before.n ||
+			// Leaving the field being typed in, or the buttons.
+			(before.typing && !after.typing || before.btn && !after.btn) && after.focus == focusContent && after.n == before.n ||
 			after.id == before.id && tabbed && after.focus == focusTabs && after.n == before.n ||
 			!tabbed && after.focus == focusSidebar
 	case focusTabs:
@@ -266,13 +267,15 @@ func TestEscClimbsFromDeepLevels(t *testing.T) {
 		{"help command details", homeOpts{start: "help"}, []string{"]", "]", "down", "down", "right"}, "Help › Commands › audd docs"},
 		{"help guide search", homeOpts{start: "help"}, []string{"]", "down", "/"}, "Help › Guide › Search"},
 		{"streams add", homeOpts{start: "streams"}, []string{"down", "a"}, "Streams › List › Add a stream"},
-		{"streams plays", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › List › Stream 1 · recent plays"},
+		{"stream page", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › List › Stream 1"},
+		{"stream plays", homeOpts{start: "streams"}, []string{"down", "right", "tab", "enter"}, "Streams › List › Stream 1 · recent plays"},
 		{"recognitions details", homeOpts{start: "recognitions"}, []string{"down", "right"}, "Recognitions › Recent › Details"},
 		{"recognitions job", homeOpts{start: "recognitions"}, []string{"]", "down", "right"}, "Recognitions › Jobs › Job k3x9"},
-		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › token"},
+		{"recognitions job files", homeOpts{start: "recognitions"}, []string{"]", "down", "right", "tab", "enter"}, "Recognitions › Jobs › Job k3x9"},
+		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › format"},
 		{"recognize file picker", homeOpts{start: "recognize"}, []string{"ctrl+o"}, "Recognize › File › Pick a file"},
 		{"recognize microphone", homeOpts{start: "listen"}, nil, "Recognize › Microphone"},
-		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "h"}, "Now playing › Stream 1 › History"},
+		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "tab", "enter"}, "Now playing › Stream 1 › History"},
 		{"sign-in paste", homeOpts{signedOut: true}, []string{"down", "enter"}, "Sign in › Paste an API token"},
 	}
 	for _, c := range cases {
@@ -567,9 +570,9 @@ func TestMouse(t *testing.T) {
 
 	// Settings rows.
 	click(t, h, "6 Settings")
-	click(t, h, "format")
+	click(t, h, "max_requests")
 	set := h.subs["settings"].(*settingsSection)
-	if set.selected().key != "format" || set.edit != nil {
+	if set.selected().key != "max_requests" || set.edit != nil {
 		t.Fatal("click selects a setting")
 	}
 

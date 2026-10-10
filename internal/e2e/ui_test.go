@@ -223,7 +223,7 @@ func TestUIAddAndRemoveStream(t *testing.T) {
 	if st := e.streams.Streams(); len(st) != 1 || st[0].RadioID != 7 || !strings.Contains(s.out.String(), "Added stream 7") {
 		t.Fatalf("streams: %+v", st)
 	}
-	s.press("d")
+	s.press(kEnter, "d") // the stream's page, then Remove (d)
 	s.wait("Remove stream 7?")
 	s.press("y")
 	s.wait("Removed stream 7")
@@ -238,7 +238,7 @@ func TestUIBillingLink(t *testing.T) {
 	s := e.ui("ui", "--section", "account")
 	s.wait("Paid until")
 	s.press("]", "]")
-	s.wait("$450.00/month")
+	s.wait("$450/mo")
 	// Into the plans (Indie is the account's own), down to Startup.
 	s.press(kDown, kDown, kEnter)
 	s.wait("nothing is charged")
@@ -255,7 +255,8 @@ func TestUIRotateToken(t *testing.T) {
 	s.wait("Paid until")
 	s.press("]", "]", "]")
 	s.wait("0123…cdef")
-	s.press(kDown, "g")
+	// The New token… button: tab to the buttons, then →, →, enter.
+	s.press(kDown, "\t", kRight, kRight, kEnter)
 	s.wait("Type rotate")
 	s.typeText("rotate")
 	s.press(kEnter)
@@ -269,9 +270,11 @@ func TestUIEditSetting(t *testing.T) {
 	e := uiEnv(t)
 	s := e.ui("ui", "--section", "settings")
 	s.wait("background_recorder")
-	s.press(kDown, kEnter, kRight, kRight)
+	s.press(kEnter, kRight, kRight)
 	s.wait("audd config set format json")
 	s.press(kEnter)
+	s.wait("Set format to json?")
+	s.press("y")
 	s.wait("Format set to json")
 	s.quit()
 	r := e.ok("config", "get", "format")

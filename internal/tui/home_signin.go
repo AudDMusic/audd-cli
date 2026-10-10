@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/oauth"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
@@ -40,10 +41,25 @@ func newSignin(h *home, heading string) *signinSection {
 	return s
 }
 
-var signinChoices = []struct{ title, help string }{
-	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token."},
-	{"Paste an API token", "Use the API token from your dashboard at https://dashboard.audd.io."},
-	{"Try with the test token", "The public test token: 10 requests a day, standard endpoint only. Nothing is saved."},
+var signinChoices = []struct{ title, help, step string }{
+	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token.", "login"},
+	{"Paste an API token", "Use the API token from your dashboard at https://dashboard.audd.io.", "paste"},
+	{"Try with the test token", "The public test token: 10 requests a day, standard endpoint only. Nothing is saved.", "test"},
+}
+
+// tokenSetChoices are Account's choices when an API token is set but
+// the account is not signed in.
+var tokenSetChoices = []struct{ title, help, step string }{
+	{"Sign in to your account", "Sign in to your AudD account in the browser (or with a code on another device) to see your plan, usage, and billing.", "login"},
+	{"Paste a different token", "Replace the API token of this profile with one from https://dashboard.audd.io.", "paste"},
+}
+
+// choiceList is what the screen offers.
+func (s *signinSection) choiceList() []struct{ title, help, step string } {
+	if s.heading != "" && !s.h.signedOut {
+		return tokenSetChoices
+	}
+	return signinChoices
 }
 
 func (s *signinSection) title() string { return "Sign in" }
@@ -85,10 +101,10 @@ func (s *signinSection) command() string {
 	case "paste":
 		return "audd config set token -"
 	}
-	switch s.choice {
-	case 0:
+	switch s.choiceList()[min(s.choice, s.choices()-1)].step {
+	case "login":
 		return displayCommand(s.loginArgs())
-	case 1:
+	case "paste":
 		return "audd config set token -"
 	}
 	return "audd recognize song.mp3 --token test"
@@ -119,7 +135,7 @@ func (s *signinSection) keysFor(p *cmdPanel) []keyHelp {
 // choices is how many choices the screen offers: the Account section
 // only offers the sign-in (a token alone does not reach the account).
 func (s *signinSection) choices() int {
-	return len(signinChoices)
+	return len(s.choiceList())
 }
 
 func (s *signinSection) update(msg tea.Msg) tea.Cmd {
@@ -158,7 +174,26 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			s.paste.err = ""
-			return s.panel.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
+			save := func() tea.Cmd {
+				return s.panel.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
+			}
+			if s.h.signedOut {
+				return save()
+			}
+			// A token is set: replacing it is asked first.
+			owner := "signin"
+			if s.heading != "" {
+				owner = "account"
+			}
+			return s.h.askFirst(&confirmState{
+				owner:    owner,
+				question: "Replace the API token of profile " + s.h.profileName() + "?",
+				notes:    []string{"New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
+				command:  "audd config set token -",
+				action:   "Replace the token",
+				cancel:   "Cancelled. The token is unchanged.",
+				yes:      save,
+			})
 		}
 		return cmd
 	}
@@ -168,15 +203,16 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 	case "up", "shift+tab":
 		s.choice = (s.choice + s.choices() - 1) % s.choices()
 	case "enter":
-		switch s.choice {
-		case 0:
+		switch s.choiceList()[min(s.choice, s.choices()-1)].step {
+		case "login":
 			s.step = "login"
 			return s.panel.start(runReq{args: s.loginArgs(), format: "jsonl", stream: true})
-		case 1:
+		case "paste":
 			s.step = "paste"
 			s.paste.focusName("token")
+			s.paste.resume()
 			return nil
-		case 2:
+		case "test":
 			return tea.Batch(s.h.signedIn(true), s.h.setFlash("Using the test token: 10 requests a day, standard endpoint only"))
 		}
 	}
@@ -204,15 +240,18 @@ func (s *signinSection) view(w, h int) string {
 		b.WriteString(s.paste.view(w, st, s.h.color))
 		return b.String()
 	}
-	if s.heading != "" {
+	switch {
+	case s.heading != "" && !s.h.signedOut:
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
-		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
-		b.WriteString(output.Wrap("To only recognize music, an API token is enough:", w) + "\n\n")
-	} else {
+		b.WriteString(output.Wrap("An API token is set for profile "+s.h.profileName()+", so audd can recognize music. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
+	case s.heading != "":
+		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
+		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account. To only recognize music, an API token is enough:", w) + "\n\n")
+	default:
 		b.WriteString(st.Bold.Render("Welcome to AudD") + "\n\n")
 		b.WriteString(output.Wrap("Recognize music in files, URLs, and from the microphone, and monitor streams. Choose how audd gets your API token:", w) + "\n\n")
 	}
-	for i, c := range signinChoices[:s.choices()] {
+	for i, c := range s.choiceList() {
 		item := s.h.listRow(c.title, i == s.choice) + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
 		b.WriteString(s.h.mark(item, func() tea.Cmd {
 			// A click opens the choice, as enter does.

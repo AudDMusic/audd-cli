@@ -31,7 +31,7 @@ func (h *home) narrow() bool { return h.w < narrowWidth }
 
 // paneSize is the size of the content pane.
 func (h *home) paneSize() (int, int) {
-	rows := h.h - 3 - len(h.headerLines())
+	rows := h.h - 2 - h.statusRows() - len(h.headerLines())
 	if h.narrow() {
 		rows--
 	}
@@ -45,7 +45,7 @@ func (h *home) paneSize() (int, int) {
 // breadcrumb and the tab bar.
 func (h *home) contentSize() (int, int) {
 	w, ht := h.paneSize()
-	return w, max(1, ht-h.headRowsNow())
+	return w, max(1, ht-h.headRowsNow()-h.actionRowsNow())
 }
 
 func (h *home) View() string {
@@ -75,7 +75,12 @@ func (h *home) View() string {
 	case h.paletteO:
 		body = h.palette.view(cw, bh)
 	default:
-		body = h.active().view(cw, bh)
+		if acts := h.pageActions(); len(acts) > 0 {
+			rows := h.actionRowsNow()
+			body = fit(h.active().view(cw, bh-rows), cw, bh-rows) + "\n\n" + h.buttonsLine(acts, cw)
+		} else {
+			body = h.active().view(cw, bh)
+		}
 	}
 	body = fit(head+"\n"+fit(body, cw, bh), cw, ch)
 	page := strings.Join(h.headerLines(), "\n")
@@ -144,13 +149,28 @@ func (h *home) headerParts() []string {
 	return parts
 }
 
+// statusRows is how many rows the status line takes: two for a long
+// message.
+func (h *home) statusRows() int {
+	if h.flash != "" && ansiWidth(h.flash) > h.w {
+		return 2
+	}
+	return 1
+}
+
 // statusLine says what just happened (until the next key), or shows
 // the first-run tip; a click on the tip hides it.
 func (h *home) statusLine() string {
 	if h.flash != "" {
-		return truncate(h.flash, h.w)
+		// A long message wraps to a second row instead of being cut.
+		lines := strings.Split(output.Wrap(h.flash, h.w), "\n")
+		if len(lines) > 2 {
+			lines[1] = truncate(strings.Join(lines[1:], " "), h.w)
+			lines = lines[:2]
+		}
+		return strings.Join(lines, "\n")
 	}
-	if !h.tip {
+	if !h.tip || h.overlay() {
 		return ""
 	}
 	t := truncate(tipText, h.w)
@@ -217,8 +237,11 @@ func (h *home) sidebar(rows int) string {
 		lines = append(lines, "")
 	}
 	if rows >= 13 {
-		lines[rows-2] = h.st.Dim.Render(" ctrl+k commands")
-		lines[rows-1] = h.st.Dim.Render(" ? keys  q quit")
+		lines[rows-2] = h.mark(h.st.Dim.Render(" ctrl+k commands"), func() tea.Cmd { return h.openPalette("") })
+		lines[rows-1] = h.mark(h.st.Dim.Render(" ? keys"), func() tea.Cmd {
+			h.keysO, h.keysScroll.off = true, 0
+			return nil
+		}) + h.st.Dim.Render("  q quit")
 	}
 	return strings.Join(lines[:rows], "\n")
 }
@@ -290,12 +313,12 @@ var moveKeys = []keyHelp{
 	{"← or esc", "come back one level (in typed text ← moves the cursor)"},
 	{"←/→", "on a tab bar: switch tabs; on a choice: change it"},
 	{"↑", "from the top of a page: back to its tab bar"},
-	{"[ ]", "previous or next tab, from anywhere in the section"},
+	{"[ ]", "previous or next tab, from anywhere in the section outside text fields"},
 }
 
 // globalKeys are the keys that work everywhere.
 var globalKeys = []keyHelp{
-	{"1-7", "jump to a section, from the menu or a tab bar"},
+	{"1-7", "jump to a section (not while typing in a text field)"},
 	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
 	{"y", "copy the command shown at the bottom"},
 	{"?", "keys for this screen"},

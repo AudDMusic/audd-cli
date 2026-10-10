@@ -1,6 +1,6 @@
 AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests left
-                 │ Account › Account
- 1 Recognize     │ >Account< Usage  Billing  API token  Profiles 
+                 │ Account › Overview
+ 1 Recognize     │ >Overview< Usage  Billing  API token  Profiles 
  2 Now playing   │ Account         user@example.com
  3 Streams       │ Plan            Startup, $450.00/month, 100,000 requests inc…
  4 Recognitions  │ Paid until      2026-11-01
@@ -18,7 +18,7 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ 
+ ? keys  q quit  │ [ Refresh (r) ]
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd account                                                            y copy

@@ -138,6 +138,43 @@ func (s *nowPlayingSection) back() bool {
 	return false
 }
 
+// actions are the buttons for the selected stream.
+func (s *nowPlayingSection) actions() []button {
+	if s.np == nil || len(s.np.stations) == 0 {
+		return nil
+	}
+	np := s.np
+	press := func(r rune) func() tea.Cmd {
+		return func() tea.Cmd {
+			_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			return tea.Batch(cmd, s.h.takeOSC(np.takeOSC()))
+		}
+	}
+	var b []button
+	switch {
+	case np.history:
+		b = append(b, button{"Back to the stream", "", press('h')})
+	default:
+		b = append(b, button{"History", "", press('h')})
+	}
+	if cur := np.current(); cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != "" && !np.history {
+		b = append(b, button{"Open link", "o", press('o')}, button{"Copy link", "c", press('c')})
+	}
+	return append(b, button{"Refresh", "r", func() tea.Cmd {
+		_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+		return tea.Batch(cmd, s.h.setFlash("Refreshed"))
+	}})
+}
+
+// downExits: ↓ from the last row of streams goes to the buttons.
+func (s *nowPlayingSection) downExits() bool {
+	if s.np == nil || s.np.single() {
+		return true
+	}
+	c := s.np.gridCols()
+	return s.np.sel+c >= len(s.np.stations)
+}
+
 // crumbs: the stream zoomed into, and its history.
 func (s *nowPlayingSection) crumbs() []string {
 	if s.np == nil || len(s.np.stations) == 0 || !s.np.zoom && !s.np.history {
@@ -182,50 +219,8 @@ func (p *explorerPane) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok && !p.ex.capturing() {
-		// Interactive mode gives each letter one meaning everywhere: r
-		// refreshes, x exports, e edits, d removes, t and f resume a job;
-		// whatever changes something asks first.
-		l := p.ex.top()
-		kind := ""
-		if l != nil {
-			kind = l.kind
-		}
-		switch k.String() {
-		case "enter":
-			if l != nil && l.detail {
-				return p.h.setFlash("Esc goes back to the list")
-			}
-		case "x":
-			return p.askExport()
-		case "e":
-			if kind == "streams" && l.selected() != nil {
-				return p.startEditURL()
-			}
-			return p.h.noop("e")
-		case "r":
-			if p.ex.tab == tabUsage {
-				return p.ex.load(tabUsage, nil)
-			}
-			if l != nil {
-				return p.ex.load(p.ex.tab, l)
-			}
-			return nil
-		case "t", "f":
-			if kind == "jobs" || kind == "items" {
-				return p.ex.resumeJob(l, k.String() == "f")
-			}
-			return p.h.noop(k.String())
-		case "c":
-			if kind == "jobs" {
-				if j := p.ex.jobOf(l); j != nil {
-					return p.h.copy(jobCommand(j.Command), "the command")
-				}
-				return nil
-			}
-		case "d":
-			if kind == "streams" {
-				return p.askRemove()
-			}
+		if l := p.ex.top(); k.String() == "enter" && l != nil && l.detail {
+			return p.h.setFlash("Tab goes to this page's buttons · esc goes back to the list")
 		}
 	}
 	_, cmd := p.ex.Update(msg)
@@ -280,6 +275,109 @@ func (p *explorerPane) back() bool {
 		return true
 	}
 	return false
+}
+
+// actions are the buttons for what the pane shows: a list, or the page
+// of one row (a stream, a job, a song).
+func (p *explorerPane) actions() []button {
+	if p.ex == nil || p.ex.capturing() {
+		return nil
+	}
+	ex := p.ex
+	refresh := button{"Refresh", "r", func() tea.Cmd {
+		if ex.tab == tabUsage {
+			return tea.Batch(ex.load(tabUsage, nil), p.h.setFlash("Refreshed"))
+		}
+		if l := ex.top(); l != nil {
+			return tea.Batch(ex.load(ex.tab, l), p.h.setFlash("Refreshed"))
+		}
+		return nil
+	}}
+	export := button{"Export", "x", p.askExport}
+	if ex.tab == tabUsage {
+		return []button{refresh, export}
+	}
+	l := ex.top()
+	if l == nil {
+		return nil
+	}
+	r := l.selected()
+	jobButtons := func(j *JobRow, jl *level) []button {
+		var b []button
+		if j == nil {
+			return b
+		}
+		if j.Status != "done" && j.Done < j.Total {
+			b = append(b, button{"Resume", "", func() tea.Cmd { return ex.resumeJob(jl, false) }})
+		}
+		if j.Failed > 0 {
+			b = append(b, button{"Retry failed files", "", func() tea.Cmd { return ex.resumeJob(jl, true) }})
+		}
+		return b
+	}
+	if l.detail && r != nil {
+		var b []button
+		switch l.kind {
+		case "streams":
+			b = append(b,
+				button{"History", "", func() tea.Cmd { return ex.drill(l, r) }},
+				button{"Edit URL", "e", p.startEditURL},
+				button{"Remove", "d", p.askRemove})
+		case "jobs":
+			j := ex.jobOf(l)
+			b = append(b, button{"Files", "", func() tea.Cmd { return ex.drill(l, r) }})
+			b = append(b, jobButtons(j, l)...)
+			if j != nil {
+				cmd := jobCommand(j.Command)
+				b = append(b, button{"Copy the batch command", "c", func() tea.Cmd { return p.h.copy(cmd, "the batch command: "+cmd) }})
+			}
+			return b
+		}
+		if r.link != "" {
+			b = append(b,
+				button{"Open link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
+				button{"Copy link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
+		}
+		if r.copies["i"] != "" {
+			b = append(b, button{"Copy ISRC", "i", func() tea.Cmd { return ex.rowAction("i", r) }})
+		}
+		if r.copies["u"] != "" {
+			b = append(b, button{"Copy UPC", "u", func() tea.Cmd { return ex.rowAction("u", r) }})
+		}
+		return b
+	}
+	var b []button
+	switch l.kind {
+	case "streams":
+		b = append(b, button{"Add a stream", "a", func() tea.Cmd { return p.onAdd() }})
+	case "items":
+		b = append(b, jobButtons(ex.jobOf(l), l)...)
+	}
+	return append(b, refresh, export)
+}
+
+// onAdd opens the add form of the section the pane is in (Streams).
+func (p *explorerPane) onAdd() tea.Cmd {
+	if s, ok := p.h.subs["streams"].(*streamsSection); ok && s.pane == p {
+		s.openAdd()
+	}
+	return nil
+}
+
+// downExits: ↓ on the last row (or the end of a page) goes to the
+// buttons.
+func (p *explorerPane) downExits() bool {
+	if p.ex == nil {
+		return true
+	}
+	l := p.ex.top()
+	if l == nil || p.ex.tab == tabUsage {
+		return true
+	}
+	if l.detail {
+		return true
+	}
+	return l.cursor >= len(l.visible())-1
 }
 
 // askExport asks which format to export the list in.
@@ -338,6 +436,7 @@ func (p *explorerPane) askSetURL(id int, url string) tea.Cmd {
 	return p.h.askFirst(&confirmState{
 		owner:    p.owner(),
 		question: fmt.Sprintf("Change the URL of stream %d?", id),
+		action:   "Change the URL",
 		notes:    []string{"Now: " + old, "New: " + url, "AudD starts monitoring the new URL; results so far stay."},
 		command:  displayCommand([]string{"streams", "set-url", key, url}),
 		cancel:   "Cancelled. Nothing was changed.",
@@ -371,6 +470,7 @@ func (p *explorerPane) askRemove() tea.Cmd {
 	return p.h.askFirst(&confirmState{
 		owner:    p.owner(),
 		question: fmt.Sprintf("Remove stream %d?", id),
+		action:   "Remove stream",
 		notes:    []string{"URL: " + p.streamURL(r.key), "AudD stops monitoring it; its stored results stay on this computer."},
 		command:  fmt.Sprintf("audd streams remove %d", id),
 		cancel:   fmt.Sprintf("Kept stream %d", id),
@@ -471,6 +571,25 @@ func (s *historySection) selectTab(i int) tea.Cmd {
 	return s.pane.ex.switchTab(s.pane.ex.allowed[i])
 }
 
+// actions: Stop while a job resumes, the links of a file's result, or
+// the list's buttons.
+func (s *historySection) actions() []button {
+	if s.resume {
+		if s.panel.running {
+			return []button{{"Stop", "s", func() tea.Cmd { s.panel.stop(); return s.h.setFlash("Stopping…") }}}
+		}
+		return s.h.batchButtons(s.bs)
+	}
+	return s.pane.actions()
+}
+
+func (s *historySection) downExits() bool {
+	if s.resume {
+		return s.panel.running || s.bs.detail || s.bs.cursor >= len(s.bs.results)-1
+	}
+	return s.pane.downExits()
+}
+
 func (s *historySection) upExits() bool { return !s.resume && s.pane.upExits() }
 
 func (s *historySection) crumbs() []string {
@@ -494,7 +613,7 @@ func (s *historySection) startResume(id string, retry bool) tea.Cmd {
 		s.runArgs = append(s.runArgs, "--retry-failed")
 	}
 	s.resume = true
-	s.bs = &batchState{jobID: id}
+	s.bs = &batchState{jobID: id, selectable: true}
 	return s.panel.start(runReq{args: s.runArgs, format: "jsonl", stream: true, spends: true})
 }
 
@@ -509,13 +628,19 @@ func (s *historySection) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if k, ok := msg.(tea.KeyMsg); ok && s.resume {
+		if s.panel.running {
+			return nil
+		}
 		switch k.String() {
-		case "s":
-			s.panel.stop()
-		case "esc", "backspace", "enter":
-			if !s.panel.running {
-				s.resume = false
+		case "up":
+			s.bs.move(-1)
+		case "down":
+			s.bs.move(1)
+		case "enter", "right":
+			if s.bs.detail {
+				return s.h.setFlash("Tab goes to the buttons · esc goes back")
 			}
+			s.bs.detail = s.bs.selected() != nil
 		}
 		return nil
 	}
@@ -529,6 +654,9 @@ func (s *historySection) view(w, h int) string {
 			return s.panel.view(w, h)
 		}
 		out := s.bs.view(st, w, h-3, s.panel.running)
+		if !s.panel.running {
+			out = s.h.batchPage(s.bs, w, h-3)
+		}
 		if !s.panel.running && s.panel.res != nil && s.panel.res.err != nil {
 			out += "\n\n" + errorText(st, s.panel.res.err, w)
 		}
@@ -539,10 +667,13 @@ func (s *historySection) view(w, h int) string {
 
 func (s *historySection) keys() []keyHelp {
 	if s.resume {
-		if s.panel.running {
-			return []keyHelp{{"s", "stop"}}
+		switch {
+		case s.panel.running:
+			return nil
+		case s.bs.detail:
+			return []keyHelp{{"esc", "back to the files"}}
 		}
-		return []keyHelp{{"esc", "back to the jobs"}}
+		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "details"}, {"esc", "back to the jobs"}}
 	}
 	return s.pane.keys()
 }
@@ -571,10 +702,14 @@ func (s *historySection) capturing() bool { return !s.resume && s.pane.capturing
 // resume runs it stays (s stops it), and esc goes to the tab bar.
 func (s *historySection) back() bool {
 	if s.resume {
-		if s.panel.running {
+		switch {
+		case s.panel.running:
 			return false
+		case s.bs.detail:
+			s.bs.detail = false
+		default:
+			s.resume = false
 		}
-		s.resume = false
 		return true
 	}
 	return s.pane.back()
@@ -638,11 +773,12 @@ func newStreamsSection(h *home) section {
 	since := textField("since", "Since", `How far back: 24h, 7d, 30d, a date, or "all"`)
 	since.setValue("7d")
 	since.placeholder = "e.g. 30d"
+	since.validate = validSince
 	sid := &field{kind: fInt, name: "id", label: "Stream ID", help: "Only this stream (empty: all)", input: newInput()}
 	sid.placeholder = "all streams"
 	by := enumField("by", "Group by", "report: group by song, artist, label, or station", []string{"song", "artist", "label", "station"})
 	format := enumField("format", "File format", "export: CSV (opens in a spreadsheet) or JSON lines", []string{"csv", "jsonl"})
-	file := textField("file", "File name", "export: the file to write, in "+exportDirShown())
+	file := textField("file", "File name", "export: the file to write, in the folder shown below")
 	s.dataForm = newForm(kind, since, sid, by, format, file, buttonField("run", "Run"))
 	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
 	s.cbForm.get("placeholder").novalidate = true
@@ -695,6 +831,17 @@ func (s *streamsSection) openAdd() {
 	s.page = 0
 	s.adding = true
 	s.add.focusName("url")
+	s.add.resume()
+	// Suggest the next free ID.
+	next := 1
+	if s.pane.ex != nil && len(s.pane.ex.tabs[tabStreams]) > 0 {
+		for _, r := range s.pane.ex.tabs[tabStreams][0].rows {
+			if n, err := strconv.Atoi(r.key); err == nil && n >= next {
+				next = n + 1
+			}
+		}
+	}
+	s.add.get("id").placeholder = "e.g. " + strconv.Itoa(next)
 }
 
 func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
@@ -736,6 +883,7 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			}
 		}
 		if done && s.cbPanel.run.req.tag == "set" && s.cbPanel.res.ok() {
+			s.cbForm.get("url").locked = true
 			return tea.Batch(s.h.setFlash("Callback URL set to "+s.cbForm.value("url")+", "+dataWords(s.returnSet())), s.getCallback())
 		}
 		return nil
@@ -746,8 +894,12 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		}
 		switch s.recPanel.args[2] {
 		case "start", "stop":
-			// Show the state it is in now.
-			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
+			// Say so, and show the state it is in now.
+			msg := map[string]string{"start": "Started", "stop": "Stopped"}[s.recPanel.args[2]]
+			if !s.recPanel.res.ok() {
+				msg = "Could not " + s.recPanel.args[2] + " the recorder"
+			}
+			return tea.Batch(s.h.setFlash(msg), s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"}))
 		case "status":
 			s.recRunning = ""
 			if s.recPanel.res.ok() {
@@ -808,41 +960,9 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		}
 		return cmd
 	case 2:
-		switch ks {
-		case "enter":
-			if s.recRunning == "yes" {
-				return s.h.setFlash("The recorder is running already")
-			}
-			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})
-		case "s":
-			return s.h.askFirst(&confirmState{
-				owner:    "streams",
-				question: "Stop the background recorder?",
-				notes:    []string{"Stream results stop being saved on this computer until it starts again."},
-				command:  "audd streams recorder stop",
-				cancel:   "The recorder keeps running",
-				yes: func() tea.Cmd {
-					return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
-				},
-			})
-		case "r":
-			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
-		}
 		_, ht := s.h.contentSize()
 		return s.recPanel.key(k, ht)
 	case 3:
-		if s.exportTo != "" && !s.dataForm.capturing() {
-			switch ks {
-			case "o":
-				dir := filepath.Dir(s.exportTo)
-				if err := openURL(dir); err != nil {
-					return s.h.setFlash("Could not open the folder: " + err.Error())
-				}
-				return s.h.setFlash("Opened " + dir)
-			case "c":
-				return s.h.copy(s.exportTo, "the path")
-			}
-		}
 		act, cmd := s.dataForm.update(k)
 		s.syncData()
 		if act == "run" {
@@ -859,6 +979,7 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 					return s.h.askFirst(&confirmState{
 						owner:    "streams",
 						question: "Replace " + filepath.Base(path) + "?",
+						action:   "Replace the file",
 						notes:    []string{"The file exists in " + filepath.Dir(path) + "; the export is written over it."},
 						command:  s.command(),
 						cancel:   "Cancelled. Nothing was written.",
@@ -886,6 +1007,7 @@ func (s *streamsSection) askCallback() tea.Cmd {
 	return s.h.askFirst(&confirmState{
 		owner:    "streams",
 		question: "Change the callback URL?",
+		action:   "Change the callback URL",
 		notes: []string{
 			"Now: " + old,
 			"New: " + s.cbForm.value("url") + ", " + dataWords(s.returnSet()),
@@ -907,6 +1029,7 @@ func (s *streamsSection) askReplace(old string) tea.Cmd {
 	return s.h.askFirst(&confirmState{
 		owner:    "streams",
 		question: fmt.Sprintf("Stream %s exists already. Change its URL instead?", id),
+		action:   "Change its URL",
 		notes:    []string{"Now: " + old, "New: " + url, "Or press n and choose another ID for a new stream."},
 		command:  displayCommand(args),
 		cancel:   "Nothing changed; choose another ID",
@@ -1087,7 +1210,13 @@ func exportDirShown() string {
 // has the keys.
 func (s *streamsSection) formView(f *form, w int) string {
 	v := f.view(w, s.h.st, s.h.color)
-	if !s.h.pageHasKeys() {
+	empty := true
+	for _, x := range f.visible() {
+		if x.isText() && x.value() != "" {
+			empty = false
+		}
+	}
+	if !s.h.pageHasKeys() && empty {
 		v += "\n" + s.h.st.Dim.Render("Press ↓ or enter to fill this in.")
 	}
 	return v
@@ -1166,7 +1295,7 @@ func (s *streamsSection) view(w, h int) string {
 	}
 	formView := s.formView(s.dataForm, w)
 	if s.dataForm.value("kind") == "export" {
-		formView += "\n" + st.Dim.Render(truncate("Folder: "+exportDirShown(), w))
+		formView += "\n" + st.Dim.Render("Folder: "+shortPath(exportDirShown(), w-8))
 	}
 	used := strings.Count(formView, "\n") + 2
 	out := bar + formView
@@ -1184,13 +1313,82 @@ func (s *streamsSection) view(w, h int) string {
 			n-- // the header row
 		}
 		if s.exportTo != "" {
-			out += "\n\n" + output.Wrap(fmt.Sprintf("Wrote %s to %s", output.Plural(n, "play"), s.exportTo), w) +
-				"\n" + st.Dim.Render("o opens the folder, c copies the path.")
+			// The folder is shown above: the file name is enough here.
+			out += "\n\n" + output.Wrap(fmt.Sprintf("Wrote %s to %s.", output.Plural(n, "play"), filepath.Base(s.exportTo)), w)
 		}
 	case s.dataPanel.res != nil:
 		out += "\n\n" + st.Bold.Render(s.dataTitle()) + "\n" + s.dataPanel.view(w, max(1, h-used-2))
 	}
 	return out
+}
+
+// actions are the buttons of the page: the list's or a stream's, the
+// recorder's, an export's.
+func (s *streamsSection) actions() []button {
+	switch s.page {
+	case 0:
+		if s.adding {
+			return nil
+		}
+		return s.pane.actions()
+	case 2:
+		refresh := button{"Refresh", "r", func() tea.Cmd {
+			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
+		}}
+		switch s.recRunning {
+		case "yes":
+			return []button{{"Stop", "", s.askStopRecorder}, refresh}
+		case "no":
+			return []button{{"Start", "", func() tea.Cmd {
+				return s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})
+			}}, refresh}
+		}
+		return []button{refresh}
+	case 3:
+		if s.exportTo != "" && s.dataPanel.res != nil && !s.dataPanel.running {
+			path := s.exportTo
+			return []button{
+				{"Open folder", "o", func() tea.Cmd {
+					dir := filepath.Dir(path)
+					if err := openURL(dir); err != nil {
+						return s.h.setFlash("Could not open the folder: " + err.Error())
+					}
+					return s.h.setFlash("Opened " + shortPath(dir, 60))
+				}},
+				{"Copy path", "c", func() tea.Cmd { return s.h.copy(path, "the path "+shortPath(path, 50)) }},
+			}
+		}
+	}
+	return nil
+}
+
+// askStopRecorder asks before stopping the recorder.
+func (s *streamsSection) askStopRecorder() tea.Cmd {
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Stop the background recorder?",
+		notes:    []string{"Stream results stop being saved on this computer until it starts again."},
+		command:  "audd streams recorder stop",
+		action:   "Stop the recorder",
+		cancel:   "The recorder keeps running",
+		yes: func() tea.Cmd {
+			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
+		},
+	})
+}
+
+// downExits: ↓ at the end of the list goes to the buttons; the forms
+// have their own.
+func (s *streamsSection) downExits() bool {
+	switch s.page {
+	case 0:
+		return !s.adding && s.pane.downExits()
+	case 2:
+		return true
+	case 3:
+		return !s.dataForm.capturing() && s.dataForm.cursor == len(s.dataForm.visible())-1
+	}
+	return false
 }
 
 func (s *streamsSection) keys() []keyHelp {
@@ -1203,16 +1401,7 @@ func (s *streamsSection) keys() []keyHelp {
 	case 1:
 		return s.cbForm.rowKeys("set")
 	case 2:
-		switch s.recRunning {
-		case "yes":
-			return []keyHelp{{"s", "stop"}, {"r", "refresh"}}
-		case "no":
-			return []keyHelp{{"enter", "start"}, {"r", "refresh"}}
-		}
-		return []keyHelp{{"r", "refresh"}}
-	}
-	if s.exportTo != "" && s.dataPanel.res != nil {
-		return append(s.dataForm.rowKeys("run"), keyHelp{"o", "open folder"}, keyHelp{"c", "copy path"})
+		return nil
 	}
 	return append(s.dataForm.rowKeys("run"), keyHelp{"pgdn/pgup", "scroll the results"})
 }
@@ -1376,7 +1565,17 @@ func (p *explorerPane) crumbs() []string {
 		}
 	}
 	if l := p.ex.top(); l != nil && l.detail {
-		out = append(out, "Details")
+		// The page of a stream or a job is named for it.
+		name := "Details"
+		if r := l.selected(); r != nil {
+			switch l.kind {
+			case "streams":
+				name = "Stream " + r.key
+			case "jobs":
+				name = "Job " + r.key
+			}
+		}
+		out = append(out, name)
 	}
 	return out
 }
@@ -1405,4 +1604,38 @@ func (s *historySection) wheel(dir int) tea.Cmd {
 		return nil
 	}
 	return s.pane.wheel(dir)
+}
+
+// shortPath shortens a path to w cells in the middle, keeping the file
+// name and its folder: "…/exp/weekly-plays.csv".
+func shortPath(p string, w int) string {
+	if len([]rune(p)) <= w {
+		return p
+	}
+	sep := string(filepath.Separator)
+	parts := strings.Split(p, sep)
+	for keep := min(len(parts)-1, 3); keep >= 1; keep-- {
+		s := "…" + sep + strings.Join(parts[len(parts)-keep:], sep)
+		if len([]rune(s)) <= w || keep == 1 {
+			return s
+		}
+	}
+	return p
+}
+
+// validSince checks how far back History & reports looks: 24h, 7d, a
+// date, or all.
+func validSince(v string) string {
+	if v == "" || v == "all" {
+		return ""
+	}
+	if n := len(v); n > 1 && strings.ContainsRune("hdw", rune(v[n-1])) {
+		if _, err := strconv.Atoi(v[:n-1]); err == nil {
+			return ""
+		}
+	}
+	if _, err := time.Parse("2006-01-02", v); err == nil {
+		return ""
+	}
+	return v + " is not a time span: use 24h, 7d, 30d, a date like 2026-10-01, or all"
 }

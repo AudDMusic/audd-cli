@@ -1,21 +1,21 @@
 AudD  ·  profile default
-                 │ Account › Account
- 1 Recognize     │ >Account< Usage  Billing  API token  Profiles 
+                 │ Account › Overview
+ 1 Recognize     │ >Overview< Usage  Billing  API token  Profiles 
  2 Now playing   │ Sign in to see this
  3 Streams       │ 
- 4 Recognitions  │ Your account, usage, and billing need a sign-in to your AudD account.
-*5 Account       > 
- 6 Settings      │ To only recognize music, an API token is enough:
- 7 Help          │ 
-                 │ · Sign in
-                 │     Sign in to your AudD account in the browser (or with a code on another device). audd saves your
-                 │     API token.
+ 4 Recognitions  │ An API token is set for profile default, so audd can recognize music. Your account, usage, and
+*5 Account       > billing need a sign-in to your AudD account.
+ 6 Settings      │ 
+ 7 Help          │ · Sign in to your account
+                 │     Sign in to your AudD account in the browser (or with a code on another device) to see your plan,
+                 │     usage, and billing.
                  │ 
-                 │   Paste an API token
-                 │     Use the API token from your dashboard at https://dashboard.audd.io.
+                 │   Paste a different token
+                 │     Replace the API token of this profile with one from https://dashboard.audd.io.
                  │ 
-                 │   Try with the test token
-                 │     The public test token: 10 requests a day, standard endpoint only. Nothing is saved.
+                 │ 
+                 │ 
+                 │ 
                  │ 
                  │ 
                  │ 

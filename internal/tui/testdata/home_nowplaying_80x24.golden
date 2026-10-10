@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Now playing
- 1 Recognize     │ Now playing                                    1 of 3 streams
+ 1 Recognize     │                                                1 of 3 streams
 *2 Now playing   > 
  3 Streams       │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
  4 Recognitions  │ ┃ Stream 1                                                  ┃
@@ -10,15 +10,15 @@ AudD  ·  profile default
                  │ ┃ Warriors (album) · Label · 2019                           ┃
                  │ ┃ played 2:50                                               ┃
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-                 │ ╭───────────────────────────────────────────────────────────╮
-                 │ │ Stream 2                                                  │
-                 │ │ LAST PLAYED · ended 21 min ago                            │
-                 │ │ Feeling Good                                              │
-                 │ │ Nina Simone                                               │
-                 │ │ Feeling Good (album) · Label · 2019                       │
-                 │ │ played 3:50                                               │
- ctrl+k commands │ ↓ 1 more streams
- ? keys  q quit  │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ ↓ 2 more streams below
+                 │ 
+                 │ 
+ ctrl+k commands │ [ History ]  [ Open link (o) ]  [ Copy link (c) ]
+ ? keys  q quit  │ [ Refresh (r) ]
 
-←/→/↑/↓ select  enter zoom in  ←/esc back  h history  o open link  ? keys
+←/→/↑/↓ select  enter zoom in  esc back  tab buttons  ? keys
 $ audd now-playing                                                        y copy

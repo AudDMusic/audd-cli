@@ -67,6 +67,9 @@ func (m *npModel) bodyHeight() int {
 
 func (m *npModel) headerLine() string {
 	left := m.st.Bold.Render("Now playing")
+	if m.embedded {
+		left = "" // the path at the top names the screen
+	}
 	right := ""
 	if len(m.stations) > 1 {
 		right = m.st.Dim.Render(fmt.Sprintf("%d of %d streams", m.sel+1, len(m.stations)))
@@ -337,8 +340,17 @@ func (m *npModel) gridView(h int) string {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cards...))
 	}
 	out := strings.Join(rows, "\n")
-	if hidden := len(m.stations) - min(len(m.stations), (firstRow+visibleRows)*cols); hidden > 0 && m.embedded {
-		out = fit(out, m.w, max(1, h-1)) + "\n" + m.st.Dim.Render(fmt.Sprintf("↓ %d more streams", hidden))
+	below := len(m.stations) - min(len(m.stations), (firstRow+visibleRows)*cols)
+	above := firstRow * cols
+	if (below > 0 || above > 0) && m.embedded {
+		var marks []string
+		if above > 0 {
+			marks = append(marks, "↑ "+plural(above, "more stream")+" above")
+		}
+		if below > 0 {
+			marks = append(marks, "↓ "+plural(below, "more stream")+" below")
+		}
+		out = fit(out, m.w, max(1, h-1)) + "\n" + m.st.Dim.Render(strings.Join(marks, " · "))
 	}
 	return out
 }
@@ -346,24 +358,16 @@ func (m *npModel) gridView(h int) string {
 // embeddedKeys are the hints in interactive mode, for the view shown:
 // the grid, one stream, or its history.
 func (m *npModel) embeddedKeys() []string {
-	var keys []string
-	cur := m.current()
-	link := cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != ""
 	switch {
 	case m.history:
-		keys = []string{"h back to the stream"}
+		return nil
 	case m.single():
 		if len(m.stations) > 1 {
-			keys = append(keys, "←/→ previous, next stream", "enter all streams")
+			return []string{"←/→ previous, next stream", "enter all streams"}
 		}
-		keys = append(keys, "h history")
-	default:
-		keys = []string{"←/→/↑/↓ select", "enter zoom in", "h history"}
+		return nil
 	}
-	if link && !m.history {
-		keys = append(keys, "o open link", "c copy link")
-	}
-	return append(keys, "r refresh")
+	return []string{"←/→/↑/↓ select", "enter zoom in"}
 }
 
 func (m *npModel) gridCard(i, w int) string {
@@ -481,4 +485,12 @@ func oscCopy(s string) string {
 	var b strings.Builder
 	copyOSC52(&b, s)
 	return b.String()
+}
+
+// plural is "1 more stream", "3 more streams".
+func plural(n int, what string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, what)
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }

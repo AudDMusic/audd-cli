@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Now playing
- 1 Recognize     │ Error: there are no streams on this account
+ 1 Recognize     │ Error: There are no streams on this account
 *2 Now playing   > Try: audd streams add <url> --id 1
  3 Streams       │ Press enter to open it.
  4 Recognitions  │ 

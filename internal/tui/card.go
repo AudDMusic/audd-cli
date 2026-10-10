@@ -193,3 +193,25 @@ func providerLinks(extra map[string]any) [][2]string {
 	}
 	return out
 }
+
+// detailFields are a song's details, each with its label (Title,
+// Artist, Album, …), for the details pages of interactive mode.
+func detailFields(r app.ResultView, key lipgloss.Style) []string {
+	rows := [][2]string{{"Title", r.Title}, {"Artist", r.Artist}, {"Album", r.Album}, {"Label", r.Label},
+		{"Released", r.ReleaseDate}, {"ISRC", r.ISRC}, {"UPC", r.UPC}, {"Timecode", r.Timecode}}
+	if r.Score > 0 {
+		rows = append(rows, [2]string{"Score", fmt.Sprint(r.Score)})
+	}
+	rows = append(rows, [2]string{"Link", r.SongLink})
+	rows = append(rows, providerLinks(r.Extra)...)
+	var lines []string
+	for _, kv := range rows {
+		if kv[1] != "" {
+			lines = append(lines, key.Render(fmt.Sprintf("%-12s", kv[0]))+kv[1])
+		}
+	}
+	if r.Cached {
+		lines = append(lines, "", "Cached result, no request used")
+	}
+	return lines
+}

@@ -5,19 +5,22 @@ AudD  ·  profile default
  3 Streams       │   Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
  4 Recognitions  │   The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page.
  5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a
- 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it. A key works only
-*7 Help          >   where it is listed (at the bottom, or here); any other key says it does nothing. Questions take y
-                 │   to confirm, n or esc to cancel; enter alone never confirms.
+ 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it. What a page can do is
+*7 Help          >   on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between them, enter
+                 │   presses one. A letter on a button, such as (o), presses it from anywhere on the page. A key works
+                 │   only where it is listed; any other key says it does nothing. A question is a dialog with Cancel
+                 │   first: enter presses the focused button, y confirms, n or esc cancels. 1-7 jump to a section except
+                 │   while you type in a field.
                  │ 
                  │   ↑/↓            move in the menu, a list, or a form
                  │   → or enter     go in: open the section, the page, the selected item
                  │   ← or esc       come back one level (in typed text ← moves the cursor)
                  │   ←/→            on a tab bar: switch tabs; on a choice: change it
                  │   ↑              from the top of a page: back to its tab bar
-                 │   [ ]            previous or next tab, from anywhere in the section
+                 │   [ ]            previous or next tab, from anywhere in the section outside text fields
                  │ 
                  │ Everywhere
-                 │   1-7            jump to a section, from the menu or a tab bar
+                 │   1-7            jump to a section (not while typing in a text field)
                  │   ctrl+k or :    run any command; ctrl+k again closes it
                  │   y              copy the command shown at the bottom
                  │   ?              keys for this screen
@@ -27,14 +30,11 @@ AudD  ·  profile default
                  │   ctrl+u         clear the field being typed in
                  │   click, wheel   select or press; scroll
                  │ 
-                 │ Letters
+                 │ Letters on buttons
                  │   a              add
-                 │   b              buy requests
-                 │   c              copy (a link, a path, a command, the token)
-                 │   d              remove or unset, after asking
-                 │   e              edit
- ctrl+k commands │   f              resume a job, retrying failed files
- ? keys  q quit  │ ↓ 98 more lines below
+                 │   c              copy what the button names (a link, a path, a command, the token)
+ ctrl+k commands │   d              remove or unset, after asking
+ ? keys  q quit  │ ↓ 63 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

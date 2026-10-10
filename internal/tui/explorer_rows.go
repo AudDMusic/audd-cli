@@ -124,7 +124,7 @@ func singleView(raw json.RawMessage) *app.ResultView {
 func resultDetail(raw json.RawMessage, st detailStyles) string {
 	if _, matches, single := resultSummary(raw); single {
 		v, length, _ := ViewFromJSON(raw)
-		lines := cardLines(v, true, st.title, st.dim, st.key)
+		lines := detailFields(v, st.key)
 		if length > 0 {
 			lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Length"))+clock(length))
 		}
@@ -181,6 +181,15 @@ func jobRows(jobs []JobRow) []row {
 	for _, j := range jobs {
 		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), strings.Join(j.Command, " "))
 		r.data = j
+		j := j
+		r.detail = func(st detailStyles) string {
+			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
+			return st.title.Render("Job "+j.ID) + "\n\n" +
+				field("Status", j.Status) +
+				field("Done", fmt.Sprintf("%d of %d files, %d failed", j.Done, j.Total, j.Failed)) +
+				field("Created", when(j.Created)) +
+				field("Command", jobCommand(j.Command))
+		}
 		rows = append(rows, r)
 	}
 	return rows
@@ -194,7 +203,7 @@ func jobItemRows(items []JobItem) []row {
 		res := ""
 		switch {
 		case it.Err != "":
-			res = "Error: " + it.Err
+			res = "Error: " + capFirst(it.Err)
 		case len(it.Result) > 0:
 			res, _, _ = resultSummary(it.Result)
 		}
@@ -252,6 +261,16 @@ func streamRows(data []stationData, now time.Time) []row {
 		}
 		r := newRow(fmt.Sprint(d.RadioID), fmt.Sprint(d.RadioID), d.healthShort(), song, since, d.URL)
 		r.link = link
+		d, song, since := d, song, since
+		r.detail = func(st detailStyles) string {
+			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
+			out := st.title.Render(fmt.Sprintf("Stream %d", d.RadioID)) + "\n\n" +
+				field("URL", d.URL) + field("Health", d.HealthText())
+			if h := d.healthHint(); h != "" {
+				out += field("", h)
+			}
+			return out + field("Latest", song+"  "+st.dim.Render(since))
+		}
 		r.hint = d.healthHint()
 		r.data = stationDoc(d, now)
 		rows = append(rows, r)

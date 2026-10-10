@@ -156,8 +156,13 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 		if s == "ctrl+k" {
-			// ctrl+k closes the palette as it opened it; the keys are
-			// back where they were.
+			// ctrl+k in a command's form goes back to the list; on the
+			// list it closes the palette, and the keys are back where
+			// they were.
+			if h.palette.phase != "list" {
+				h.palette.phase = "list"
+				return nil
+			}
 			h.paletteO = false
 			return nil
 		}
@@ -302,6 +307,25 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
 	cur := h.active()
 	typing := cur.capturing()
+	acts := h.pageActions()
+	if len(acts) == 0 {
+		h.btnActive = false
+	}
+	if h.btnActive && !typing {
+		if cmd, ok := h.buttonKey(s, acts); ok {
+			return cmd
+		}
+	}
+	if !typing && len(acts) > 0 {
+		if cmd, ok := h.accelerator(s, acts); ok {
+			return cmd
+		}
+		d, isD := cur.(downExiter)
+		if s == "tab" || s == "down" && isD && d.downExits() {
+			h.btnActive, h.btnCur = true, 0
+			return nil
+		}
+	}
 	if s == "esc" || s == "left" && leftExits(cur) {
 		return h.backOne()
 	}
@@ -311,9 +335,6 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	}
 	if typing {
 		return h.send(h.activeID(), k)
-	}
-	if len(s) == 1 && s >= "1" && s <= "7" {
-		return h.setFlash(s + " jumps to a section from the menu or a tab bar")
 	}
 	if cmd, ok := h.globalKey(s); ok {
 		return cmd
@@ -395,6 +416,9 @@ var navKeys = map[string]bool{
 // first of them; ? shows them all).
 func (h *home) sectionKnows(s string) bool {
 	if navKeys[s] {
+		return true
+	}
+	if listed(actionKeys(h.pageActions()), s) {
 		return true
 	}
 	return listed(h.active().keys(), s)
@@ -650,9 +674,9 @@ func (h *home) footer() []keyHelp {
 	case h.ask != nil && h.ask.typed != "":
 		return []keyHelp{{"type", h.ask.typed}, {"enter", "confirm"}, {"esc", "cancel"}}
 	case h.confirm != nil && h.confirm.choices != nil:
-		return []keyHelp{{"←/→", "choose"}, {"enter", "take it"}, {"esc", "cancel"}}
+		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"esc", "cancel"}}
 	case h.prompt():
-		return []keyHelp{{"y", "confirm"}, {"n/esc", "cancel"}}
+		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"y", "confirm"}, {"n/esc", "cancel"}}
 	case h.keysO:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
@@ -665,7 +689,15 @@ func (h *home) footer() []keyHelp {
 		return []keyHelp{{"←/→", "tabs"}, {"↓", "open"}, {"esc", "back"}, {"?", "keys"}}
 	}
 	cur := h.active()
-	return composeKeys(cur.keys(), leftExits(cur), cur.capturing())
+	acts := h.pageActions()
+	if h.btnActive && len(acts) > 0 {
+		return append(h.buttonHints(acts), keyHelp{"?", "keys"})
+	}
+	keys := cur.keys()
+	if len(acts) > 0 && !cur.capturing() {
+		keys = append(keys, keyHelp{"tab", "buttons"})
+	}
+	return composeKeys(keys, leftExits(cur), cur.capturing())
 }
 
 // fitKeys lays out hints in w columns: the ones that do not fit are
@@ -716,7 +748,13 @@ func composeKeys(keys []keyHelp, left, typing bool) []keyHelp {
 	if len(back) > 0 {
 		b = back[0]
 	}
-	if left && b.key == "esc" && !typing {
+	leftShown := false
+	for _, k := range keys {
+		if strings.Contains(k.key, "←") {
+			leftShown = true
+		}
+	}
+	if left && b.key == "esc" && !typing && !leftShown {
 		b.key = "←/esc"
 	}
 	out := append(append(append([]keyHelp{}, move...), open...), b)
@@ -747,67 +785,99 @@ func (h *home) listRow(label string, selected bool) string {
 }
 
 // confirmState is a question the screen asks before something that
-// spends requests or cannot be undone. It takes every key until it is
-// answered.
+// spends requests, cannot be undone, or changes a saved value. It is a
+// dialog: the question, what happens, and buttons named for what they
+// do, [ Cancel ] first and focused. It takes every key until answered.
 type confirmState struct {
 	owner    string   // the section the answer goes to
 	question string   // "Remove stream 3?"
 	notes    []string // what happens, in plain words
 	command  string   // the command it runs
+	action   string   // the button that does it: "Remove stream"
 	yes      func() tea.Cmd
 	cancel   string // said when the answer is no
-	// choices, when set, make it a choice instead of a yes or no: ←/→
-	// pick one and enter takes it (pick gets its index).
+	// choices, when set, are buttons of their own after Cancel (export
+	// as CSV or JSON); pick gets the index of the one pressed.
 	choices []string
-	choice  int
 	pick    func(i int) tea.Cmd
+	cur     int // the focused button; 0 is Cancel
 }
 
-// ask opens a confirmation.
+// buttons are the dialog's buttons, Cancel first.
+func (c *confirmState) buttons() []string {
+	if c.choices != nil {
+		return append([]string{"Cancel"}, c.choices...)
+	}
+	action := c.action
+	if action == "" {
+		action = "Confirm"
+	}
+	return []string{"Cancel", action}
+}
+
+// askFirst opens a dialog.
 func (h *home) askFirst(c *confirmState) tea.Cmd {
 	h.confirm = c
 	return nil
 }
 
-func (h *home) confirmKey(s string) tea.Cmd {
+// press is the dialog's button i.
+func (h *home) pressConfirm(i int) tea.Cmd {
 	c := h.confirm
-	if c.choices != nil {
-		switch s {
-		case "left":
-			c.choice = max(0, c.choice-1)
-			return nil
-		case "right", "tab":
-			c.choice = min(len(c.choices)-1, c.choice+1)
-			return nil
-		case "enter":
-			h.confirm = nil
-			return h.wrap(c.owner, c.pick(c.choice))
-		case "esc":
-			h.confirm = nil
-			return h.setFlash(c.cancel)
-		}
-		return h.setFlash("←/→ choose, enter takes it, esc cancels")
-	}
-	switch s {
-	case "y", "Y":
-		h.confirm = nil
-		return h.wrap(c.owner, c.yes())
-	case "enter":
-		// Enter never confirms: a second enter can not spend or change
-		// anything by accident.
-		return h.setFlash("Press y to confirm, or n to cancel")
-	case "n", "N", "esc":
-		h.confirm = nil
+	h.confirm = nil
+	switch {
+	case i == 0:
 		msg := c.cancel
 		if msg == "" {
 			msg = "Cancelled. Nothing was changed."
 		}
 		return h.setFlash(msg)
+	case c.choices != nil:
+		return h.wrap(c.owner, c.pick(i-1))
+	}
+	return h.wrap(c.owner, c.yes())
+}
+
+func (h *home) confirmKey(s string) tea.Cmd {
+	c := h.confirm
+	n := len(c.buttons())
+	switch s {
+	case "left", "shift+tab":
+		c.cur = max(0, c.cur-1)
+		return nil
+	case "right", "tab":
+		c.cur = min(n-1, c.cur+1)
+		return nil
+	case "enter":
+		return h.pressConfirm(c.cur)
+	case "y", "Y":
+		if c.choices == nil {
+			return h.pressConfirm(1)
+		}
+	case "n", "N", "esc":
+		return h.pressConfirm(0)
 	case "ctrl+c":
 		h.confirm = nil
 		return h.quit()
 	}
-	return h.setFlash("y or enter confirms, n or esc cancels")
+	return h.setFlash(s + " does nothing here · ←/→ choose, enter presses, esc cancels")
+}
+
+// dialogButtons draws a dialog's buttons, the focused one highlighted;
+// a click presses one.
+func (h *home) dialogButtons(labels []string, cur int, press func(i int) tea.Cmd) string {
+	var parts []string
+	for i, l := range labels {
+		label := "[ " + l + " ]"
+		if i == cur {
+			label = "[>" + l + "<]"
+			if h.color {
+				label = h.st.Bold.Reverse(true).Render(" " + l + " ")
+			}
+		}
+		parts = append(parts, h.mark(label, func() tea.Cmd { return press(i) }))
+	}
+	return "  " + strings.Join(parts, "  ")
 }
 
 func (h *home) confirmView(w int) string {
@@ -824,32 +894,7 @@ func (h *home) confirmView(w int) string {
 	if c.command != "" {
 		b.WriteString(h.st.Dim.Render(truncate("$ "+h.withSession(c.command), w)) + "\n\n")
 	}
-	if c.choices != nil {
-		var parts []string
-		for i, ch := range c.choices {
-			label := "[ " + ch + " ]"
-			if i == c.choice {
-				label = "[>" + ch + "<]"
-				if h.color {
-					label = h.st.Bold.Reverse(true).Render(" " + ch + " ")
-				}
-			}
-			parts = append(parts, h.mark(label, func() tea.Cmd {
-				h.confirm = nil
-				return h.wrap(c.owner, c.pick(i))
-			}))
-		}
-		b.WriteString("  " + strings.Join(parts, "  ") + "\n\n")
-		b.WriteString("←/→ choose, enter takes it, esc cancels.")
-		return b.String()
-	}
-	yes := h.mark("[ Confirm ]", func() tea.Cmd {
-		h.confirm = nil
-		return h.wrap(c.owner, c.yes())
-	})
-	no := h.mark("[ Cancel ]", func() tea.Cmd { return h.confirmKey("n") })
-	b.WriteString("  " + yes + "  " + no + "\n\n")
-	b.WriteString("Press y to confirm, n or esc to cancel.")
+	b.WriteString(h.dialogButtons(c.buttons(), c.cur, h.pressConfirm))
 	return b.String()
 }
 
