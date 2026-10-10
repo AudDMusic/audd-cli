@@ -5,20 +5,20 @@ AudD  ·  profile default
  3 Streams       │   1-7            jump to a section
  4 History       │   ↑/↓ j/k        move in the sidebar
  5 Account       │   enter          open the section
- 6 Settings      │   esc            back (to the sidebar)
-*7 Help          │   y              copy the command shown at the bottom
+ 6 Settings      │   esc, ←         back (← from the left-most item)
+*7 Help          >   ←/→            tabs and pages
+                 │   click, wheel   select or press; scroll
+                 │   y              copy the command shown at the bottom
                  │   ?              keys for this screen
                  │   F1             help
                  │   q              quit (ctrl+c always quits)
                  │ 
-                 │ Recognize
-                 │   ↑/↓ tab        move between fields
-                 │   ←/→            Source: a file or the microphone
-                 │   space          tick a box
-                 │   ctrl+o         pick a file or folder
-                 │   enter          next field, or press a button
-                 │   s              stop a batch or a recording
- ctrl+k commands │   o, c, d        result: open, copy the link, details
- ? keys  q quit  │ 
-↑/↓ scroll  [ ] pages
+                 │ Mouse
+                 │   Click a section, a page, a row, a field, or a button; click
+                 │   a selected row again to open it. The wheel scrolls. To
+                 │   select text with the mouse, hold Shift (Option in iTerm2).
+                 │   AUDD_NO_MOUSE=1 turns the mouse off.
+ ctrl+k commands │ 
+ ? keys  q quit  │ Recognize
+esc back  ↑/↓ scroll  ←/→ [ ] pages
 ctrl+k runs any audd command

@@ -1,7 +1,7 @@
 AudD  ·  profile default
                  │ Now playing                                     stream 1 of 3
  1 Recognize     │ 
-*2 Now playing   │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+*2 Now playing   > ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
  3 Streams       │ ┃ Stream 1                                                  ┃
  4 History       │ ┃ JUST PLAYED · ended 1 min ago                             ┃
  5 Account       │ ┃ Warriors                                                  ┃
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-←/→/↑/↓ select  enter zoom  o open  c copy link  h history
+←/esc back  ←/→/↑/↓ select  enter zoom  o open  c copy link  h history
 $ audd now-playing                                                        y copy

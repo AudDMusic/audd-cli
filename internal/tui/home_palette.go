@@ -271,6 +271,39 @@ func (p *palette) load() {
 		}
 	}
 	p.picker = newPicker(items)
+	p.picker.h = p.h
+	p.picker.click = func(i int) tea.Cmd {
+		return p.picker.clickRow(i, func() tea.Cmd { return p.openForm(p.picker.selected().value) })
+	}
+}
+
+// leftExits reports whether left goes back a step, as esc does: at the
+// start of the filter, at the left of the form, or on a result.
+func (p *palette) leftExits() bool {
+	switch p.phase {
+	case "list":
+		return p.picker == nil || p.picker.filter.Position() == 0
+	case "form":
+		return p.cf == nil || p.cf.form.leftExits()
+	}
+	return !p.panel.running && p.tree == nil
+}
+
+// wheel moves through the list, the form, or the result.
+func (p *palette) wheel(dir int) tea.Cmd {
+	switch p.phase {
+	case "list":
+		if p.picker != nil {
+			p.picker.wheel(dir)
+		}
+		return nil
+	case "form":
+		if p.cf != nil {
+			p.cf.form.move(dir)
+		}
+		return nil
+	}
+	return keyWheel(dir, 3, func(k tea.KeyMsg) tea.Cmd { return p.update(k) })
 }
 
 func (p *palette) find(path string) (cmdInfo, bool) {
@@ -296,7 +329,7 @@ func (p *palette) openForm(path string) tea.Cmd {
 	default:
 		p.h.paletteO = false
 		p.phase = "list"
-		return p.h.show(t, true)
+		return p.h.jump(t)
 	}
 	info, ok := p.find(path)
 	if !ok {
@@ -310,6 +343,7 @@ func (p *palette) openForm(path string) tea.Cmd {
 		return p.h.setFlash(err.Error())
 	}
 	p.cf = cf
+	cf.form.h = p.h
 	p.phase = "form"
 	cf.form.cursor = 0
 	cf.form.focus()

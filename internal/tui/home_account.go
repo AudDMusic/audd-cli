@@ -54,6 +54,7 @@ func newAccountSection(h *home) section {
 		token: newPanel(h), prof: newPanel(h)}
 	n := &field{kind: fInt, name: "requests", label: "Requests", help: "Extra requests, in multiples of 1,000", required: true, input: newInput()}
 	s.buyIn = newForm(n, buttonField("buy", "Get the payment link"))
+	s.buyIn.h = h
 	return s
 }
 
@@ -190,23 +191,39 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 	}
 	ks := k.String()
 	if s.needsLogin() {
-		if !s.signin.capturing() {
+		if s.signin.step == "" {
 			switch ks {
-			case "]":
+			case "]", "right":
 				return s.openPage(s.page + 1)
 			case "[":
 				return s.openPage(s.page - 1)
+			case "left":
+				if s.page > 0 {
+					return s.openPage(s.page - 1)
+				}
 			}
 		}
 		return s.signin.update(k)
 	}
-	if !s.capturing() && s.confirm == "" {
+	if s.atTop() {
 		switch ks {
 		case "]":
 			return s.openPage(s.page + 1)
 		case "[":
 			return s.openPage(s.page - 1)
+		case "left":
+			if s.page > 0 {
+				return s.openPage(s.page - 1)
+			}
+		case "right":
+			if s.page < len(accountPages)-1 {
+				return s.openPage(s.page + 1)
+			}
 		}
+	}
+	if ks == "left" && s.page == 2 && s.buying && s.buyIn.leftExits() {
+		s.buying = false
+		return nil
 	}
 	_, ht := s.h.contentSize()
 	switch s.page {
@@ -358,20 +375,51 @@ func (s *accountSection) profilesKey(ks string) tea.Cmd {
 }
 
 func (s *accountSection) pageBar(w int) string {
-	st := s.h.st
-	var parts []string
-	for i, p := range accountPages {
-		if i == s.page {
-			if s.h.color {
-				parts = append(parts, st.Bold.Reverse(true).Render(" "+p+" "))
-			} else {
-				parts = append(parts, "["+p+"]")
-			}
-			continue
-		}
-		parts = append(parts, st.Dim.Render(" "+p+" "))
+	return s.h.pageStrip(accountPages, s.page, w, func(i int) tea.Cmd {
+		s.buying = false
+		return s.openPage(i)
+	})
+}
+
+// atTop reports whether the page shows nothing opened on it (a form, a
+// question, a link, a sign-in step), so the arrows walk the pages.
+func (s *accountSection) atTop() bool {
+	if s.needsLogin() {
+		return s.signin.step == ""
 	}
-	return truncate(strings.Join(parts, " "), w)
+	if s.capturing() || s.confirm != "" {
+		return false
+	}
+	switch s.page {
+	case 1:
+		return s.usage.atTop()
+	case 2:
+		return !s.buying && s.payLink == "" && !s.showHist && !s.pay.running
+	case 3:
+		return s.token.pending == nil
+	}
+	return true
+}
+
+// leftExits: left walks back through the pages, and leaves from the
+// first one.
+func (s *accountSection) leftExits() bool { return s.page == 0 && s.atTop() }
+
+func (s *accountSection) wheel(dir int) tea.Cmd {
+	k := tea.KeyMsg{Type: tea.KeyDown}
+	if dir < 0 {
+		k = tea.KeyMsg{Type: tea.KeyUp}
+	}
+	if s.needsLogin() || !s.atTop() {
+		return nil
+	}
+	switch s.page {
+	case 1:
+		return s.usage.wheel(dir)
+	case 2, 4:
+		return s.update(k)
+	}
+	return nil
 }
 
 func (s *accountSection) view(w, h int) string {
@@ -500,7 +548,7 @@ func (s *accountSection) tokenView(w, h int) string {
 }
 
 func (s *accountSection) keys() []keyHelp {
-	pages := keyHelp{"[ ]", "pages"}
+	pages := keyHelp{"←/→ [ ]", "pages"}
 	if s.needsLogin() {
 		return append(s.signin.keys(), pages)
 	}

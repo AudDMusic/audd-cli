@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │      Sign in to your AudD account (or paste an API token) so audd can recognize music and show your
  5 Account       │      account.
  6 Settings      │      $ audd login
-*7 Help          │ 
+*7 Help          > 
                  │   2. Recognize a file
                  │      Pick a file, URL, or folder and recognize it. This fills in AudD's example song.
                  │      $ audd recognize https://audd.tech/example.mp3
@@ -36,5 +36,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ step  enter go  [ ] pages
+←/esc back  ↑/↓ step  enter go  ←/→ [ ] pages
 $ audd login                                                                                                      y copy

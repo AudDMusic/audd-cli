@@ -28,7 +28,7 @@ func TestNowPlayingSection(t *testing.T) {
 	h := newTestHome(t, &fakeRun{}, homeOpts{start: "now-playing"})
 	NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
 	v := runHome(t, h, 100, 30, "no streams", "")
-	if !strings.Contains(v, "Try: audd streams add") || !strings.Contains(v, "press 4") {
+	if !strings.Contains(v, "Try: audd streams add") || !strings.Contains(v, "press 3") {
 		t.Fatalf("no streams:\n%s", v)
 	}
 }

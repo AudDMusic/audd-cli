@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Run a command
- 1 Recognize     │ >                                                                                                   
+ 1 Recognize     > >                                                                                                   
  2 Now playing   │ 
  3 Streams       │ > completion      Print a shell completion script
  4 History       │   docs            Print AudD documentation as markdown

@@ -99,7 +99,11 @@ func RunHome(ctx context.Context, a *app.App, section string) error {
 	if isListen(section) {
 		m.useMic()
 	}
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(a.In), tea.WithOutput(m.arts.out))
+	popts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(a.In), tea.WithOutput(m.arts.out)}
+	if mouseEnabled() {
+		popts = append(popts, tea.WithMouseCellMotion())
+	}
+	p := tea.NewProgram(m, popts...)
 	_, err = p.Run()
 	m.arts.finish()
 	cancel()
@@ -213,6 +217,15 @@ type home struct {
 	focus focusArea
 	// signin is shown instead of a section (signed out, or chosen).
 	showSignin bool
+
+	// backTo are the screens jumps came from (a Help step, a hint, the
+	// palette): esc at the top of a screen returns to the last one, and
+	// to the sidebar when there is none.
+	backTo []string
+
+	// Mouse: what each region of the last frame does when clicked.
+	zoneFns []func() tea.Cmd
+	hits    []zoneHit
 
 	palette  *palette
 	paletteO bool
@@ -346,6 +359,48 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 	return cmd
 }
 
+// navigate opens a section the user chose (sidebar, number keys, F1):
+// there is nothing to go back to but the sidebar.
+func (h *home) navigate(id string) tea.Cmd {
+	h.backTo = nil
+	return h.show(id, true)
+}
+
+// jump opens a screen from an action in another (a Help step, a hint,
+// the palette); esc at its top comes back here.
+func (h *home) jump(id string) tea.Cmd {
+	from := h.activeID()
+	to := id
+	if to == "listen" {
+		to = "recognize"
+	}
+	if h.focus == focusContent && from != to {
+		h.backTo = append(h.backTo, from)
+	}
+	return h.show(id, true)
+}
+
+// goBack leaves the top of a screen: to the screen a jump came from, or
+// to the sidebar, with its section shown and highlighted.
+func (h *home) goBack() tea.Cmd {
+	for len(h.backTo) > 0 {
+		id := h.backTo[len(h.backTo)-1]
+		h.backTo = h.backTo[:len(h.backTo)-1]
+		if id != h.activeID() {
+			return h.show(id, true)
+		}
+	}
+	h.toSidebar()
+	return nil
+}
+
+// toSidebar moves the keys to the sidebar. The sign-in screen has no
+// sidebar item, so the section of the highlighted item comes back.
+func (h *home) toSidebar() {
+	h.focus = focusSidebar
+	h.showSignin = false
+}
+
 // useMic switches Recognize to the microphone.
 func (h *home) useMic() {
 	if s, ok := h.subs["recognize"].(*recognizeSection); ok {
@@ -413,6 +468,8 @@ func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return h, h.route(msg)
 	case tea.KeyMsg:
 		return h, h.key(msg)
+	case tea.MouseMsg:
+		return h, h.mouse(msg)
 	}
 	return h, nil
 }
@@ -468,13 +525,15 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	if h.keysO {
 		h.keysO = false
 		if s == "f1" || s == "enter" {
-			return h.show("help", true)
+			return h.navigate("help")
 		}
 		return nil
 	}
 	if h.paletteO {
-		if s == "esc" && !h.palette.back() {
-			h.paletteO = false
+		if s == "esc" || s == "left" && h.palette.leftExits() {
+			if !h.palette.back() {
+				h.paletteO = false
+			}
 			return nil
 		}
 		if s == "ctrl+k" {
@@ -487,17 +546,15 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	case "ctrl+k":
 		return h.openPalette("")
 	case "f1":
-		return h.show("help", true)
+		return h.navigate("help")
 	}
 	cur := h.active()
 	if h.focus == focusContent && s == "left" && leftExits(cur) {
-		h.focus = focusSidebar
-		return nil
+		return h.goBack()
 	}
 	if h.focus == focusContent && cur.capturing() {
 		if s == "esc" && !cur.back() {
-			h.focus = focusSidebar
-			return nil
+			return h.goBack()
 		}
 		return h.send(h.activeID(), k)
 	}
@@ -515,9 +572,10 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 		}
 		return h.setFlash("No command to copy here")
 	case "1", "2", "3", "4", "5", "6", "7":
-		return h.show(h.order[s[0]-'1'], true)
+		return h.navigate(h.order[s[0]-'1'])
 	}
 	if h.focus == focusSidebar {
+		h.backTo = nil
 		switch s {
 		case "down", "j":
 			if h.showSignin {
@@ -541,7 +599,7 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	}
 	if s == "esc" {
 		if !cur.back() {
-			h.focus = focusSidebar
+			return h.goBack()
 		}
 		return nil
 	}
@@ -605,6 +663,7 @@ func (h *home) signedIn(testToken bool) tea.Cmd {
 	h.hdrLoaded = false
 	h.showSignin = false
 	h.focus = focusContent
+	h.backTo = nil
 	if a, err := HomeApp(h.flags); err == nil {
 		h.a = sessionApp(a)
 	}
@@ -631,6 +690,7 @@ func (h *home) switchProfile(name string) tea.Cmd {
 	}
 	h.runs.mu.Unlock()
 	h.gen++
+	h.backTo = nil
 	h.build()
 	return tea.Batch(h.setFlash("Switched to profile "+name), h.loadHeader(), h.show("account", true))
 }

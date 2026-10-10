@@ -2,7 +2,7 @@ AudD  ·  profile default
                  │ [Streams]  Callback   Recorder   History & reports 
  1 Recognize     │   ID    Health               Latest song                  When               URL
  2 Now playing   │ > 1     Live                 Imagine Dragons — Warriors   ended 1 min ago    https://radio.example…
-*3 Streams       │   2     Live                 Nina Simone — Feeling Good   ended 21 min ago   https://radio.example…
+*3 Streams       >   2     Live                 Nina Simone — Feeling Good   ended 21 min ago   https://radio.example…
  4 History       │   3     Can't connect (650)  Portishead — Roads           ended 3 h ago      https://radio.example…
  5 Account       │ 
  6 Settings      │ 
@@ -36,5 +36,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ Streams · 3
-↑/↓ move  enter open  / filter  o open  c copy  a add  d remove  u set URL  e export  [ ] pages
+←/esc back  ↑/↓ move  enter open  / filter  o open  c copy  a add  d remove  u set URL  e export  ←/→ [ ] pages
 $ audd streams list                                                                                               y copy

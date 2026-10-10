@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Identify the music playing near you
-*1 Recognize     │ 
+*1 Recognize     > 
  2 Now playing   │   Source   ‹ Microphone ›
  3 Streams       │   Seconds  10
  4 History       │   Device   ‹ default ›
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ field  ←/→ choose  space toggle  enter listen  esc sidebar
+←/esc back  ↑/↓ field  ←/→ choose  space toggle  enter listen
 $ audd listen                                                             y copy

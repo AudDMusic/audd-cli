@@ -5,11 +5,18 @@ AudD  ·  profile default
  3 Streams       │   1-7            jump to a section
  4 History       │   ↑/↓ j/k        move in the sidebar
  5 Account       │   enter          open the section
- 6 Settings      │   esc            back (to the sidebar)
-*7 Help          │   y              copy the command shown at the bottom
+ 6 Settings      │   esc, ←         back (← from the left-most item)
+*7 Help          >   ←/→            tabs and pages
+                 │   click, wheel   select or press; scroll
+                 │   y              copy the command shown at the bottom
                  │   ?              keys for this screen
                  │   F1             help
                  │   q              quit (ctrl+c always quits)
+                 │ 
+                 │ Mouse
+                 │   Click a section, a page, a row, a field, or a button; click a selected row again to open it. The
+                 │   wheel scrolls. To select text with the mouse, hold Shift (Option in iTerm2). AUDD_NO_MOUSE=1 turns
+                 │   the mouse off.
                  │ 
                  │ Recognize
                  │   ↑/↓ tab        move between fields
@@ -27,14 +34,7 @@ AudD  ·  profile default
                  │   o, c           open or copy the song link
                  │   r              refresh
                  │ 
-                 │ Streams
-                 │   [ ]            pages: streams, callback, recorder, history and reports
-                 │   a              add a stream
-                 │   d              remove the stream (asks first)
-                 │   u              change its URL
-                 │   enter          recent plays of the stream
-                 │   s, x           recorder: start, stop
- ctrl+k commands │ 
- ? keys  q quit  │ History
-↑/↓ scroll  [ ] pages
+ ctrl+k commands │ Streams
+ ? keys  q quit  │   ←/→ [ ]        pages: streams, callback, recorder, history and reports
+esc back  ↑/↓ scroll  ←/→ [ ] pages
 ctrl+k runs any audd command

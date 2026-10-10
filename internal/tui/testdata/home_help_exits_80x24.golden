@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │                     --fail-on-no-match
  5 Account       │   2    usage        invalid arguments or input, or a missing
  6 Settings      │                     tool such as ffmpeg
-*7 Help          │   3    auth         missing or rejected API token, or sign-in
+*7 Help          >   3    auth         missing or rejected API token, or sign-in
                  │                     needed (audd login)
                  │   4    quota        quota, plan, or feature not available on
                  │                     the account
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │   7    partial      a batch finished with some files failed
  ctrl+k commands │   8    threshold    usage --check found fewer remaining
  ? keys  q quit  │                     requests than --min-remaining
-↑/↓ scroll  [ ] pages
+esc back  ↑/↓ scroll  ←/→ [ ] pages
 $ audd commands --json                                                    y copy

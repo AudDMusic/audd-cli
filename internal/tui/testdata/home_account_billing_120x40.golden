@@ -4,7 +4,7 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
  2 Now playing   │ Amount owed                  $0.00
  3 Streams       │ 
  4 History       │ Plans
-*5 Account       │ › startup_plan     Startup        $450.00/month  100,000 requests
+*5 Account       > › startup_plan     Startup        $450.00/month  100,000 requests
  6 Settings      │   pro_plan         Pro            $900.00/month  250,000 requests
  7 Help          │ 
                  │ Payment links never charge anything: you review and pay in the browser.
@@ -36,5 +36,5 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ plan  s subscribe  n renew  b buy requests  h payments  [ ] pages
+esc back  ↑/↓ plan  s subscribe  n renew  b buy requests  h payments  ←/→ [ ] pages
 $ audd billing subscribe startup_plan                                                                             y copy

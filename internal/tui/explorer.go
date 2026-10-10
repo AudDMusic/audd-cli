@@ -346,6 +346,8 @@ type explorer struct {
 	// the clipboard, and help to the screen around it.
 	embedded bool
 	allowed  []tabID
+	// mark, when set, makes tabs and rows clickable (interactive mode).
+	mark func(s string, fn func() tea.Cmd) string
 	// onResume, when set, resumes a job (r, R) instead of quitting.
 	onResume func(id string, retry bool) tea.Cmd
 }

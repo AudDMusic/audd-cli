@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Recognize music in a file, URL, or folder
-*1 Recognize     │ 
+*1 Recognize     > 
  2 Now playing   │   Source     ‹ File, URL, or folder ›
  3 Streams       │ › Input*                                                    
  4 History       │              A file, URL, folder, or glob. ctrl+o picks a
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ field  space toggle  ctrl+o pick a file  enter next / press  esc sidebar
+←/esc back  ↑/↓ field  space toggle  ctrl+o pick a file  enter next / press
 $ audd recognize '<file>'                                                 y copy

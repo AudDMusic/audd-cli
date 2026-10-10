@@ -5,7 +5,7 @@ AudD  ·  profile default
  3 Streams       │     API token, kept in the system credential store
  4 History       │   format                       auto  (default)
  5 Account       │     default output format: table, json, jsonl, csv (auto: ta…
-*6 Settings      │   max_requests                 no limit  (default)
+*6 Settings      >   max_requests                 no limit  (default)
  7 Help          │     default --max-requests for every command
                  │   concurrency                  4  (default)
                  │     parallel requests for batch recognition
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-↑/↓ setting  enter change  u unset  r reload
+←/esc back  ↑/↓ setting  enter change  u unset  r reload
 $ audd config get token                                                   y copy

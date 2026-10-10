@@ -36,6 +36,7 @@ func newSignin(h *home, heading string) *signinSection {
 	tok := &field{kind: fText, name: "token", label: "API token", masked: true, input: newInput(),
 		help: "From https://dashboard.audd.io. Saved like audd config set token."}
 	s.paste = newForm(tok, buttonField("save", "Save"))
+	s.paste.h = h
 	return s
 }
 
@@ -144,8 +145,16 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 	}
 	switch s.step {
 	case "login":
+		if k.String() == "left" && !s.panel.capturing() {
+			s.back()
+			return nil
+		}
 		return s.panel.key(k, s.h.h)
 	case "paste":
+		if k.String() == "left" && s.paste.leftExits() {
+			s.step = ""
+			return nil
+		}
 		act, cmd := s.paste.update(k)
 		if act == "save" {
 			v := s.paste.value("token")
@@ -214,14 +223,24 @@ func (s *signinSection) view(w, h int) string {
 			mark = "› "
 			title = st.Bold.Render(title)
 		}
-		b.WriteString(mark + title + "\n")
-		b.WriteString(styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    ")) + "\n\n")
+		item := mark + title + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
+		b.WriteString(s.h.mark(item, func() tea.Cmd {
+			if s.choice == i {
+				return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
+			}
+			s.choice = i
+			return nil
+		}) + "\n\n")
 	}
 	if s.heading == "" {
 		b.WriteString(styleLines(st.Dim, output.Wrap("You can also look around first: the sections on the left work once a token is set.", w)))
 	}
 	return b.String()
 }
+
+// leftExits: left leaves from the choices; inside a step it goes back
+// to them.
+func (s *signinSection) leftExits() bool { return s.step == "" }
 
 func indent(s, pre string) string {
 	lines := strings.Split(s, "\n")

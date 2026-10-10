@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │ recordings, and from the microphone; monitors streams; and
  5 Account       │ manages your AudD account. It prints tables on a terminal and
  6 Settings      │ JSON when its output is piped.
-*7 Help          │ 
+*7 Help          > 
                  │ Get your API token at https://dashboard.audd.io, or run audd
                  │ login.
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │   macOS, Linux (script)   curl -fsSL
  ctrl+k commands │                           https://github.com/AudDMusic/audd-…
  ? keys  q quit  │ 4%
-↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
+esc back  ↑/↓ pgdn scroll  / search  n N next, previous  { } headings  ←/→ [ ] …
 $ audd docs cli                                                           y copy

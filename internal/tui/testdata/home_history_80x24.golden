@@ -3,7 +3,7 @@ AudD  ·  profile default
  1 Recognize     │   When    Song      Album         Source
  2 Now playing   │ > Oct 0…  Imagine…  Warriors      warriors.mp3
  3 Streams       │   Oct 0…  No match                https://aud…
-*4 History       │   Oct 0…  2 match…                mix.mp3
+*4 History       >   Oct 0…  2 match…                mix.mp3
  5 Account       │ 
  6 Settings      │ 
  7 Help          │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ Recognized with audd · 3
-↑/↓ move  enter open  / filter  o open  c copy  e export  tab next
+←/esc back  ↑/↓ move  enter open  / filter  o open  c copy  e export  tab next
 $ audd browse --tab recent                                                y copy

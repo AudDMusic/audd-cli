@@ -57,6 +57,7 @@ func newRecognizeSection(h *home) section {
 		buttonField("listen", "Listen"),
 	)
 	s.form = newForm(fields...)
+	s.form.h = h
 	s.sync()
 	s.form.focusName("input")
 	return s
@@ -345,7 +346,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 			}
 		case "d":
 			s.details = !s.details
-		case "backspace":
+		case "backspace", "left":
 			s.phase = "form"
 		}
 		return nil
@@ -478,5 +479,11 @@ func (s *recognizeSection) leftExits() bool {
 	if s.browser != nil {
 		return false
 	}
-	return s.phase != "form" || s.form.leftExits()
+	switch s.phase {
+	case "result":
+		return false // left goes back to the form
+	case "running":
+		return true
+	}
+	return s.form.leftExits()
 }

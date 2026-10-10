@@ -104,7 +104,7 @@ func (s *nowPlayingSection) view(w, h int) string {
 		e := output.AsError(s.err)
 		out := errorText(st, &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}, w)
 		if e.Code == "no_streams" {
-			out += "\n\n" + st.Dim.Render("Add a stream in Streams (press 4, then a).")
+			out += "\n\n" + st.Dim.Render("Add a stream in Streams (press 3, then a).")
 		}
 		return out + "\n\n" + st.Dim.Render("r tries again.")
 	}
@@ -151,6 +151,7 @@ func (p *explorerPane) init() tea.Cmd {
 		return nil
 	}
 	p.ex = newEmbeddedExplorer(p.h.ctx, p.h.a, d, p.tabs, p.h.arts)
+	p.ex.mark = p.h.mark
 	return p.ex.Init()
 }
 
@@ -384,6 +385,9 @@ func newStreamsSection(h *home) section {
 	by := enumField("by", "Group by", "report: group by song, artist, label, or station", []string{"song", "artist", "label", "station"})
 	format := enumField("format", "File format", "export: JSON lines or CSV", []string{"jsonl", "csv"})
 	s.dataForm = newForm(kind, since, sid, by, format, buttonField("run", "Run"))
+	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
+	s.cbForm.before = func() { s.inForm = true }
+	s.dataForm.before = func() { s.inForm = true }
 	s.syncData()
 	s.recPanel.empty = s.h.st.Dim.Render("Loading…")
 	return s
@@ -479,6 +483,25 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			return s.openPage(s.page + 1)
 		case "[":
 			return s.openPage(s.page - 1)
+		case "left":
+			if s.page > 0 {
+				return s.openPage(s.page - 1)
+			}
+		case "right":
+			if s.page < len(streamsPages)-1 && (s.page > 0 || s.pane.atTop()) {
+				return s.openPage(s.page + 1)
+			}
+		}
+	}
+	// Left at the start of a form leaves the form.
+	if ks == "left" {
+		switch {
+		case s.page == 0 && s.adding && s.add.leftExits():
+			s.adding = false
+			return nil
+		case s.inForm && s.page == 1 && s.cbForm.leftExits(), s.inForm && s.page == 3 && s.dataForm.leftExits():
+			s.inForm = false
+			return nil
 		}
 	}
 	if (s.page == 1 || s.page == 3) && !s.inForm {
@@ -633,20 +656,28 @@ func (s *streamsSection) formView(f *form, w int) string {
 }
 
 func (s *streamsSection) pageBar(w int) string {
-	st := s.h.st
-	var parts []string
-	for i, p := range streamsPages {
-		if i == s.page {
-			if s.h.color {
-				parts = append(parts, st.Bold.Reverse(true).Render(" "+p+" "))
-			} else {
-				parts = append(parts, "["+p+"]")
-			}
-			continue
-		}
-		parts = append(parts, st.Dim.Render(" "+p+" "))
+	return s.h.pageStrip(streamsPages, s.page, w, func(i int) tea.Cmd {
+		s.adding = false
+		return s.openPage(i)
+	})
+}
+
+// wheel moves through the list of streams, or scrolls the output.
+func (s *streamsSection) wheel(dir int) tea.Cmd {
+	k := tea.KeyMsg{Type: tea.KeyDown}
+	if dir < 0 {
+		k = tea.KeyMsg{Type: tea.KeyUp}
 	}
-	return truncate(strings.Join(parts, " "), w)
+	_, ht := s.h.contentSize()
+	switch {
+	case s.page == 0 && !s.adding:
+		return s.pane.update(k)
+	case s.page == 2:
+		return keyWheel(dir, 3, func(k tea.KeyMsg) tea.Cmd { return s.recPanel.key(k, ht) })
+	case s.page == 3 && s.dataPanel.res != nil:
+		return keyWheel(dir, 3, func(k tea.KeyMsg) tea.Cmd { return s.dataPanel.key(k, ht/2) })
+	}
+	return nil
 }
 
 func (s *streamsSection) view(w, h int) string {
@@ -704,7 +735,7 @@ func (s *streamsSection) view(w, h int) string {
 }
 
 func (s *streamsSection) keys() []keyHelp {
-	pages := keyHelp{"[ ]", "pages"}
+	pages := keyHelp{"←/→ [ ]", "pages"}
 	switch s.page {
 	case 0:
 		if s.adding {
@@ -794,13 +825,13 @@ func (s *nowPlayingSection) leftExits() bool {
 	return s.np == nil || !s.np.history && s.np.sel == 0
 }
 
-// leftExits: left switches the explorer's tabs, so it leaves from the
-// first one.
+// leftExits: left closes details and drill-downs, then switches the
+// explorer's tabs, so it leaves from the first one.
 func (p *explorerPane) leftExits() bool {
 	if p.ex == nil {
 		return true
 	}
-	if p.ex.capturing() {
+	if !p.atTop() {
 		return false
 	}
 	return len(p.ex.allowed) <= 1 || p.ex.tab == p.ex.allowed[0]
@@ -808,16 +839,34 @@ func (p *explorerPane) leftExits() bool {
 
 func (s *historySection) leftExits() bool { return s.resume || s.pane.leftExits() }
 
+// leftExits: left walks back through the pages (out of a form first),
+// and leaves from the first page.
 func (s *streamsSection) leftExits() bool {
-	switch {
-	case s.page == 0 && s.adding:
-		return s.add.leftExits()
-	case s.page == 0:
-		return s.pane.leftExits()
-	case s.inForm && s.page == 1:
-		return s.cbForm.leftExits()
-	case s.inForm && s.page == 3:
-		return s.dataForm.leftExits()
+	return s.page == 0 && !s.adding && s.pane.leftExits()
+}
+
+// atTop reports whether the explorer shows its list (no details, no
+// drill-down, no prompt), where right can go on to the next page.
+func (p *explorerPane) atTop() bool {
+	if p.ex == nil {
+		return true
 	}
-	return true
+	l := p.ex.top()
+	return !p.ex.capturing() && p.ex.confirm == "" && (l == nil || !l.detail && len(p.ex.tabs[p.ex.tab]) <= 1)
+}
+
+// wheel moves through the list, or scrolls the details.
+func (p *explorerPane) wheel(dir int) tea.Cmd {
+	k := tea.KeyMsg{Type: tea.KeyDown}
+	if dir < 0 {
+		k = tea.KeyMsg{Type: tea.KeyUp}
+	}
+	return p.update(k)
+}
+
+func (s *historySection) wheel(dir int) tea.Cmd {
+	if s.resume {
+		return nil
+	}
+	return s.pane.wheel(dir)
 }

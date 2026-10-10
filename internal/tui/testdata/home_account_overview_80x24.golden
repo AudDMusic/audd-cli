@@ -4,7 +4,7 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
  2 Now playing   │ Plan            Startup, $450.00/month, 100,000 requests inc…
  3 Streams       │ Paid until      2026-11-01
  4 History       │ 
-*5 Account       │ 
+*5 Account       > 
  6 Settings      │ 
  7 Help          │ 
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests l
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-r refresh  [ ] pages
+←/esc back  r refresh  ←/→ [ ] pages
 $ audd account                                                            y copy

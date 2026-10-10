@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │   Recognize music         │ the microphone; monitors streams; and manages your AudD account. It
  5 Account       │     Whole recordings (ent…│ prints tables on a terminal and JSON when its output is piped.
  6 Settings      │     Folders, globs, and l…│ 
-*7 Help          │     Results cache         │ Get your API token at https://dashboard.audd.io, or run audd login.
+*7 Help          >     Results cache         │ Get your API token at https://dashboard.audd.io, or run audd login.
                  │   Limits and confirmations│ 
                  │   Streams                 │ Install
                  │     Background recorder   │ 
@@ -36,5 +36,5 @@ AudD  ·  profile default
                  │                           │ against the release's checksums.
  ctrl+k commands │                           │ 
  ? keys  q quit  │ 9%
-↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
+esc back  ↑/↓ pgdn scroll  / search  n N next, previous  { } headings  ←/→ [ ] pages
 $ audd docs cli                                                                                                   y copy

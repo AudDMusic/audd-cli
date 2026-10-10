@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
  5 Account       │   3    auth         missing or rejected API token, or sign-in needed (audd login)
  6 Settings      │   4    quota        quota, plan, or feature not available on the account
-*7 Help          │   5    network      network or server error; retrying may help
+*7 Help          >   5    network      network or server error; retrying may help
                  │   6    safety       a bound is missing (--limit, --max-files), a confirmation is needed (--yes),
                  │                     --max-requests was reached, or an unfinished job for the same files needs
                  │                     --resume or --new
@@ -36,5 +36,5 @@ AudD  ·  profile default
                  │ list
  ctrl+k commands │   one JSON document with the rows under "items": {"schema_version":1,"items":[...]}
  ? keys  q quit  │ 
-↑/↓ scroll  [ ] pages
+esc back  ↑/↓ scroll  ←/→ [ ] pages
 $ audd commands --json                                                                                            y copy

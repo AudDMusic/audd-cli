@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -33,6 +34,7 @@ func (h *home) View() string {
 		return ""
 	}
 	h.arts.beginView()
+	h.zoneFns = nil
 	cw, ch := h.contentSize()
 	var body string
 	switch {
@@ -52,10 +54,9 @@ func (h *home) View() string {
 	} else {
 		side := strings.Split(h.sidebar(ch), "\n")
 		lines := strings.Split(body, "\n")
-		rule := h.st.Dim.Render("│")
 		var b strings.Builder
 		for i := 0; i < ch; i++ {
-			b.WriteString(padRight(side[i], sidebarW) + rule + " " + lines[i])
+			b.WriteString(padRight(side[i], sidebarW) + h.rule(i) + " " + lines[i])
 			if i < ch-1 {
 				b.WriteString("\n")
 			}
@@ -63,6 +64,7 @@ func (h *home) View() string {
 		page = h.headerLine() + "\n" + b.String()
 	}
 	page += "\n" + h.hintsLine() + "\n" + h.commandLine()
+	page = h.scanZones(page)
 	page = h.arts.finishView(page, h.w)
 	if h.osc != "" {
 		page = h.osc + page
@@ -101,6 +103,32 @@ func (h *home) headerLine() string {
 	return truncate(strings.Join(parts, h.st.Dim.Render("  ·  ")), h.w)
 }
 
+// contentFocused reports whether keys go to the content pane (or an
+// overlay on it).
+func (h *home) contentFocused() bool {
+	return h.focus == focusContent || h.paletteO || h.ask != nil || h.keysO
+}
+
+// rule is row i of the line between the sidebar and the content. It
+// shows which pane has the keys: in the accent color while the content
+// has them, and without color with a > next to the open section.
+func (h *home) rule(i int) string {
+	if !h.contentFocused() {
+		return h.st.Dim.Render("│")
+	}
+	if h.color {
+		return h.st.Accent.Render("┃")
+	}
+	row := h.cur + 1 // the sidebar starts with a blank row
+	if h.showSignin {
+		row = 0
+	}
+	if i == row {
+		return ">"
+	}
+	return "│"
+}
+
 func (h *home) sidebar(rows int) string {
 	lines := make([]string, 0, rows)
 	lines = append(lines, "")
@@ -108,7 +136,7 @@ func (h *home) sidebar(rows int) string {
 		label := fmt.Sprintf(" %d %s", i+1, t)
 		sel := i == h.cur && !h.showSignin && !h.paletteO
 		switch {
-		case sel && h.focus == focusSidebar:
+		case sel && !h.contentFocused():
 			if h.color {
 				label = h.st.Bold.Reverse(true).Render(padRight(label, sidebarW-1))
 			} else {
@@ -123,7 +151,7 @@ func (h *home) sidebar(rows int) string {
 		default:
 			label = h.st.Dim.Render(label)
 		}
-		lines = append(lines, label)
+		lines = append(lines, h.mark(label, h.clickSection(i)))
 	}
 	for len(lines) < rows {
 		lines = append(lines, "")
@@ -135,21 +163,37 @@ func (h *home) sidebar(rows int) string {
 	return strings.Join(lines[:rows], "\n")
 }
 
+// clickSection selects sidebar item i, with the keys on the sidebar.
+func (h *home) clickSection(i int) func() tea.Cmd {
+	return func() tea.Cmd {
+		h.paletteO = false
+		h.backTo = nil
+		h.cur = i
+		h.toSidebar()
+		return h.activate()
+	}
+}
+
 // tabStrip is the sidebar on narrow terminals.
 func (h *home) tabStrip() string {
 	var parts []string
 	for i, t := range homeTitles {
 		label := fmt.Sprintf("%d %s", i+1, t)
 		if i == h.cur && !h.showSignin && !h.paletteO {
-			if h.color {
+			switch {
+			case h.color && h.contentFocused():
+				label = h.st.Bold.Inherit(h.st.Accent).Render("[" + label + "]")
+			case h.color:
 				label = h.st.Bold.Reverse(true).Render(" " + label + " ")
-			} else {
+			case h.contentFocused():
 				label = "[" + label + "]"
+			default:
+				label = ">" + label + "<"
 			}
-			parts = append(parts, label)
+			parts = append(parts, h.mark(label, h.clickSection(i)))
 			continue
 		}
-		parts = append(parts, h.st.Dim.Render(fmt.Sprintf("%d", i+1)))
+		parts = append(parts, h.mark(h.st.Dim.Render(fmt.Sprintf("%d", i+1)), h.clickSection(i)))
 	}
 	return truncate(strings.Join(parts, " "), h.w)
 }
@@ -169,7 +213,7 @@ func (h *home) hintsLine() string {
 	case h.focus == focusSidebar:
 		keys = []keyHelp{{"↑/↓", "section"}, {"enter", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"?", "keys"}, {"q", "quit"}}
 	default:
-		keys = h.active().keys()
+		keys = backHint(h.active().keys(), leftExits(h.active()))
 		if h.narrow() {
 			keys = append(keys, keyHelp{"ctrl+k", "commands"})
 		}
@@ -179,6 +223,32 @@ func (h *home) hintsLine() string {
 		parts = append(parts, k.key+" "+k.help)
 	}
 	return truncate(h.st.Dim.Render(strings.Join(parts, "  ")), h.w)
+}
+
+// backHint puts how to go back first in a section's keys: ← and esc
+// when left leaves too, esc alone otherwise (unless the section says
+// what esc does).
+func backHint(keys []keyHelp, left bool) []keyHelp {
+	out := make([]keyHelp, 0, len(keys)+1)
+	hasEsc := false
+	for _, k := range keys {
+		if k.key == "esc" && k.help == "sidebar" {
+			continue
+		}
+		if strings.Contains(k.key, "esc") {
+			hasEsc = true
+		}
+		out = append(out, k)
+	}
+	switch {
+	case left && hasEsc:
+		return append([]keyHelp{{"←", "back"}}, out...)
+	case left:
+		return append([]keyHelp{{"←/esc", "back"}}, out...)
+	case !hasEsc:
+		return append([]keyHelp{{"esc", "back"}}, out...)
+	}
+	return out
 }
 
 func (h *home) commandLine() string {
@@ -200,7 +270,9 @@ var globalKeys = []keyHelp{
 	{"1-7", "jump to a section"},
 	{"↑/↓ j/k", "move in the sidebar"},
 	{"enter", "open the section"},
-	{"esc", "back (to the sidebar)"},
+	{"esc, ←", "back (← from the left-most item)"},
+	{"←/→", "tabs and pages"},
+	{"click, wheel", "select or press; scroll"},
 	{"y", "copy the command shown at the bottom"},
 	{"?", "keys for this screen"},
 	{"F1", "help"},

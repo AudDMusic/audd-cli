@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ audd streams add  Add a stream to monitor
- 1 Recognize     │ 
+ 1 Recognize     > 
  2 Now playing   │ › url*                                                      
  3 Streams       │   --id*   ·
  4 History       │   [ ] --start

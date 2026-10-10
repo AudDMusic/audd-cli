@@ -1,6 +1,6 @@
 AudD  ·  profile default
                  │ Error: no API token is set
-*1 Recognize     │ Try: audd login
+*1 Recognize     > Try: audd login
  2 Now playing   │ Press enter to open it.
  3 Streams       │ 
  4 History       │ 

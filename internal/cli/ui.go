@@ -36,7 +36,9 @@ func newUICmd(a *app.App) *cobra.Command {
 Running audd with no arguments on a terminal opens it too. Sections:
 ` + strings.Join(tui.HomeSections, ", ") + `. Press ctrl+k for a palette of
 every command; the command each action runs is shown at the bottom (y copies
-it). Set AUDD_NO_TUI=1 to have audd with no arguments print help instead.`,
+it). Esc or left goes back; the mouse clicks and scrolls (hold Shift to
+select text; AUDD_NO_MOUSE=1 turns it off). Set AUDD_NO_TUI=1 to have audd
+with no arguments print help instead.`,
 		Example: "  audd ui\n  audd ui --section streams",
 		GroupID: GroupOther,
 		Args:    cobra.NoArgs,

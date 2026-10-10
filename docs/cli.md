@@ -74,6 +74,12 @@ confirmations: it asks before spending more than one request and never adds
 `--yes`. `audd ui --section <name>` opens a section (`recognize`,
 `now-playing`, `streams`, `history`, `account`, `settings`, `help`).
 
+Esc goes back one step, and so does left from the left-most item: to the
+screen you came from (a Help step, a hint), or to the sidebar. Left and right
+walk tabs and pages. The mouse works too: click a section, a page, a row, a
+field, or a button, and scroll with the wheel. To select text with the mouse,
+hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
+
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help
 instead, so scripts and agents get plain output.
 

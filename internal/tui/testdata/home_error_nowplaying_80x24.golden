@@ -1,9 +1,9 @@
 AudD  ·  profile default
                  │ Error: there are no streams on this account
  1 Recognize     │ Try: audd streams add <url> --id 1
-*2 Now playing   │ Press enter to open it.
+*2 Now playing   > Press enter to open it.
  3 Streams       │ 
- 4 History       │ Add a stream in Streams (press 4, then a).
+ 4 History       │ Add a stream in Streams (press 3, then a).
  5 Account       │ 
  6 Settings      │ r tries again.
  7 Help          │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-r try again
+←/esc back  r try again
 $ audd now-playing                                                        y copy

@@ -43,6 +43,22 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	l := m.top()
+	if m.embedded && (s == "left" || s == "right") {
+		// Embedded, left and right walk the tabs without wrapping, and
+		// left first closes details and drill-downs.
+		if s == "left" && l != nil && (l.detail || len(m.tabs[m.tab]) > 1) {
+			s = "esc"
+		} else {
+			d := 1
+			if s == "left" {
+				d = -1
+			}
+			if next := m.nextTab(d); (d > 0) == (next > m.tab) && next != m.tab {
+				return m, m.switchTab(next)
+			}
+			return m, nil
+		}
+	}
 	switch s {
 	case "q", "ctrl+c":
 		if m.embedded {

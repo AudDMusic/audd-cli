@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -74,15 +75,43 @@ func (m *explorer) tabBar() string {
 				label = "[" + strings.TrimSpace(label) + "]"
 				s = m.st.Bold
 			}
-			parts = append(parts, s.Render(label))
+			parts = append(parts, m.zone(s.Render(label), m.clickTab(tabID(i))))
 		} else {
-			parts = append(parts, m.st.Dim.Render(label))
+			parts = append(parts, m.zone(m.st.Dim.Render(label), m.clickTab(tabID(i))))
 		}
 	}
 	if m.embedded {
 		return truncate(strings.Join(parts, " "), m.w)
 	}
 	return spread(strings.Join(parts, " "), m.st.Dim.Render("audd browse"), m.w)
+}
+
+// zone makes s clickable when the explorer is in interactive mode.
+func (m *explorer) zone(s string, fn func() tea.Cmd) string {
+	if m.mark == nil {
+		return s
+	}
+	return m.mark(s, fn)
+}
+
+func (m *explorer) clickTab(t tabID) func() tea.Cmd {
+	return func() tea.Cmd {
+		if t == m.tab {
+			return nil
+		}
+		return m.switchTab(t)
+	}
+}
+
+// clickRow selects row i; a click on the selected row opens it.
+func (m *explorer) clickRow(l *level, i int) func() tea.Cmd {
+	return func() tea.Cmd {
+		if l.cursor == i {
+			return m.enter(l)
+		}
+		l.cursor = i
+		return nil
+	}
 }
 
 func (m *explorer) statusLine() string {
@@ -245,7 +274,7 @@ func (m *explorer) levelView(l *level, h int) string {
 		} else if !m.color {
 			line = "  " + truncate(line, m.w-2)
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(m.zone(line, m.clickRow(l, i)) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

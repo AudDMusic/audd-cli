@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │   docs            Print AudD documentation as markdown
  5 Account       │   now-playing     Show the latest songs on your streams
  6 Settings      │   recognize       Identify music in files, URLs, and folders
-*7 Help          │   streams         Manage stream monitoring
+*7 Help          >   streams         Manage stream monitoring
                  │   streams add     Add a stream to monitor
                  │   streams remove  Stop monitoring a stream
                  │   streams report  Plays grouped
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-type filter  → details  enter open in the palette  [ ] pages
+esc back  type filter  → details  enter open in the palette  ←/→ [ ] pages
 $ audd completion --help                                                  y copy

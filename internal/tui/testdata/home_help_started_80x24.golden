@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │      Sign in to your AudD account (or paste an API token) so
  5 Account       │      audd can recognize music and show your account.
  6 Settings      │      $ audd login
-*7 Help          │ 
+*7 Help          > 
                  │   2. Recognize a file
                  │      Pick a file, URL, or folder and recognize it. This fills
                  │      in AudD's example song.
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │   4. Add a stream
  ctrl+k commands │      Have AudD monitor a radio or other live stream, then
  ? keys  q quit  │      watch it in Now playing.
-↑/↓ step  enter go  [ ] pages
+←/esc back  ↑/↓ step  enter go  ←/→ [ ] pages
 $ audd login                                                              y copy

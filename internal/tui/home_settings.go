@@ -140,6 +140,10 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 	}
 	ks := k.String()
 	if s.edit != nil {
+		if ks == "left" && (s.edit.kind == fEnum && s.edit.choice == 0 || s.edit.isText() && s.edit.input.Position() == 0) {
+			s.edit = nil
+			return nil
+		}
 		switch ks {
 		case "esc":
 			s.edit = nil
@@ -219,8 +223,18 @@ func (s *settingsSection) view(w, h int) string {
 		if i == s.cur && s.h.color && s.edit == nil {
 			line = st.Bold.Render(line)
 		}
-		b.WriteString(truncate(line, w) + "\n")
-		b.WriteString(truncate("    "+st.Dim.Render(r.desc), w) + "\n")
+		row := truncate(line, w) + "\n" + truncate("    "+st.Dim.Render(r.desc), w)
+		b.WriteString(s.h.mark(row, func() tea.Cmd {
+			if s.edit != nil && s.cur == i {
+				return nil
+			}
+			if s.cur == i {
+				s.edit = s.editor(r)
+				return nil
+			}
+			s.cur, s.edit = i, nil
+			return nil
+		}) + "\n")
 	}
 	if s.edit != nil {
 		b.WriteString("\n" + styleLines(st.Dim, output.Wrap(s.edit.help+"; esc cancels.", w)) + "\n")
@@ -253,6 +267,17 @@ func (s *settingsSection) command() string {
 }
 
 func (s *settingsSection) capturing() bool { return s.edit != nil }
+
+// leftExits: left leaves from the list; while editing, left at the
+// start of the value cancels the edit.
+func (s *settingsSection) leftExits() bool { return s.edit == nil }
+
+func (s *settingsSection) wheel(dir int) tea.Cmd {
+	if s.edit == nil {
+		s.cur = max(0, min(len(s.rows)-1, s.cur+dir))
+	}
+	return nil
+}
 
 func (s *settingsSection) back() bool {
 	if s.edit != nil {

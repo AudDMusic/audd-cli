@@ -6,7 +6,7 @@ AudD  ·  profile default
  4 History       │   The AudD API docs             https://docs.audd.io
  5 Account       │   Your dashboard (API token, plans)https://dashboard.audd.io
  6 Settings      │   Report a problem              https://github.com/AudDMusic…
-*7 Help          │   Email AudD                    mailto:api@audd.io
+*7 Help          >   Email AudD                    mailto:api@audd.io
                  │ 
                  │ Enter opens the link, c copies it.
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 
-enter open  c copy  [ ] pages
+esc back  enter open  c copy  ←/→ [ ] pages
 ctrl+k runs any audd command

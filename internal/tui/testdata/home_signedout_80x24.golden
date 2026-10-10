@@ -1,5 +1,5 @@
 AudD  ·  profile default  ·  signed out
-                 │ Welcome to AudD
+                 > Welcome to AudD
  1 Recognize     │ 
  2 Now playing   │ audd recognizes music in files, URLs, and from the
  3 Streams       │ microphone, monitors streams, and manages your account. To
@@ -20,5 +20,5 @@ AudD  ·  profile default  ·  signed out
                  │ You can also look around first: the sections on the left work
  ctrl+k commands │ once a token is set.
  ? keys  q quit  │ 
-↑/↓ choose  enter go
+←/esc back  ↑/↓ choose  enter go
 $ audd login --browser                                                    y copy

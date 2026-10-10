@@ -136,6 +136,29 @@ type form struct {
 	fields []*field
 	cursor int
 	err    string
+	// h makes the fields clickable; before runs first on a click (a page
+	// that shows the form without its cursor goes into it).
+	h      *home
+	before func()
+}
+
+// click is what a click on visible field i does: the cursor moves there,
+// and a box, choice, or button is pressed as with enter.
+func (f *form) click(i int) func() tea.Cmd {
+	if f.h == nil {
+		return nil
+	}
+	return func() tea.Cmd {
+		if f.before != nil {
+			f.before()
+		}
+		f.cursor = i
+		f.focus()
+		if c := f.current(); c == nil || c.isText() {
+			return nil
+		}
+		return f.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
+	}
 }
 
 func newForm(fields ...*field) *form {
@@ -313,11 +336,12 @@ func (f *form) labelWidth() int {
 // view draws the form; st styles it, color says whether reverse video
 // is available for the cursor.
 func (f *form) view(w int, st output.Styles, color bool) string {
-	var b strings.Builder
+	var out strings.Builder
 	lw := f.labelWidth()
 	vis := f.visible()
 	var buttons []string
 	for i, x := range vis {
+		var b strings.Builder
 		cur := i == f.cursor
 		mark := "  "
 		if cur {
@@ -337,7 +361,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 					label = "[>" + x.label + "<]"
 				}
 			}
-			buttons = append(buttons, label)
+			buttons = append(buttons, f.h.mark(label, f.click(i)))
 			continue
 		case fBool:
 			box := "[ ]"
@@ -382,7 +406,10 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				b.WriteString(truncate(pad+st.Dim.Render(l), w) + "\n")
 			}
 		}
+		row := strings.TrimSuffix(b.String(), "\n")
+		out.WriteString(f.h.mark(row, f.click(i)) + "\n")
 	}
+	b := &out
 	if len(buttons) > 0 {
 		b.WriteString("\n  " + strings.Join(buttons, "  ") + "\n")
 	}
@@ -621,6 +648,26 @@ type picker struct {
 	filter textinput.Model
 	cursor int
 	off    int
+	// h and click make the rows clickable: click gets the row's index
+	// in matches.
+	h     *home
+	click func(i int) tea.Cmd
+}
+
+// clickRow is a click on row i: the first selects it, the next one on
+// the selected row runs act.
+func (p *picker) clickRow(i int, act func() tea.Cmd) tea.Cmd {
+	if i == p.cursor {
+		return act()
+	}
+	p.cursor = i
+	return nil
+}
+
+// wheel moves the cursor.
+func (p *picker) wheel(dir int) {
+	n := len(p.matches())
+	p.cursor = max(0, min(n-1, p.cursor+dir))
 }
 
 func newPicker(items []pickItem) *picker {
@@ -723,7 +770,11 @@ func (p *picker) view(w, h int, st output.Styles, color bool) string {
 		} else if !color {
 			line = "  " + line
 		}
-		b.WriteString(truncate(line, w) + "\n")
+		line = truncate(line, w)
+		if p.click != nil {
+			line = p.h.mark(line, func() tea.Cmd { return p.click(i) })
+		}
+		b.WriteString(line + "\n")
 	}
 	if len(m) == 0 {
 		b.WriteString(st.Dim.Render("Nothing matches."))
