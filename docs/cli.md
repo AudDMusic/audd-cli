@@ -96,11 +96,15 @@ copies, `r` refreshes, `d` removes, `e` edits, `x` exports, `s` stops). A key
 works only where it is listed; any other key says it does nothing. `1`-`7`
 jump to a section except while typing in a field.
 
-Saved values (a setting, the callback URL, a stream's URL, the token) are
-read-only until Enter or Edit; Esc cancels the edit and puts the old value
-back. Saving, removing, signing out, and spending requests ask first in a
-dialog with Cancel focused and a button named for the action; `y` confirms,
-`n` or Esc cancels. `q` asks first while a command is running.
+Opening a page never starts typing: its first field is selected, a letter
+starts typing in it, and Enter edits it. Saved values (a setting, the
+callback URL, a stream's URL, the token) are read-only until Enter or Edit;
+Esc cancels the edit and puts the old value back. Settings of audd save
+right away, and `u` undoes the last change. Spending more than one request,
+removing a stream, signing out, and replacing the token or the callback URL
+ask first in a dialog with a button named for the action: after a plan the
+action is focused, otherwise Cancel. In a dialog `y` confirms and `n` or Esc
+cancels. `q` asks first while a command is running.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
