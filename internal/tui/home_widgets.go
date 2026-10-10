@@ -156,7 +156,7 @@ func (f *form) visible() []*field {
 
 func (f *form) current() *field {
 	v := f.visible()
-	if len(v) == 0 {
+	if len(v) == 0 || f.cursor < 0 {
 		return nil
 	}
 	if f.cursor >= len(v) {

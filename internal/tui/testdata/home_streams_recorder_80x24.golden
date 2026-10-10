@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │  Streams   Callback  [Recorder]  History & reports 
+ 1 Recognize     │ Background recorder
+ 2 Listen        │ 
+ 3 Now playing   │ Running:        yes (pid 4242)
+*4 Streams       │ Store:          /data/streams-default.db
+ 5 History       │ 
+ 6 Account       │ 
+ 7 Settings      │ 
+ 8 Help          │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+s start  x stop  r refresh  [ ] pages
+$ audd streams recorder status                                            y copy

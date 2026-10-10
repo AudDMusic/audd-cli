@@ -18,6 +18,7 @@ import (
 	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 	"github.com/AudDMusic/audd-cli/internal/secrets"
+	"github.com/AudDMusic/audd-cli/internal/testutil"
 )
 
 // fakeRun stands in for HomeRun: it records each run and answers from
@@ -163,8 +164,8 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	NewExplorerData = func(a *app.App) (ExplorerData, error) { return d, nil }
 	NewFeed = func(a *app.App) (Feed, error) { return sampleFeed(), nil }
 	t.Cleanup(func() { NewExplorerData, NewFeed = oldData, oldFeed })
-	t.Setenv("AUDD_API_TOKEN", "")
-	t.Setenv("AUDD_FORMAT", "")
+	testutil.Isolate(t)
+	t.Setenv("AUDD_NO_BACKGROUND_RECORDER", "1")
 
 	var out, errb bytes.Buffer
 	a := npApp(&out, &errb, output.PrinterOptions{Format: output.FormatTable, StdoutTTY: true, StdinTTY: true, NoColor: true})
@@ -215,6 +216,30 @@ func runHome(t *testing.T, h *home, w, ht int, wait, after string, keys ...tea.K
 	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
 	fm := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))
 	return fm.View()
+}
+
+// drive runs h on a w×ht terminal through steps: a string waits for that
+// text on the screen, a tea.KeyMsg (or []tea.KeyMsg) is sent. It quits
+// and returns the last frame.
+func drive(t *testing.T, h *home, w, ht int, steps ...any) string {
+	t.Helper()
+	tm := teatest.NewTestModel(t, h, teatest.WithInitialTermSize(w, ht))
+	out := tm.Output()
+	for _, st := range steps {
+		switch v := st.(type) {
+		case string:
+			teatest.WaitFor(t, out, func(b []byte) bool { return bytes.Contains(b, []byte(v)) },
+				teatest.WithDuration(5*time.Second), teatest.WithCheckInterval(10*time.Millisecond))
+		case tea.KeyMsg:
+			tm.Send(v)
+		case []tea.KeyMsg:
+			for _, k := range v {
+				tm.Send(k)
+			}
+		}
+	}
+	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
+	return tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second)).View()
 }
 
 // typeText is the key messages for typing s.
