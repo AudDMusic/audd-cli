@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,8 +124,10 @@ func TestRecognizeBatchWithConfirmation(t *testing.T) {
 		}
 		asked <- "yes"
 		io.Stdout.Write([]byte(`{"schema_version":1,"type":"event","event":"job_started","job_id":"j1","total":2,"to_run":2}` + "\n"))
-		io.Stdout.Write([]byte(`{"schema_version":1,"type":"result","job_id":"j1","index":0,"input":"` + dir + `/a.mp3","status":"matched","result":{"artist":"Imagine Dragons","title":"Warriors"}}` + "\n"))
-		io.Stdout.Write([]byte(`{"schema_version":1,"type":"result","job_id":"j1","index":1,"input":"` + dir + `/b.mp3","status":"no_match","result":null}` + "\n"))
+		a, _ := json.Marshal(filepath.Join(dir, "a.mp3"))
+		b, _ := json.Marshal(filepath.Join(dir, "b.mp3"))
+		io.Stdout.Write([]byte(`{"schema_version":1,"type":"result","job_id":"j1","index":0,"input":` + string(a) + `,"status":"matched","result":{"artist":"Imagine Dragons","title":"Warriors"}}` + "\n"))
+		io.Stdout.Write([]byte(`{"schema_version":1,"type":"result","job_id":"j1","index":1,"input":` + string(b) + `,"status":"no_match","result":null}` + "\n"))
 		io.Stdout.Write([]byte(`{"schema_version":1,"type":"summary","job_id":"j1","recognized":1,"no_match":1,"failed":0,"requests_spent_this_run":2}` + "\n"))
 		return 0
 	})
@@ -162,7 +165,7 @@ func TestRecognizeBatchWithConfirmation(t *testing.T) {
 	if !strings.Contains(v, "a.mp3") || !strings.Contains(v, "Imagine Dragons — Warriors") || !strings.Contains(v, "no match") {
 		t.Fatalf("batch results:\n%s", v)
 	}
-	if !strings.Contains(v, "$ audd recognize "+dir+" --max-files 2") {
+	if !strings.Contains(v, "$ "+displayCommand([]string{"recognize", dir, "--max-files", "2"})) {
 		t.Fatalf("command:\n%s", v)
 	}
 }

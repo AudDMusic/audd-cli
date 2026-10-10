@@ -1,0 +1,40 @@
+AudD  ·  profile default
+                 │ Settings  profile default
+ 1 Recognize     │ 
+ 2 Listen        │ › token                        0123…cdef  (audd config set token)
+ 3 Now playing   │     API token, kept in the system credential store
+ 4 Streams       │   format                       auto  (default)
+ 5 History       │     default output format: table, json, jsonl, csv (auto: table on a terminal, JSON when piped)
+ 6 Account       │   max_requests                 no limit  (default)
+*7 Settings      │     default --max-requests for every command
+ 8 Help          │   concurrency                  4  (default)
+                 │     parallel requests for batch recognition
+                 │   streams.background_recorder  true  (default)
+                 │     start the background stream recorder automatically
+                 │ 
+                 │ Settings apply to profile default and are saved in config-dir/config.toml. Environment variables
+                 │ (env) win over the file.
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+↑/↓ setting  enter change  u unset  r reload
+$ audd config get token                                                                                           y copy

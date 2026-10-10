@@ -17,8 +17,7 @@ func (s *stubSection) command() string        { return "" }
 func (s *stubSection) capturing() bool        { return false }
 func (s *stubSection) back() bool             { return false }
 
-func newSettingsSection(h *home) section { return &stubSection{h, "Settings"} }
-func newHelpSection(h *home) section     { return &stubSection{h, "Help"} }
+func newHelpSection(h *home) section { return &stubSection{h, "Help"} }
 
 type paletteOpenMsg struct{ path, line string }
 
