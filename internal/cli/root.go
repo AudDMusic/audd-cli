@@ -140,6 +140,10 @@ func Run(ctx context.Context, args []string, stdio IO) int {
 	root.SetIn(stdio.In)
 	root.SetOut(stdio.Out)
 	root.SetErr(stdio.Err)
+	if opensHome(root, args, stdio) {
+		args = append([]string{"ui"}, args...)
+		root.SetArgs(args)
+	}
 	if err := unknownSubcommand(root, args); err != nil {
 		return a.Out.Error(err)
 	}
@@ -183,8 +187,11 @@ Output is a readable table on a terminal and JSON when piped. Commands that
 can spend many requests ask for explicit limits (--limit, --max-files) and
 show a plan before they start; --dry-run shows the plan only.
 
-Get your API token at https://dashboard.audd.io, or run audd login.`,
-		Example: `  audd recognize song.mp3
+Get your API token at https://dashboard.audd.io, or run audd login.
+
+Run audd with no arguments (or audd ui) on a terminal for interactive mode.`,
+		Example: `  audd ui
+  audd recognize song.mp3
   audd recognize https://audd.tech/example.mp3 --return apple_music,spotify
   audd recognize ./recordings --max-files 200 --dry-run
   audd recognize mix.mp3 --enterprise --limit 20 --tracklist
@@ -243,7 +250,7 @@ var commandOrder = []string{
 	"login", "account", "usage", "billing", "token", "auth",
 	"browse", "jobs", "cache", "config",
 	"api", "commands", "docs", "agent-setup", "mcp",
-	"version", "update", "completion", "help",
+	"ui", "version", "update", "completion", "help",
 }
 
 func orderCommands(root *cobra.Command) {

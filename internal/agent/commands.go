@@ -131,6 +131,7 @@ var commandInfos = map[string]commandInfo{
 	"version":                {"object", nil},
 	"agent-setup":            {"object", nil},
 	"completion":             {"", nil},
+	"ui":                     {"", nil},
 	"streams callback get":   {"object", []int{3, 4, 5}},
 }
 

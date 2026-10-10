@@ -25,6 +25,7 @@ func TestHooksAssignedByOwners(t *testing.T) {
 		"RunBatch":       {app.RunBatch, mod + "jobs.RunBatch"},
 		"RunExplorer":    {app.RunExplorer, mod + "tui.RunExplorer"},
 		"RenderResult":   {app.RenderResult, mod + "tui.RenderResultCard"},
+		"RunHome":        {app.RunHome, mod + "tui.RunHome"},
 		"EnsureRecorder": {app.EnsureRecorder, mod + "streams.EnsureBackground"},
 		// Hooks that cli fills in from the API layer, the results cache,
 		// the stream store and the jobs store.

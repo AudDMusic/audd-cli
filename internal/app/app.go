@@ -7,6 +7,7 @@
 //
 //	RunBatch       internal/jobs     (batch recognition)
 //	RunExplorer    internal/tui      (audd browse and friends)
+//	RunHome        internal/tui      (interactive mode: audd ui)
 //	RenderResult   internal/tui      (result card; plain text until then)
 //	EnsureRecorder internal/streams  (background stream recorder)
 //	RestartRecorder internal/streams (restart it after a token change)
@@ -127,6 +128,11 @@ var (
 	// from the explorer.
 	RunExplorer = func(ctx context.Context, a *App, tab string) error {
 		return NotImplemented("the interactive explorer")
+	}
+	// RunHome opens interactive mode on a section ("" for the start
+	// screen). ctx is the command's: Ctrl-C and SIGTERM end it.
+	RunHome = func(ctx context.Context, a *App, section string) error {
+		return NotImplemented("interactive mode")
 	}
 	// RenderResult draws one recognition result for people.
 	RenderResult = PlainResult
