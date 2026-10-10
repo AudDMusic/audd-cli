@@ -320,7 +320,7 @@ var moveKeys = []keyHelp{
 var globalKeys = []keyHelp{
 	{"1-7", "jump to a section (not while typing in a text field)"},
 	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
-	{"y", "copy the command shown at the bottom"},
+	{"y", "copy the command shown at the bottom (in a dialog: confirm)"},
 	{"?", "keys for this screen"},
 	{"F1", "help"},
 	{"q", "quit; not while typing, and it asks while a command runs"},

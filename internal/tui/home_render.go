@@ -112,6 +112,7 @@ type batchState struct {
 	cursor, off int
 	detail      bool
 	title       string // a heading of its own ("3 matches in mix.mp3")
+	inJobs      bool   // shown in Recognitions › Jobs, so it does not point there
 }
 
 // selected is the result under the cursor.
@@ -167,9 +168,19 @@ func (b *batchState) listView(st output.Styles, w, ht int, row func(label string
 		b.off = b.cursor - room + 1
 	}
 	inW := min(32, w/2)
+	timed := len(b.results) > 0 && b.results[0]["start"] != nil
+	if timed {
+		// Matches in one file: where each starts and ends.
+		out.WriteString(st.Dim.Render(truncate("  "+padRight("Starts at", 11)+padRight("Ends at", 10)+"Song", w)) + "\n")
+		room--
+	}
 	for i := b.off; i < len(b.results) && i < b.off+room; i++ {
 		m := b.results[i]
-		out.WriteString(truncate(row(padRight(truncate(fileName(str(m["input"])), inW-1), inW)+resultSong(m), i == b.cursor), w) + "\n")
+		label := padRight(truncate(fileName(str(m["input"])), inW-1), inW) + resultSong(m)
+		if timed {
+			label = padRight(str(m["start"]), 11) + padRight(str(m["end"]), 10) + resultSong(m)
+		}
+		out.WriteString(truncate(row(label, i == b.cursor), w) + "\n")
 	}
 	return strings.TrimRight(out.String(), "\n")
 }
@@ -275,7 +286,11 @@ func (b *batchState) view(st output.Styles, w, ht int, running bool) string {
 		out.WriteString(st.Bold.Render(fmt.Sprintf("Job %s: %d recognized, %d no match, %d failed",
 			b.jobID, int(num(s["recognized"])), int(num(s["no_match"])), int(num(s["failed"])))) + "\n")
 		if n := int(num(s["requests_spent_this_run"])); n > 0 || s["requests_spent_this_run"] != nil {
-			out.WriteString(st.Dim.Render(fmt.Sprintf("%s used in this run. The job is in Recognitions › Jobs.", output.Plural(n, "request"))) + "\n")
+			note := output.Plural(n, "request") + " used in this run."
+			if !b.inJobs {
+				note += " The job is in Recognitions › Jobs."
+			}
+			out.WriteString(st.Dim.Render(note) + "\n")
 		}
 		out.WriteString("\n")
 	}
@@ -397,6 +412,13 @@ func (h *home) batchPage(bs *batchState, w, ht int) string {
 		if m := bs.selected(); m != nil {
 			ds := detailStyles{title: st.Title.Inherit(st.Accent), dim: st.Dim, key: st.Key}
 			out := st.Dim.Render(truncate(str(m["input"]), w)) + "\n\n"
+			if m["start"] != nil {
+				where := "Starts at " + str(m["start"])
+				if e := str(m["end"]); e != "" {
+					where += ", ends at " + e
+				}
+				out = where + "\n\n"
+			}
 			if m["result"] != nil && m["status"] != "no_match" {
 				raw, _ := json.Marshal(m["result"])
 				return out + resultDetail(raw, ds)

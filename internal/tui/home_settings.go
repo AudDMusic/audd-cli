@@ -33,6 +33,10 @@ type settingsSection struct {
 	// orig is the value the editor started with: enter without a change
 	// saves nothing.
 	orig string
+	// undo puts back the setting saved last, while its message shows.
+	undo *settingUndo
+	// fresh: nothing typed in the editor yet.
+	fresh bool
 }
 
 func newSettingsSection(h *home) section { return &settingsSection{h: h, panel: newPanel(h)} }
@@ -153,6 +157,8 @@ func (s *settingsSection) startEdit() {
 	if r := s.selected(); r != nil {
 		s.edit = s.editor(*r)
 		s.orig = s.edit.value()
+		// The first key typed replaces the value, as if it was selected.
+		s.fresh = s.edit.isText() && s.orig != ""
 	}
 }
 
@@ -168,6 +174,11 @@ func (s *settingsSection) askUnset() tea.Cmd {
 		what = "audd then has no API token for this profile until you set one or sign in."
 	}
 	key := r.key
+	if key != "token" {
+		// A setting of audd itself: unset right away, with undo.
+		s.undo = &settingUndo{key: key, value: r.value}
+		return s.panel.start(runReq{args: []string{"config", "unset", key}})
+	}
 	return s.h.askFirst(&confirmState{
 		owner:    "settings",
 		question: fmt.Sprintf("Unset %s in profile %s?", key, s.profile),
@@ -190,6 +201,9 @@ func (s *settingsSection) setArgs() []string {
 		return []string{"config", "set", "token", "-"}
 	}
 	v := s.edit.value()
+	if r.key == "format" && v == "auto" {
+		return []string{"config", "unset", "format"}
+	}
 	if v == "" {
 		v = "VALUE"
 	}
@@ -202,18 +216,24 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 			s.load()
 			if s.panel.res.ok() {
 				key := s.panel.args[2]
-				what := key + " is back to its default"
+				what := settingLabel(key) + " is back to its default"
 				switch {
 				case key == "token" && s.panel.args[1] == "unset":
 					what = "API token removed from profile " + s.profile
 				case key == "token":
 					what = "Token saved for profile " + s.profile
 				case s.panel.args[1] == "set":
-					what = strings.ToUpper(key[:1]) + key[1:] + " set to " + s.panel.args[3]
+					what = settingLabel(key) + " set to " + s.panel.args[3]
 				}
 				if key == "token" {
-					s.h.signedOut = s.h.noToken()
+					// The saved token runs from now on, not a session one.
+					s.h.useToken(false)
+					s.load()
 					return tea.Batch(s.h.setFlash(what), s.h.loadHeader())
+				}
+				if s.undo != nil && s.undo.key == key && s.undo.msg == "" {
+					what += " · u undo"
+					s.undo.msg = what
 				}
 				return s.h.setFlash(what)
 			}
@@ -262,6 +282,10 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 			f.update(k)
 			return nil
 		}
+		if s.fresh && k.Type == tea.KeyRunes {
+			s.edit.input.SetValue("")
+		}
+		s.fresh = false
 		var cmd tea.Cmd
 		s.edit.input, cmd = s.edit.input.Update(k)
 		// A number is checked as it is typed.
@@ -291,21 +315,11 @@ func (s *settingsSection) edit1() tea.Cmd {
 	return nil
 }
 
-// askSave asks before saving a new value, with the old and the new.
+// askSave saves a new value. Settings of audd itself save right away,
+// with undo; the token, which changes what runs everywhere, asks first.
 func (s *settingsSection) askSave(v string) tea.Cmd {
 	r := *s.selected()
 	args := s.setArgs()
-	shown, old := v, r.value
-	if r.source != "" {
-		old += " (" + r.source + ")"
-	}
-	q := fmt.Sprintf("Set %s to %s?", r.key, v)
-	action := "Set " + r.key
-	if r.key == "token" {
-		shown = config.MaskToken(v)
-		q = "Replace the API token of profile " + s.profile + "?"
-		action = "Replace the token"
-	}
 	run := func() tea.Cmd {
 		s.edit = nil
 		if r.key == "format" && v == "auto" {
@@ -317,14 +331,41 @@ func (s *settingsSection) askSave(v string) tea.Cmd {
 		}
 		return s.panel.start(req)
 	}
-	notes := []string{"Now: " + old, "New: " + shown}
-	if r.key == "token" {
-		notes = append(notes, "Commands in this profile use the new token from now on.")
+	if r.key != "token" {
+		s.undo = &settingUndo{key: r.key, value: r.value, wasDefault: r.source == config.SettingDefault}
+		return run()
+	}
+	old := r.value
+	if r.source != "" {
+		old += " (" + r.source + ")"
 	}
 	return s.h.askFirst(&confirmState{
-		owner: "settings", question: q, notes: notes, action: action,
-		command: displayCommand(args), cancel: "Cancelled. " + r.key + " is unchanged.", yes: run,
+		owner:    "settings",
+		question: "Replace the API token of profile " + s.profile + "?",
+		notes:    []string{"Now: " + old, "New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
+		action:   "Replace the token",
+		topic:    "Replace the token?",
+		command:  displayCommand(args),
+		cancel:   "Cancelled. The token is unchanged.",
+		yes:      run,
 	})
+}
+
+// settingUndo is how to put back the setting changed last.
+type settingUndo struct {
+	key, value string
+	wasDefault bool
+	msg        string // the message the undo goes with
+}
+
+// undoLast puts the setting changed last back.
+func (s *settingsSection) undoLast() tea.Cmd {
+	u := s.undo
+	s.undo = nil
+	if u.wasDefault {
+		return s.panel.start(runReq{args: []string{"config", "unset", u.key}})
+	}
+	return s.panel.start(runReq{args: []string{"config", "set", u.key, u.value}})
 }
 
 // actions are the buttons for the selected setting.
@@ -341,7 +382,11 @@ func (s *settingsSection) actions() []button {
 			}
 		}
 	}
-	return append(b, button{"Reload", "r", func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
+	b = append(b, button{"Reload", "r", func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
+	if s.undo != nil && s.undo.msg != "" && (s.h.flash == s.undo.msg || s.h.lastFlash == s.undo.msg) {
+		b = append(b, button{"Undo", "u", s.undoLast})
+	}
+	return b
 }
 
 func (s *settingsSection) downExits() bool { return s.edit == nil && s.cur >= len(s.rows)-1 }
@@ -356,7 +401,7 @@ func (s *settingsSection) view(w, h int) string {
 	}
 	keyW := 0
 	for _, r := range s.rows {
-		keyW = max(keyW, len(r.key))
+		keyW = max(keyW, len(settingLabel(r.key)))
 	}
 	for i, r := range s.rows {
 		val := r.value
@@ -368,7 +413,7 @@ func (s *settingsSection) view(w, h int) string {
 				val = s.edit.input.View()
 			}
 		}
-		line := padRight(r.key, keyW+2) + val
+		line := padRight(settingLabel(r.key), keyW+2) + val
 		switch {
 		case s.edit != nil && i == s.cur:
 			line += "  " + st.Dim.Render("editing")
@@ -376,7 +421,7 @@ func (s *settingsSection) view(w, h int) string {
 			line += "  " + st.Dim.Render("("+r.source+")")
 		}
 		line = s.h.listRow(line, i == s.cur)
-		desc := st.Dim.Render(r.desc)
+		desc := st.Dim.Render(r.key + " · " + r.desc)
 		if s.edit != nil && i == s.cur && s.edit.problem != "" {
 			desc = st.Warn.Render(s.edit.problem)
 		}
@@ -464,4 +509,20 @@ func (s *settingsSection) back() bool {
 		return true
 	}
 	return false
+}
+
+// settingLabels name the settings in plain words; the key is shown dim.
+var settingLabels = map[string]string{
+	"format":                      "Output format",
+	"max_requests":                "Request limit per command",
+	"concurrency":                 "Parallel requests",
+	"streams.background_recorder": "Start the recorder automatically",
+	"token":                       "API token",
+}
+
+func settingLabel(key string) string {
+	if l := settingLabels[key]; l != "" {
+		return l
+	}
+	return key
 }

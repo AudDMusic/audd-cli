@@ -358,16 +358,16 @@ func (m *npModel) gridView(h int) string {
 // embeddedKeys are the hints in interactive mode, for the view shown:
 // the grid, one stream, or its history.
 func (m *npModel) embeddedKeys() []string {
-	switch {
-	case m.history:
-		return nil
-	case m.single():
-		if len(m.stations) > 1 {
-			return []string{"←/→ previous, next stream", "enter all streams"}
-		}
+	if len(m.stations) < 2 {
 		return nil
 	}
-	return []string{"←/→/↑/↓ select", "enter zoom in"}
+	switch {
+	case m.history:
+		return []string{"←/→ previous, next stream"}
+	case m.single():
+		return []string{"←/→ previous, next stream", "enter all streams"}
+	}
+	return []string{"←/→ previous, next stream", "↑/↓ rows", "enter open"}
 }
 
 func (m *npModel) gridCard(i, w int) string {

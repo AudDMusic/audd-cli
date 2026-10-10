@@ -3,7 +3,7 @@ AudD  ·  profile default
  1 Recognize     │ >Overview< Usage  Billing  API token  Profiles 
  2 Now playing   │ Sign in to see this
  3 Streams       │ 
- 4 Recognitions  │ An API token is set for profile default, so audd can
+ 4 Recognitions  │ An API token is saved for profile default, so audd can
 *5 Account       > recognize music. Your account, usage, and billing need a
  6 Settings      │ sign-in to your AudD account.
  7 Help          │ 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/AudDMusic/audd-cli/internal/agent"
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
@@ -141,12 +143,21 @@ func newCmdForm(info cmdInfo) (*cmdForm, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s --%s: no form field for flag type %s", c.CommandPath(), fl.Name, fl.Value.Type())
 		}
-		help := fl.Usage
+		// A plain label; the flag itself is in the help, and on the
+		// command line at the bottom.
+		help := capFirst(fl.Usage) + " (--" + fl.Name + ")"
+		label := plainName(fl.Name)
 		var f *field
 		if choices := flagChoices(c, fl.Name); kind == fText && len(choices) > 0 {
-			f = enumField("flag:"+fl.Name, "--"+fl.Name, help, choices)
+			f = enumField("flag:"+fl.Name, label, help, choices)
 		} else {
-			f = &field{kind: kind, name: "flag:" + fl.Name, label: "--" + fl.Name, help: help, input: newInput()}
+			f = &field{kind: kind, name: "flag:" + fl.Name, label: label, help: help, input: newInput()}
+		}
+		if key := configKeys[fl.Name]; key != "" && kind != fBool {
+			// The value in effect when the flag is left out.
+			if v, _ := config.SettingSource(&config.Profile{}, key, os.Getenv); v != "" {
+				f.placeholder = "default: " + v
+			}
 		}
 		if r, ok := fl.Annotations[cobra.BashCompOneRequiredFlag]; ok && len(r) > 0 && r[0] == "true" {
 			f.required = true
@@ -163,6 +174,9 @@ func newCmdForm(info cmdInfo) (*cmdForm, error) {
 			// A required flag has no usable default: the user types it.
 			f.def = ""
 		case kind == fList && (f.def == "[]" || f.def == ""):
+			f.def = ""
+		case f.placeholder != "" && (fl.DefValue == "0" || fl.DefValue == ""):
+			// Left empty: the setting's value applies (the placeholder).
 			f.def = ""
 		default:
 			f.setValue(fl.DefValue)
@@ -532,7 +546,13 @@ func (p *palette) run() tea.Cmd {
 		return s
 	}
 	p.panel.live = p.live
-	return p.panel.start(runReq{args: p.argv, stream: true, spends: true})
+	format := ""
+	if tableCommand(p.cf.info.path) {
+		// Shown as the command shows it on a terminal: sentences and
+		// tables, not raw fields.
+		format = "table"
+	}
+	return p.panel.start(runReq{args: p.argv, stream: true, spends: true, format: format})
 }
 
 // live shows a run's output as it arrives.
@@ -651,7 +671,11 @@ func (p *palette) view(w, h int) string {
 func (p *palette) keys() []keyHelp {
 	switch p.phase {
 	case "list":
-		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, {"esc", "close"}}
+		esc := keyHelp{"esc", "close"}
+		if p.picker != nil && p.picker.filter.Value() != "" {
+			esc = keyHelp{"esc", "clear the filter"}
+		}
+		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, esc}
 	case "form":
 		return p.cf.form.rowKeys("run")
 	}
@@ -758,4 +782,35 @@ func splitCommandLine(s string) []string {
 		out = append(out, cur.String())
 	}
 	return out
+}
+
+// tableCommand reports whether a command's own terminal output reads
+// better than its JSON (account, usage, billing, cache, config, lists).
+func tableCommand(path string) bool {
+	for _, p := range []string{"usage", "account", "billing", "cache", "config", "auth status", "token show", "jobs list", "jobs show", "streams list", "streams history", "streams report", "streams recorder", "streams callback get", "version", "doctor"} {
+		if path == p || strings.HasPrefix(path, p+" ") {
+			return true
+		}
+	}
+	return false
+}
+
+// configKeys are the flags a setting gives a default to.
+var configKeys = map[string]string{"concurrency": "concurrency", "max-requests": "max_requests", "format": "format"}
+
+// plainName is a flag or argument name as a label: "max-files" is "Max
+// files", "id" is "ID".
+func plainName(name string) string {
+	words := strings.FieldsFunc(name, func(r rune) bool { return r == '-' || r == '_' || r == '|' || r == '.' })
+	for i, w := range words {
+		switch w {
+		case "id", "url", "isrc", "upc", "api":
+			words[i] = strings.ToUpper(w)
+		}
+	}
+	if len(words) == 0 {
+		return name
+	}
+	words[0] = capFirst(words[0])
+	return strings.Join(words, " ")
 }

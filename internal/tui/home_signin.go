@@ -54,12 +54,33 @@ var tokenSetChoices = []struct{ title, help, step string }{
 	{"Paste a different token", "Replace the API token of this profile with one from https://dashboard.audd.io.", "paste"},
 }
 
+// testTokenChoices are Account's choices while the test token is in use.
+var testTokenChoices = []struct{ title, help, step string }{
+	{"Paste your token…", "Use your own API token from https://dashboard.audd.io; it is saved for this profile.", "paste"},
+	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token.", "login"},
+}
+
 // choiceList is what the screen offers.
 func (s *signinSection) choiceList() []struct{ title, help, step string } {
-	if s.heading != "" && !s.h.signedOut {
+	switch {
+	case s.heading != "" && s.h.testToken:
+		return testTokenChoices
+	case s.heading != "" && !s.h.signedOut:
 		return tokenSetChoices
 	}
 	return signinChoices
+}
+
+// suspiciousToken says why a pasted value does not look like an API
+// token ("" when it does).
+func suspiciousToken(v string) string {
+	switch {
+	case strings.EqualFold(v, "your-api-token"), strings.EqualFold(v, "your-token"), strings.Contains(v, "<"):
+		return "This looks like the example text, not a token."
+	case strings.ContainsAny(v, " \t") || len(v) < 16:
+		return "This does not look like an API token (tokens are one word of letters and digits)."
+	}
+	return ""
 }
 
 func (s *signinSection) title() string { return "Sign in" }
@@ -177,14 +198,20 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 			save := func() tea.Cmd {
 				return s.panel.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
 			}
-			if s.h.signedOut {
-				return save()
-			}
-			// A token is set: replacing it is asked first.
 			owner := "signin"
 			if s.heading != "" {
 				owner = "account"
 			}
+			if why := suspiciousToken(v); why != "" {
+				return s.h.askFirst(&confirmState{
+					owner: owner, question: why + " Save it anyway?", action: "Save anyway",
+					topic: "Save anyway?", command: "audd config set token -", cancel: "Not saved", yes: save,
+				})
+			}
+			if s.h.signedOut || s.h.testToken {
+				return save()
+			}
+			// A token is saved: replacing it is asked first.
 			return s.h.askFirst(&confirmState{
 				owner:    owner,
 				question: "Replace the API token of profile " + s.h.profileName() + "?",
@@ -241,9 +268,12 @@ func (s *signinSection) view(w, h int) string {
 		return b.String()
 	}
 	switch {
+	case s.heading != "" && s.h.testToken:
+		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
+		b.WriteString(output.Wrap("Using the public test token for this session (10 requests a day). Nothing is saved. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
 	case s.heading != "" && !s.h.signedOut:
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
-		b.WriteString(output.Wrap("An API token is set for profile "+s.h.profileName()+", so audd can recognize music. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
+		b.WriteString(output.Wrap("An API token is saved for profile "+s.h.profileName()+", so audd can recognize music. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
 	case s.heading != "":
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
 		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account. To only recognize music, an API token is enough:", w) + "\n\n")

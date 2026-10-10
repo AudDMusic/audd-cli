@@ -216,7 +216,7 @@ func TestUIAddAndRemoveStream(t *testing.T) {
 	s.press(kDown, "a")
 	s.wait("Add a stream")
 	s.typeText("https://radio.example/7.mp3")
-	s.press(kDown)
+	s.press(kDown, "\x15") // ID: clear the suggested one (ctrl+u)
 	s.typeText("7")
 	s.press(kDown, kDown, kEnter) // past "start" to Add
 	s.wait("Streams · 1 stream")
@@ -273,9 +273,7 @@ func TestUIEditSetting(t *testing.T) {
 	s.press(kEnter, kRight, kRight)
 	s.wait("audd config set format json")
 	s.press(kEnter)
-	s.wait("Set format to json?")
-	s.press("y")
-	s.wait("Format set to json")
+	s.wait("Output format set to json")
 	s.quit()
 	r := e.ok("config", "get", "format")
 	if d := doc(t, r.Stdout); d["value"] != "json" {

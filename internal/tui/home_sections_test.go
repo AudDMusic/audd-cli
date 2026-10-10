@@ -133,7 +133,7 @@ func TestStreamsAddAndRemove(t *testing.T) {
 	drain(h, h.activate(), 0)
 	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/7.mp3")...)
-	press(h, key("down"))
+	press(h, key("down"), key("ctrl+u"))
 	press(h, typeText("7")...)
 	press(h, key("down"), key(" "))
 	if h.command() != "audd streams add https://radio.example/7.mp3 --id 7 --start" {

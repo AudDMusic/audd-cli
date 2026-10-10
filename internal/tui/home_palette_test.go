@@ -78,7 +78,7 @@ func TestPaletteForm(t *testing.T) {
 	press(h, typeText("recognize")...)
 	press(h, key("enter"))
 	v := h.View()
-	for _, s := range []string{"file|url|dir|glob|-*", "--enterprise", "$ audd recognize '<file|url|dir|glob|->'"} {
+	for _, s := range []string{"file|url|dir|glob|-*", "Enterprise", "Concurrency", "default: 4", "$ audd recognize '<file|url|dir|glob|->'"} {
 		if !strings.Contains(v, s) {
 			t.Fatalf("form lacks %q:\n%s", s, v)
 		}

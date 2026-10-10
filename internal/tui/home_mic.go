@@ -132,6 +132,9 @@ func (s *recognizeSection) micKeys() []keyHelp {
 
 // startListen records and recognizes.
 func (s *recognizeSection) startListen() tea.Cmd {
+	if s.h.signedOut {
+		return s.needToken(s.startListen)
+	}
 	if e := s.form.check(); e != "" {
 		s.form.err = e
 		return nil
@@ -169,7 +172,7 @@ func (s *recognizeSection) micNotes(w int) string {
 	var b strings.Builder
 	if t := s.m.tools; t != nil && t.FFmpeg == "" && t.Sox == "" {
 		e := media.MissingTool("ffmpeg", "listening to the microphone")
-		b.WriteString("\n\n" + styleLines(st.Warn, output.Wrap(e.Message+" (sox works too)", w)))
+		b.WriteString("\n\n" + styleLines(st.Warn, output.Wrap(capFirst(e.Message)+" (sox works too)", w)))
 		b.WriteString("\n" + output.Wrap("To install it: "+e.Hint, w))
 		b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Then come back here: audd looks for it again when you open Recognize.", w)))
 	}

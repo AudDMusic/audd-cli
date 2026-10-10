@@ -67,6 +67,15 @@ type field struct {
 	placeholder string
 	// validate, when set, checks a typed value ("" when it is fine).
 	validate func(v string) string
+	// optionLabels are a choice's options in plain words (options are
+	// the values the command takes).
+	optionLabels []string
+	// describe, when set, says what a value means ("7d" → "7 days
+	// ago"), shown next to it.
+	describe func(v string) string
+	// typeHint is what to type into the field, for its hint while it is
+	// selected but not being typed in ("a path or URL").
+	typeHint string
 }
 
 func newInput() textinput.Model {
@@ -190,6 +199,21 @@ type form struct {
 	// inPalette: the form is in the command palette, so it has the keys
 	// while the palette is open.
 	inPalette bool
+	// enterNext: enter in a text field goes on to the next field; the
+	// last one (or the button) runs the form.
+	enterNext bool
+}
+
+// laterField reports whether a field other than a button comes after
+// the cursor.
+func (f *form) laterField() bool {
+	v := f.visible()
+	for i := f.cursor + 1; i < len(v); i++ {
+		if v[i].kind != fButton {
+			return true
+		}
+	}
+	return false
 }
 
 // click is what a click on visible field i does: the cursor moves there;
@@ -344,6 +368,25 @@ func (f *form) resume() {
 		c.locked = false
 		f.focus()
 	}
+}
+
+// idle selects the text field under the cursor without typing in it:
+// a page opened with number keys never starts typing.
+func (f *form) idle() {
+	if c := f.current(); c != nil && c.isText() && !c.lockable {
+		c.locked = true
+	}
+}
+
+// startsTyping reports whether k, typed now, starts typing into the
+// selected field: any character but the digits that jump to sections.
+func (f *form) startsTyping(k tea.KeyMsg) bool {
+	c := f.current()
+	if c == nil || !c.isText() || c.lockable || !c.locked || k.Type != tea.KeyRunes {
+		return false
+	}
+	s := k.String()
+	return !(len(s) == 1 && s >= "1" && s <= "7")
 }
 
 // leaveField stops typing in the text field under the cursor (esc): the
@@ -502,6 +545,15 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 			c.orig = c.input.Value()
 			c.input.CursorEnd()
 			return "", c.input.Focus()
+		case !c.lockable && k.Type == tea.KeyRunes:
+			// Typing into a selected field starts editing it, with what
+			// was typed.
+			c.locked = false
+			c.input.CursorEnd()
+			c.input.Focus()
+			var cmd tea.Cmd
+			c.input, cmd = c.input.Update(k)
+			return "", cmd
 		}
 		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
 			if c.lockable {
@@ -514,6 +566,10 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 	switch s {
 	case "enter":
 		c.problem = c.formatProblem()
+		if f.enterNext && f.laterField() {
+			f.move(1)
+			return "", nil
+		}
 		if b := f.firstButton(); b != nil {
 			// The form is sent: the keys leave the field (o, c, and the
 			// rest work on what comes next).
@@ -557,9 +613,15 @@ func (f *form) rowKeys(primary string) []keyHelp {
 	case c.locked && c.lockable:
 		k = append(k, keyHelp{"enter/e", "edit"})
 	case c.lockable:
-		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel the edit"})
+		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel"})
+	case f.enterNext && f.laterField():
+		k = append(k, keyHelp{"enter", "next field"})
 	case c.locked:
-		k = append(k, keyHelp{"enter", "type in it"})
+		what := c.typeHint
+		if what == "" {
+			what = "to fill it in"
+		}
+		k = append(k, keyHelp{"type", what}, keyHelp{"enter", "edit"}, keyHelp{"1-7", "sections"})
 	default:
 		k = append(k, keyHelp{"enter", primary})
 	}
@@ -643,7 +705,11 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 		case fEnum:
 			val := ""
 			if len(x.options) > 0 {
-				val = f.h.mark("‹", f.arrowClick(i, -1)) + " " + x.options[x.choice] + " " + f.h.mark("›", f.arrowClick(i, 1))
+				opt := x.options[x.choice]
+				if x.choice < len(x.optionLabels) {
+					opt = x.optionLabels[x.choice]
+				}
+				val = f.h.mark("‹", f.arrowClick(i, -1)) + " " + opt + " " + f.h.mark("›", f.arrowClick(i, 1))
 			}
 			if cur {
 				val = st.Bold.Render(val)
@@ -671,6 +737,11 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				if val == "" {
 					val = st.Dim.Render(x.placeholderText())
 				}
+				if x.describe != nil && val != "" {
+					if d := x.describe(x.input.Value()); d != "" {
+						val += st.Dim.Render(" · " + d)
+					}
+				}
 				switch {
 				case cur && x.lockable:
 					val += st.Dim.Render("  (enter or e to edit)")
@@ -686,7 +757,8 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			b.WriteString(truncate(strings.Repeat(" ", lw+2)+st.Accent.Render("editing")+st.Dim.Render(" · enter saves, esc cancels"), w) + "\n")
 		}
 		if x.problem != "" {
-			b.WriteString(truncate(strings.Repeat(" ", lw+2)+st.Warn.Render(x.problem), w) + "\n")
+			// A long problem wraps under the field.
+			b.WriteString(indent(styleLines(st.Warn, output.Wrap(x.problem, max(10, w-lw-2))), strings.Repeat(" ", lw+2)) + "\n")
 		}
 		row := strings.TrimSuffix(b.String(), "\n")
 		out.WriteString(f.h.mark(row, f.click(i)) + "\n")

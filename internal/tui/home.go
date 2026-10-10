@@ -199,6 +199,7 @@ const (
 // headerMsg carries the account line of the header.
 type headerMsg struct {
 	email, plan string
+	planKey     string // the plan's identifier, as list_plans names it
 	remaining   int
 	known       bool
 	err         error
@@ -265,9 +266,10 @@ type home struct {
 	hdr                               headerMsg
 	hdrLoaded                         bool
 
-	flash  string
-	flashN int
-	osc    string
+	flash     string
+	lastFlash string
+	flashN    int
+	osc       string
 
 	runs   runRegistry
 	arts   *artStore
@@ -294,6 +296,7 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 	case start >= 0:
 		h.cur = start
 		h.focus = h.entryFocus()
+		h.pageEntered()
 	case h.signedOut:
 		h.showSignin, h.focus = true, focusContent
 	default:
@@ -405,6 +408,7 @@ func (h *home) navigate(id string) tea.Cmd {
 	h.backTo = nil
 	cmd := h.show(id, false)
 	h.focus = h.entryFocus()
+	h.pageEntered()
 	return cmd
 }
 
@@ -636,7 +640,7 @@ func (h *home) loadHeader() tea.Cmd {
 			return headerMsg{err: err}
 		}
 		if s, err := b.Status(c); err == nil && s.Plan != nil {
-			m.plan = s.Plan.Name
+			m.plan, m.planKey = s.Plan.Name, s.Plan.Key
 			if m.plan == "" {
 				m.plan = s.Plan.Key
 			}
@@ -650,19 +654,28 @@ func (h *home) loadHeader() tea.Cmd {
 
 // signedIn is called after a token was set or a sign-in finished.
 func (h *home) signedIn(testToken bool) tea.Cmd {
-	h.testToken = testToken
-	if testToken {
-		h.flags.Token = "test"
-	}
-	h.signedOut = h.noToken()
-	h.hdrLoaded = false
+	h.useToken(testToken)
 	h.showSignin = false
 	h.focus = focusContent
 	h.backTo = nil
+	return tea.Batch(h.loadHeader(), h.show("recognize", true))
+}
+
+// useToken makes runs use the public test token, or the profile's own
+// token (saved, from audd login, or from the environment). It is called
+// on every change of token: the token that runs is the one the header
+// shows.
+func (h *home) useToken(test bool) {
+	h.testToken = test
+	h.flags.Token = ""
+	if test {
+		h.flags.Token = "test"
+	}
 	if a, err := HomeApp(h.flags); err == nil {
 		h.a = sessionApp(a)
 	}
-	return tea.Batch(h.loadHeader(), h.show("recognize", true))
+	h.signedOut = h.noToken()
+	h.hdr, h.hdrLoaded = headerMsg{}, false
 }
 
 // switchProfile rebuilds the session for another profile.
@@ -673,6 +686,9 @@ func (h *home) switchProfile(name string) tea.Cmd {
 	if err != nil {
 		return h.setFlash("Could not switch: " + output.AsError(err).Message)
 	}
+	// The test token was for this session's profile: the new one runs
+	// with its own token.
+	flags.Token = ""
 	h.flags = flags
 	h.a = sessionApp(a)
 	h.testToken = false

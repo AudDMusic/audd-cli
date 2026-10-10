@@ -3,7 +3,7 @@ AudD  ·  profile default
 *1 Recognize     > Recognize music in a file, URL, or folder
  2 Now playing   │ 
  3 Streams       │   Source     ‹ File, URL, or folder ›
- 4 Recognitions  │ › Input*     a file, URL, or folder                         
+ 4 Recognitions  │ › Input*     a file, URL, or folder  (enter to type)
  5 Account       │   [ ] Add Apple Music data (link, artwork, track length)
  6 Settings      │   [ ] Add Spotify data (link, artwork, popularity)
  7 Help          │   [ ] Add Deezer data (link, artwork)
@@ -20,5 +20,5 @@ AudD  ·  profile default
  ctrl+k commands │ 
  ? keys  q quit  │ 
 
-↑/↓ field  enter recognize  esc leave the field  ctrl+u clear
+↑/↓ field  type a path or URL  enter edit  ←/esc back  1-7 sections  ? keys
 $ audd recognize '<file>'                                                 y copy

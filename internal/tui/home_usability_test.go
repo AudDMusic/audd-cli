@@ -66,7 +66,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press  y confirm  n/esc cancel") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Confirm") || !strings.Contains(v, "[ Change the callback URL ]") {
+	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press  y confirm  n/esc cancel") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL?") || !strings.Contains(v, "[ Change the callback URL ]") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -324,7 +324,7 @@ func TestSettingsEditor(t *testing.T) {
 		t.Fatalf("concurrency starts on 4: %v", s.edit)
 	}
 	press(h, typeText("x")...)
-	if !strings.Contains(h.View(), "4x is not a whole number") {
+	if !strings.Contains(h.View(), "x is not a whole number") || s.edit.value() != "x" {
 		t.Fatalf("no check while typing:\n%s", h.View())
 	}
 }
@@ -336,8 +336,10 @@ func TestAddStreamWithATakenID(t *testing.T) {
 	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/new.mp3")...)
 	press(h, key("down"))
+	press(h, key("ctrl+u"))
 	press(h, typeText("1")...)
-	press(h, key("enter"))
+	// Enter goes field by field; the Add button adds.
+	press(h, key("enter"), key("down"), key("enter"))
 	if v := h.View(); !strings.Contains(v, "Stream 1 exists already. Change its URL instead?") || !s.adding {
 		t.Fatalf("taken ID:\n%s", v)
 	}

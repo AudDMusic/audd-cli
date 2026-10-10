@@ -23,7 +23,11 @@ func (m *explorer) usageView() string {
 	}
 	u := m.usage
 	var b strings.Builder
-	b.WriteString(m.st.Bold.Render("This billing cycle") + "\n\n")
+	title := "This billing cycle"
+	if u.CycleStart != "" && u.CycleEnd != "" {
+		title += " (" + u.CycleStart + " to " + u.CycleEnd + ")"
+	}
+	b.WriteString(m.st.Bold.Render(title) + "\n\n")
 	fmt.Fprintf(&b, "  %-12s %s\n", "Used", fmtInt(u.UsedThisCycle))
 	if u.Allowance > 0 {
 		fmt.Fprintf(&b, "  %-12s %s\n", "Allowance", fmtInt(u.Allowance))
@@ -39,7 +43,9 @@ func (m *explorer) usageView() string {
 	}
 	if len(u.Days) > 0 {
 		b.WriteString("\n" + m.st.Bold.Render("Requests per day") + "\n\n")
-		b.WriteString(dayChart(u.Days, m.w-4, m.h-16, m.st))
+		// The chart takes the rows left (and at least a few).
+		used := strings.Count(b.String(), "\n") + 3
+		b.WriteString(dayChart(u.Days, m.w-4, max(3, m.h-used), m.st))
 		b.WriteString("\n")
 	}
 	if m.embedded {

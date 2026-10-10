@@ -47,9 +47,8 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case len(m.stations) == 0:
 		case !m.embedded:
 			m.sel = (m.sel + 1) % len(m.stations)
-		case m.sel+1 < len(m.stations) && (m.single() || (m.sel+1)%m.gridCols() != 0):
-			// Embedded, the arrows stay in the row: left from its first
-			// station goes back.
+		case m.sel+1 < len(m.stations):
+			// Embedded: the next stream, in every view; no wrapping.
 			m.sel++
 		}
 	case "left", "shift+tab":
@@ -57,7 +56,7 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case len(m.stations) == 0:
 		case !m.embedded:
 			m.sel = (m.sel + len(m.stations) - 1) % len(m.stations)
-		case m.sel > 0 && (m.single() || m.sel%m.gridCols() != 0):
+		case m.sel > 0:
 			m.sel--
 		}
 	case "down", "j":

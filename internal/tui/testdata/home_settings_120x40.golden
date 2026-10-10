@@ -2,16 +2,16 @@ AudD  ·  profile default
                  │ Settings
  1 Recognize     │ Profile default
  2 Now playing   │ 
- 3 Streams       │ › format                       auto  (default)
- 4 Recognitions  │     default output format: table, json, jsonl, csv (auto: table on a terminal, JSON when piped)
- 5 Account       │   max_requests                 no limit  (default)
-*6 Settings      >     default --max-requests for every command
- 7 Help          │   concurrency                  4  (default)
-                 │     parallel requests for batch recognition
-                 │   streams.background_recorder  true  (default)
-                 │     start the background stream recorder automatically
-                 │   token                        0123…cdef  (saved token)
-                 │     API token, kept in the system credential store
+ 3 Streams       │ › Output format                     auto  (default)
+ 4 Recognitions  │     format · default output format: table, json, jsonl, csv (auto: table on a terminal, JSON when pi…
+ 5 Account       │   Request limit per command         no limit  (default)
+*6 Settings      >     max_requests · default --max-requests for every command
+ 7 Help          │   Parallel requests                 4  (default)
+                 │     concurrency · parallel requests for batch recognition
+                 │   Start the recorder automatically  true  (default)
+                 │     streams.background_recorder · start the background stream recorder automatically
+                 │   API token                         0123…cdef  (saved token)
+                 │     token · API token, kept in the system credential store
                  │ 
                  │ Settings apply to profile default and are saved in config-dir/config.toml. Environment variables
                  │ (env) win over the file.

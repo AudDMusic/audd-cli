@@ -31,6 +31,7 @@ type accountSection struct {
 	history  *cmdPanel // billing history (table)
 	showHist bool
 	pay      *cmdPanel // subscribe, renew, buy
+	payWhat  string    // what the payment link is for
 	payLink  string
 	buying   bool
 	buyIn    *form
@@ -228,7 +229,7 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 			case "switch":
 				return s.h.switchProfile(s.switchTo)
 			case "logout":
-				s.h.signedOut = s.h.noToken()
+				s.h.useToken(false)
 				s.checkLogin()
 				return tea.Batch(s.h.setFlash("Signed out"), s.h.loadHeader())
 			}
@@ -239,7 +240,7 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		if done && s.tokSet.res.ok() {
 			s.tokPasting = false
 			s.tokForm.get("token").setValue("")
-			s.h.signedOut = s.h.noToken()
+			s.h.useToken(false)
 			return tea.Batch(s.h.setFlash("Token saved for profile "+s.h.profileName()), s.h.loadHeader(), s.showToken(false))
 		}
 		if done && s.tokSet.res.err != nil {
@@ -367,6 +368,19 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 // startPay asks for a payment link. It never charges anything and never
 // adds --open: the link is shown, and opened only on a keypress.
 func (s *accountSection) startPay(args []string) tea.Cmd {
+	// What the link is for, named on its page.
+	name := ""
+	if i := s.planCur; i >= 0 && i < len(s.plans) {
+		name = str(s.plans[i]["name"])
+	}
+	switch args[1] {
+	case "subscribe":
+		s.payWhat = "Subscribe to " + name
+	case "renew":
+		s.payWhat = "Renew " + name
+	default:
+		s.payWhat = "Buy " + fmtIntString(args[2]) + " requests"
+	}
 	s.payLink = ""
 	return s.pay.start(runReq{args: args})
 }
@@ -395,12 +409,20 @@ func (s *accountSection) profiles() []string {
 // currentPlan is the index of the plan the account is on (-1: not
 // known).
 func (s *accountSection) currentPlan() int {
-	cur := strings.ToLower(s.h.hdr.plan)
-	if cur == "" {
+	key, name := strings.ToLower(s.h.hdr.planKey), strings.ToLower(s.h.hdr.plan)
+	if key == "" && name == "" {
 		return -1
 	}
+	// The plan's identifier first; then its name ("Startup", or "Startup
+	// plan" against the plan named Startup).
 	for i, p := range s.plans {
-		if strings.ToLower(str(p["name"])) == cur || strings.ToLower(str(p["plan"])) == cur {
+		if k := strings.ToLower(str(p["plan"])); k != "" && (k == key || k == name) {
+			return i
+		}
+	}
+	for i, p := range s.plans {
+		n := strings.ToLower(str(p["name"]))
+		if n != "" && (n == name || strings.HasPrefix(name, n+" ") || strings.HasPrefix(key, n+"_")) {
 			return i
 		}
 	}
@@ -585,6 +607,7 @@ func (s *accountSection) billingView(w, h int) string {
 		if c := num(doc["amount_cents"]); c > 0 {
 			b.WriteString(fmt.Sprintf("Amount: $%.2f\n\n", c/100))
 		}
+		b.WriteString(st.Bold.Render(s.payWhat) + "\n\n")
 		b.WriteString("Open this link to review and pay (nothing is charged until you confirm there):\n\n  ")
 		b.WriteString(st.Accent.Render(s.payLink) + "\n\n")
 		b.WriteString(st.Dim.Render("enter or o opens it in the browser, c copies it, esc closes it."))
@@ -778,9 +801,13 @@ func (s *accountSection) askToken() tea.Cmd {
 	if s.tokView != nil {
 		old = str(s.tokView["token"])
 	}
+	q := "Replace the API token of profile " + s.h.profileName() + "?"
+	if why := suspiciousToken(v); why != "" {
+		q = why + " Save it anyway?"
+	}
 	return s.h.askFirst(&confirmState{
 		owner:    "account",
-		question: "Replace the API token of profile " + s.h.profileName() + "?",
+		question: q,
 		notes:    []string{"Now: " + old, "New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
 		command:  "audd config set token -",
 		action:   "Replace the token",
@@ -911,4 +938,12 @@ func shortCount(n int) string {
 		return fmtInt(n/1000) + "k"
 	}
 	return fmtInt(n)
+}
+
+// fmtIntString formats a number given as text ("10000" → "10,000").
+func fmtIntString(v string) string {
+	if n, err := strconv.Atoi(v); err == nil {
+		return fmtInt(n)
+	}
+	return v
 }

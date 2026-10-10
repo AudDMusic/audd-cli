@@ -24,7 +24,7 @@ func TestSettingsSection(t *testing.T) {
 	h := newTestHome(t, f, homeOpts{start: "settings"})
 	// format: enter opens the choice, → picks json, enter asks, y saves.
 	v := drive(t, h, 120, 40, "background_recorder", key("enter"), "‹ auto ›", key("right"), key("right"),
-		"$ audd config set format json", key("enter"), "Set format to json?", "Now: auto (default)", key("y"), "Format set to json")
+		"$ audd config set format json", key("enter"), "Output format set to json · u undo")
 	f.waitFor(t, "config set format json")
 	if !strings.Contains(v, "(env)") && !strings.Contains(v, "(default)") {
 		t.Fatalf("sources:\n%s", v)

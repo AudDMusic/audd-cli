@@ -51,6 +51,7 @@ func newRecognizeSection(h *home) section {
 	in := textField("input", "Input", "A file, URL, folder, or glob; enter recognizes it. ctrl+o picks a file.")
 	in.required = true
 	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
+	in.typeHint = "a path or URL"
 	in.placeholder = "a file, URL, or folder"
 	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
 	sec.setValue("10")
@@ -85,8 +86,7 @@ func newRecognizeSection(h *home) section {
 		}
 		return ""
 	}
-	s.form.get("recognize").disabled = needInput
-	s.form.get("plan").disabled = needInput
+	_ = needInput // Recognize and the plan say what is missing, at its field
 	// The plan works with the options as they are.
 	s.form.get("plan").novalidate = true
 	s.form.get("limit").need = "Enterprise recognition is billed per 12-second chunk: set a limit (chunks per file), or type none to scan whole files"
@@ -156,7 +156,13 @@ func (s *recognizeSection) init() tea.Cmd {
 	return s.findDevices()
 }
 
-func (s *recognizeSection) pageEntered() { s.form.resume() }
+// pageEntered: the page opens with its field selected, not typing in it.
+func (s *recognizeSection) pageEntered() { s.form.idle() }
+
+// startsTyping: a character typed on the selected Input starts typing.
+func (s *recognizeSection) startsTyping(k tea.KeyMsg) bool {
+	return s.browser == nil && s.phase == "form" && s.form.startsTyping(k)
+}
 
 func (s *recognizeSection) capturing() bool {
 	return s.browser == nil && s.phase == "form" && s.form.capturing()
@@ -309,7 +315,7 @@ func (s *recognizeSection) keys() []keyHelp {
 		return []keyHelp{{"esc", "back to the form"}}
 	}
 	k := s.form.rowKeys(s.primary())
-	if c := s.form.current(); c != nil && c.name == "input" && !c.locked {
+	if c := s.form.current(); c != nil && c.name == "input" {
 		k = append(k, keyHelp{"ctrl+o", "pick a file"})
 	}
 	return k
@@ -320,6 +326,9 @@ func (s *recognizeSection) keys() []keyHelp {
 func (s *recognizeSection) primary() string {
 	if s.mic() {
 		return "listen"
+	}
+	if _, e := s.check(true); e != "" {
+		return "show what is missing"
 	}
 	if n := s.batchCount(); n > 0 {
 		return "recognize " + output.Plural(n, "file")
@@ -444,7 +453,49 @@ func (s *recognizeSection) batchCount() int {
 }
 
 // startPlan runs the dry run; with run set the recognition follows.
+// needToken asks how to get an API token, when there is none, before
+// anything runs; then goes on with next.
+func (s *recognizeSection) needToken(next func() tea.Cmd) tea.Cmd {
+	return s.h.askFirst(&confirmState{
+		owner:    "recognize",
+		question: "You need an API token",
+		notes:    []string{"AudD recognizes music with your API token. Try the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."},
+		choices:  []string{"Use the test token", "Paste a token…", "Sign in"},
+		cur:      1,
+		topic:    "API token?",
+		cancel:   "Cancelled. Nothing was sent.",
+		pick: func(i int) tea.Cmd {
+			switch i {
+			case 0:
+				cmd := s.h.signedIn(true)
+				return tea.Batch(cmd, s.h.setFlash("Using the test token: 10 requests a day"), next())
+			case 1:
+				cmd := s.h.jump("signin")
+				if si, ok := s.h.subs["signin"].(*signinSection); ok {
+					si.step = "paste"
+					si.paste.focusName("token")
+					si.paste.resume()
+				}
+				return cmd
+			}
+			cmd := s.h.jump("signin")
+			if si, ok := s.h.subs["signin"].(*signinSection); ok {
+				si.choice = 0
+				return tea.Batch(cmd, s.h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
+			}
+			return cmd
+		},
+	})
+}
+
 func (s *recognizeSection) startPlan(run bool) tea.Cmd {
+	if s.h.signedOut && run {
+		if name, e := s.check(true); e != "" {
+			s.form.fail(name, e)
+			return nil
+		}
+		return s.needToken(func() tea.Cmd { return s.startPlan(true) })
+	}
 	if name, e := s.check(run); e != "" {
 		s.form.fail(name, e)
 		return nil
@@ -769,11 +820,16 @@ func enterpriseMatches(doc map[string]any) []map[string]any {
 			if !ok {
 				continue
 			}
-			at := str(chunk["offset"])
-			if tc := str(song["timecode"]); tc != "" {
-				at = strings.TrimSpace(at + " " + tc)
+			// Where in the file: the match's start and end when given,
+			// else the chunk's offset and the song's timecode.
+			start, end := str(chunk["offset"]), ""
+			if _, ok := song["start_seconds"]; ok {
+				start = clock(time.Duration(num(song["start_seconds"]) * float64(time.Second)))
+				end = clock(time.Duration(num(song["end_seconds"]) * float64(time.Second)))
+			} else if tc := str(song["timecode"]); tc != "" {
+				start = strings.TrimSpace(start + " " + tc)
 			}
-			out = append(out, map[string]any{"input": at, "status": "matched", "result": song})
+			out = append(out, map[string]any{"input": start, "start": start, "end": end, "status": "matched", "result": song})
 		}
 	}
 	return out

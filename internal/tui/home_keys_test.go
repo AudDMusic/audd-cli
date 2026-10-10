@@ -46,7 +46,10 @@ func formValues(h *home) map[string]string {
 	add("recognize", r.form, h.activeID() == "recognize" && h.focus == focusContent)
 	st := h.subs["streams"].(*streamsSection)
 	on := h.activeID() == "streams" && h.focus == focusContent
-	add("streams-add", st.add, on)
+	if st.adding {
+		// Opening the add form fills in the next free ID.
+		add("streams-add", st.add, on)
+	}
 	add("streams-callback", st.cbForm, on)
 	add("streams-data", st.dataForm, on)
 	ac := h.subs["account"].(*accountSection)
@@ -170,7 +173,7 @@ func TestDialogButtons(t *testing.T) {
 	}
 	press(h, key("d"))
 	v := h.View()
-	if h.confirm == nil || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Unset token ]") || !strings.Contains(crumbText(v), "Settings › Confirm") {
+	if h.confirm == nil || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Unset token ]") || !strings.Contains(crumbText(v), "Settings › Unset token?") {
 		t.Fatalf("the dialog:\n%s", v)
 	}
 	press(h, key("enter"))
@@ -186,7 +189,7 @@ func TestDialogButtons(t *testing.T) {
 // token comes from in words; the commands shown carry --token test.
 func TestTestTokenAndSignIn(t *testing.T) {
 	h := navHome(t, homeOpts{start: "account"})
-	for _, want := range []string{"An API token is set", "Paste a different token", "Sign in to your account"} {
+	for _, want := range []string{"An API token is saved", "Paste a different token", "Sign in to your account"} {
 		if !strings.Contains(h.View(), want) {
 			t.Fatalf("no %q:\n%s", want, h.View())
 		}
@@ -216,14 +219,14 @@ func TestRecognizeFormKeys(t *testing.T) {
 	}
 	press(h, typeText("a.mp3")...)
 	press(h, key("esc"))
-	if h.focus != focusContent || s.form.capturing() || !strings.Contains(footerText(h.View()), "enter type in it") {
+	if h.focus != focusContent || s.form.capturing() || !strings.Contains(footerText(h.View()), "enter edit") {
 		t.Fatalf("esc leaves the field:\n%s", h.View())
 	}
 	press(h, typeText("z")...)
-	if s.form.value("input") != "a.mp3" {
-		t.Fatal("letters go nowhere once the field is left")
+	if s.form.value("input") != "a.mp3z" || !s.form.capturing() {
+		t.Fatal("typing on the selected field starts typing in it again")
 	}
-	press(h, key("esc"))
+	press(h, key("esc"), key("esc"))
 	if h.focus != focusSidebar {
 		t.Fatal("the next esc goes back")
 	}

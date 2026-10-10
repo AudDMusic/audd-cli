@@ -4,10 +4,9 @@ AudD  ·  profile default
  2 Now playing   │ Callback URL: https://audd.tech/empty/
 *3 Streams       > 
  4 Recognitions  │ AudD sends (POSTs) every stream result to your account's
- 5 Account       │ callback URL. audd's background recorder receives results on
- 6 Settings      │ its own, so without a server of your own
- 7 Help          │ https://audd.tech/empty/ (it accepts the results and drops
-                 │ them) is fine.
+ 5 Account       │ callback URL. If you don't have a server,
+ 6 Settings      │ https://audd.tech/empty/ accepts the results and drops them;
+ 7 Help          │ the recorder still saves them.
                  │ 
                  │   Callback URL* https://audd.tech/empty/
                  │   [ ] Add Apple Music data (link, artwork, track length)
@@ -16,6 +15,7 @@ AudD  ·  profile default
                  │   [ ] Add MusicBrainz data (IDs and release details)
                  │ 
                  │   [ Set ]  [ Use the placeholder ]
+                 │ 
                  │ 
  ctrl+k commands │ 
  ? keys  q quit  │ 

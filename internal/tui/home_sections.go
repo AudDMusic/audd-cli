@@ -323,6 +323,20 @@ func (p *explorerPane) actions() []button {
 				button{"History", "", func() tea.Cmd { return ex.drill(l, r) }},
 				button{"Edit URL", "e", p.startEditURL},
 				button{"Remove", "d", p.askRemove})
+			if u := p.streamURL(r.key); strings.Contains(u, "://") {
+				b = append(b, button{"Open the stream URL", "", func() tea.Cmd {
+					if err := openURL(u); err != nil {
+						return p.h.setFlash("Could not open the browser: " + err.Error())
+					}
+					return p.h.setFlash("Opened in your browser: " + u)
+				}})
+			}
+			if r.link != "" {
+				b = append(b,
+					button{"Open the song link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
+					button{"Copy the song link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
+			}
+			return b
 		case "jobs":
 			j := ex.jobOf(l)
 			b = append(b, button{"Files", "", func() tea.Cmd { return ex.drill(l, r) }})
@@ -332,6 +346,13 @@ func (p *explorerPane) actions() []button {
 				b = append(b, button{"Copy the batch command", "c", func() tea.Cmd { return p.h.copy(cmd, "the batch command: "+cmd) }})
 			}
 			return b
+		}
+		if l.kind == "items" {
+			if it, ok := r.data.(JobItem); ok && it.State == "failed" {
+				// A failed file is retried with the job's other failed
+				// files.
+				b = append(b, button{"Retry this file", "", func() tea.Cmd { return ex.resumeJob(l, true) }})
+			}
 		}
 		if r.link != "" {
 			b = append(b,
@@ -475,6 +496,10 @@ func (p *explorerPane) askRemove() tea.Cmd {
 		command:  fmt.Sprintf("audd streams remove %d", id),
 		cancel:   fmt.Sprintf("Kept stream %d", id),
 		yes: func() tea.Cmd {
+			// Back on the list, on the row after the one removed.
+			if l := ex.top(); l != nil {
+				l.detail = false
+			}
 			return ex.streamAction(func(ctx context.Context) error { return ex.d.RemoveStream(ctx, id) }, fmt.Sprintf("Removed stream %d", id))
 		},
 	})
@@ -613,7 +638,7 @@ func (s *historySection) startResume(id string, retry bool) tea.Cmd {
 		s.runArgs = append(s.runArgs, "--retry-failed")
 	}
 	s.resume = true
-	s.bs = &batchState{jobID: id, selectable: true}
+	s.bs = &batchState{jobID: id, selectable: true, inJobs: true}
 	return s.panel.start(runReq{args: s.runArgs, format: "jsonl", stream: true, spends: true})
 }
 
@@ -621,6 +646,11 @@ func (s *historySection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.panel.handle(msg); mine {
 		if l, ok := msg.(runLineMsg); ok && l.pending == nil {
 			s.bs.add(l.line)
+		}
+		if done && s.panel.res.err != nil && s.panel.res.err.Code == "declined" {
+			// Cancelled at its question: back on the job's page.
+			s.resume = false
+			return s.h.setFlash("Cancelled. Nothing was sent.")
 		}
 		if done {
 			return s.pane.reload(tabJobs)
@@ -769,11 +799,13 @@ func newStreamsSection(h *home) section {
 	}
 	cbFields = append(cbFields, buttonField("set", "Set"), buttonField("placeholder", "Use the placeholder"))
 	s.cbForm = newForm(cbFields...)
-	kind := enumField("kind", "Show", "history: recent plays; report: plays and airtime grouped; export: write plays to a file", []string{"history", "report", "export"})
+	kind := enumField("kind", "What", "Recent plays, a report of plays and airtime grouped, or plays written to a file", []string{"history", "report", "export"})
+	kind.optionLabels = []string{"recent plays", "a report", "plays to a file"}
 	since := textField("since", "Since", `How far back: 24h, 7d, 30d, a date, or "all"`)
 	since.setValue("7d")
 	since.placeholder = "e.g. 30d"
 	since.validate = validSince
+	since.describe = sinceWords
 	sid := &field{kind: fInt, name: "id", label: "Stream ID", help: "Only this stream (empty: all)", input: newInput()}
 	sid.placeholder = "all streams"
 	by := enumField("by", "Group by", "report: group by song, artist, label, or station", []string{"song", "artist", "label", "station"})
@@ -781,6 +813,9 @@ func newStreamsSection(h *home) section {
 	file := textField("file", "File name", "export: the file to write, in the folder shown below")
 	s.dataForm = newForm(kind, since, sid, by, format, file, buttonField("run", "Run"))
 	s.add.h, s.cbForm.h, s.dataForm.h = h, h, h
+	// These forms are filled field by field: enter goes on until the
+	// last one.
+	s.add.enterNext, s.dataForm.enterNext = true, true
 	s.cbForm.get("placeholder").novalidate = true
 	s.syncData()
 	s.recPanel.empty = s.h.st.Dim.Render("Loading…")
@@ -841,7 +876,9 @@ func (s *streamsSection) openAdd() {
 			}
 		}
 	}
-	s.add.get("id").placeholder = "e.g. " + strconv.Itoa(next)
+	if f := s.add.get("id"); f.value() == "" {
+		f.setValue(strconv.Itoa(next))
+	}
 }
 
 func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
@@ -1047,6 +1084,28 @@ func (s *streamsSection) addArgs() []string {
 	return args
 }
 
+// callbackUnsaved reports whether the Callback page differs from the
+// callback in use.
+func (s *streamsSection) callbackUnsaved() bool {
+	if !s.cbSet {
+		return false
+	}
+	base, ret := splitReturn(s.cbURL)
+	if s.cbForm.value("url") != base {
+		return true
+	}
+	cur := s.returnSet()
+	if len(cur) != len(ret) {
+		return true
+	}
+	for _, r := range cur {
+		if !slices.Contains(ret, r) {
+			return true
+		}
+	}
+	return false
+}
+
 // returnSet are the providers ticked on the Callback page.
 func (s *streamsSection) returnSet() []string {
 	var ret []string
@@ -1111,6 +1170,18 @@ func recorderFacts(out string) (running, store string) {
 		}
 	}
 	return running, store
+}
+
+// dataPrimary is what Run does: "show plays", "run the report",
+// "export plays".
+func (s *streamsSection) dataPrimary() string {
+	switch s.dataForm.value("kind") {
+	case "report":
+		return "run the report"
+	case "export":
+		return "export plays"
+	}
+	return "show plays"
 }
 
 // dataTitle names what History & reports shows: "Plays by artist,
@@ -1192,6 +1263,10 @@ func (s *streamsSection) exportPath() string {
 	if name == "" {
 		name = "audd-streams-export." + s.dataForm.value("format")
 	}
+	if filepath.Ext(name) == "" {
+		// The extension of the format chosen, when the name has none.
+		name += "." + s.dataForm.value("format")
+	}
 	if filepath.IsAbs(name) {
 		return name
 	}
@@ -1265,11 +1340,14 @@ func (s *streamsSection) view(w, h int) string {
 		case s.cbPanel.res != nil:
 			b.WriteString("No callback URL is set.")
 		}
-		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("AudD sends (POSTs) every stream result to your account's callback URL. audd's background recorder receives results on its own, so without a server of your own "+streams.EmptyCallbackURL+" (it accepts the results and drops them) is fine.", w)))
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("AudD sends (POSTs) every stream result to your account's callback URL. If you don't have a server, "+streams.EmptyCallbackURL+" accepts the results and drops them; the recorder still saves them.", w)))
+		if s.callbackUnsaved() {
+			b.WriteString("\n" + st.Warn.Render("Unsaved changes · Set saves them, esc on the URL puts it back"))
+		}
 		b.WriteString("\n\n" + s.formView(s.cbForm, w))
 		return bar + b.String()
 	case 2:
-		intro := styleLines(st.Dim, output.Wrap("The background recorder saves every stream result on this computer, so Recognitions, reports, and Now playing stay complete while audd is closed. It runs in the background; the background recorder setting in Settings starts it with audd.", w))
+		intro := styleLines(st.Dim, output.Wrap("The background recorder saves every stream result on this computer, so Recognitions, reports, and Now playing stay complete while audd is closed. Settings can start it automatically with audd.", w))
 		var state string
 		switch {
 		case s.recPanel.running:
@@ -1362,6 +1440,9 @@ func (s *streamsSection) actions() []button {
 	return nil
 }
 
+// enterPresses: on the Recorder page enter presses Start or Stop.
+func (s *streamsSection) enterPresses() bool { return s.page == 2 }
+
 // askStopRecorder asks before stopping the recorder.
 func (s *streamsSection) askStopRecorder() tea.Cmd {
 	return s.h.askFirst(&confirmState{
@@ -1403,7 +1484,7 @@ func (s *streamsSection) keys() []keyHelp {
 	case 2:
 		return nil
 	}
-	return append(s.dataForm.rowKeys("run"), keyHelp{"pgdn/pgup", "scroll the results"})
+	return append(s.dataForm.rowKeys(s.dataPrimary()), keyHelp{"pgdn/pgup", "scroll the results"})
 }
 
 func (s *streamsSection) command() string {
@@ -1421,6 +1502,9 @@ func (s *streamsSection) command() string {
 			}
 			if l := ex.top(); l != nil && l.kind == "plays" {
 				return "audd streams history --id " + l.arg
+			}
+			if l := ex.top(); l != nil && l.kind == "streams" && l.detail {
+				return "audd streams history --id " + s.pane.selectedKey()
 			}
 		}
 		return "audd streams list"
@@ -1507,13 +1591,8 @@ func (s *streamsSection) crumbs() []string {
 // goes back from the left-most column; zoomed in, it goes back from the
 // first station.
 func (s *nowPlayingSection) leftExits() bool {
-	if s.np == nil || s.np.history || len(s.np.stations) == 0 {
-		return true
-	}
-	if s.np.single() {
-		return s.np.sel == 0
-	}
-	return s.np.sel%s.np.gridCols() == 0
+	// ←/→ are the previous and next stream in every view; esc goes back.
+	return s.np == nil || len(s.np.stations) == 0
 }
 
 // leftExits: left goes back (closing details and drill-downs first),
@@ -1621,6 +1700,25 @@ func shortPath(p string, w int) string {
 		}
 	}
 	return p
+}
+
+// sinceWords says how far back a Since value goes: "7 days ago".
+func sinceWords(v string) string {
+	if v == "all" {
+		return "all time"
+	}
+	if n := len(v); n > 1 {
+		if k, err := strconv.Atoi(v[:n-1]); err == nil {
+			unit := map[byte]string{'h': "hour", 'd': "day", 'w': "week"}[v[n-1]]
+			if unit != "" {
+				return output.Plural(k, unit) + " ago"
+			}
+		}
+	}
+	if _, err := time.Parse("2006-01-02", v); err == nil {
+		return "since " + v
+	}
+	return ""
 }
 
 // validSince checks how far back History & reports looks: 24h, 7d, a

@@ -20,5 +20,5 @@ AudD  ·  profile default
  ctrl+k commands │ [ History ]  [ Open link (o) ]  [ Copy link (c) ]
  ? keys  q quit  │ [ Refresh (r) ]
 
-←/→/↑/↓ select  enter zoom in  esc back  tab buttons  ? keys
+←/→ previous, next stream  ↑/↓ rows  enter open  esc back  tab buttons  ? keys
 $ audd now-playing                                                        y copy

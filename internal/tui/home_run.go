@@ -359,7 +359,9 @@ type askState struct {
 }
 
 func newAskState(owner string, m runAskMsg, h *home) *askState {
-	s := &askState{owner: owner, msg: m, typed: m.run.req.typed}
+	// A command asks before spending more than one request: the plan
+	// was just shown, so the action button has the focus.
+	s := &askState{owner: owner, msg: m, typed: m.run.req.typed, cur: 1}
 	if s.typed != "" {
 		ti := textinput.New()
 		ti.Prompt = "> "
@@ -374,8 +376,10 @@ func newAskState(owner string, m runAskMsg, h *home) *askState {
 // 2 files, using 2 requests?" is [ Recognize 2 files ].
 func (s *askState) action() string {
 	q := strings.TrimSuffix(strings.TrimSpace(s.msg.question), "?")
-	if i := strings.IndexAny(q, ",?.:"); i > 0 {
-		q = q[:i]
+	for _, sep := range []string{", ", "? ", ". ", ": "} {
+		if i := strings.Index(q, sep); i > 0 {
+			q = q[:i]
+		}
 	}
 	if q == "" || len(q) > 32 {
 		return "Confirm"
@@ -442,6 +446,8 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 		return h.pressAsk(1)
 	case "n", "N":
 		return h.pressAsk(0)
+	case "?":
+		return h.setFlash("←/→ or tab choose · enter presses · y confirms · n or esc cancels")
 	}
 	return h.setFlash(key + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
@@ -460,15 +466,15 @@ func (h *home) pressAsk(i int) tea.Cmd {
 func (h *home) askView(w, ht int) string {
 	s := h.ask
 	var b strings.Builder
-	b.WriteString(h.st.Bold.Render("Confirm") + "\n\n")
+	// The question, then what it costs (the plan); the command is on the
+	// bottom line.
+	b.WriteString(styleLines(h.st.Bold, output.Wrap(s.msg.question, w)) + "\n\n")
 	for _, n := range s.msg.notes {
 		b.WriteString(output.Wrap(n, w) + "\n")
 	}
 	if len(s.msg.notes) > 0 {
 		b.WriteString("\n")
 	}
-	b.WriteString(styleLines(h.st.Warn, output.Wrap(s.msg.question, w)) + "\n\n")
-	b.WriteString(h.st.Dim.Render("$ "+h.withSession(displayCommand(s.msg.run.req.args))) + "\n\n")
 	if s.typed != "" {
 		b.WriteString(fmt.Sprintf("Type %s and press enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))
 		b.WriteString(s.input.View() + "\n")

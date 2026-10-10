@@ -118,7 +118,7 @@ func (m *explorer) statusLine() string {
 	case m.flash != "":
 		return truncate(m.st.Dim.Render(m.flash), m.w)
 	}
-	if l := m.top(); l != nil && m.tab != tabUsage && !m.help {
+	if l := m.top(); l != nil && m.tab != tabUsage && !m.help && !l.detail {
 		if r := l.selected(); r != nil && r.hint != "" && !l.detail {
 			// What to do about the selected row (a stream that is down).
 			return truncate(m.st.Warn.Render(r.hint), m.w)

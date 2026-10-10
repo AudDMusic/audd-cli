@@ -330,6 +330,9 @@ func TestEscAndLeftReachTheSidebar(t *testing.T) {
 	useListenTools(t, media.Tools{FFmpeg: "/usr/bin/ffmpeg"})
 	for _, k := range []string{"esc", "left"} {
 		for _, id := range append([]string{"listen"}, HomeSections...) {
+			if k == "left" && id == "now-playing" {
+				continue // ← is the previous stream there; esc goes back
+			}
 			h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: id}), 100, 30)
 			drain(h, h.activate(), 0)
 			backOut(t, h, k, 10, id)
@@ -372,6 +375,9 @@ func TestJumpsGoBackToTheirOrigin(t *testing.T) {
 	)
 	for _, k := range []string{"esc", "left"} {
 		for _, j := range jumps {
+			if k == "left" && j.name == "palette now-playing" {
+				continue // ← is the previous stream there
+			}
 			h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: j.from}), 100, 30)
 			drain(h, h.activate(), 0)
 			drain(h, j.do(h), 0)
@@ -428,10 +434,10 @@ func TestBracketsSwitchTabs(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams"})
 	s := h.subs["streams"].(*streamsSection)
 	press(h, key("a"))
-	if s.adding {
-		t.Fatal("a on the tab bar does nothing: actions work on the page")
+	if !s.adding || h.focus != focusContent {
+		t.Fatal("a, shown on the List's button, works from the tab bar too")
 	}
-	press(h, key("down"), key("a"))
+	press(h, key("esc"), key("esc"), key("down"), key("a"))
 	if !s.adding {
 		t.Fatal("a opens the add form")
 	}
@@ -740,19 +746,16 @@ func TestEnterInInputRuns(t *testing.T) {
 	waitView(t, h, "Warriors")
 }
 
-// A disabled button shows why, and pressing it says so.
-func TestDisabledButtonSaysWhy(t *testing.T) {
+// Recognize with nothing to recognize says what is missing, at the
+// field.
+func TestRecognizeSaysWhatIsMissing(t *testing.T) {
 	f := &fakeRun{}
 	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
 	drain(h, h.activate(), 0)
 	s := recognizeOf(h)
 	s.form.focusName("recognize")
-	if v := h.View(); !strings.Contains(v, "Enter a file, URL, or folder first") {
-		t.Fatalf("the disabled button gives no reason:\n%s", v)
-	}
 	press(h, key("enter"))
-	// Pressing it puts the cursor on the field to fill in, with why.
-	if len(f.commands()) != 0 || s.form.current().name != "input" || !strings.Contains(h.View(), "Enter a file, URL, or folder (ctrl+o picks a file)") {
+	if len(f.commands()) != 0 || s.form.current().name != "input" || strings.Count(h.View(), "Enter a file, URL, or folder") != 1 {
 		t.Fatalf("pressing it ran %q:\n%s", f.commands(), h.View())
 	}
 }

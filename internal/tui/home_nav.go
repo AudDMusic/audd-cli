@@ -124,8 +124,9 @@ func (h *home) hasKeys(inPalette bool) bool {
 
 func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
-	// Messages in the status line last until the next key.
-	h.flash = ""
+	// Messages in the status line last until the next key (lastFlash
+	// keeps it for this key: u undoes what it says).
+	h.lastFlash, h.flash = h.flash, ""
 	if h.tip {
 		// The tip goes once the keys are in use.
 		if h.tipKeys++; h.tipKeys >= tipKeysMax {
@@ -298,6 +299,11 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 	case "up":
 		return h.setFlash("This is the tab bar · ↓ opens the page, esc goes back")
 	}
+	if cmd, ok := h.accelerator(s, h.pageActions()); ok {
+		// A letter shown on a visible button works from here too.
+		h.focus = focusContent
+		return cmd
+	}
 	return h.noop(s)
 }
 
@@ -320,6 +326,12 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 		if cmd, ok := h.accelerator(s, acts); ok {
 			return cmd
 		}
+		if p, ok := cur.(enterPresser); ok && s == "enter" && p.enterPresses() {
+			// A page whose one action is its button: enter presses it,
+			// and the keys stay on it.
+			h.btnActive, h.btnCur = true, 0
+			return h.pressButton(acts[0])
+		}
 		d, isD := cur.(downExiter)
 		if s == "tab" || s == "down" && isD && d.downExits() {
 			h.btnActive, h.btnCur = true, 0
@@ -332,6 +344,9 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	if s == "up" && h.tabs() != nil && upExits(cur) {
 		h.focus = focusTabs
 		return nil
+	}
+	if t, ok := cur.(typeStarter); ok && !typing && t.startsTyping(k) {
+		return h.send(h.activeID(), k)
 	}
 	if typing {
 		return h.send(h.activeID(), k)
@@ -350,6 +365,13 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	}
 	return h.send(h.activeID(), k)
 }
+
+// enterPresser is a page whose enter presses its first button.
+type enterPresser interface{ enterPresses() bool }
+
+// typeStarter is a section where typing on a selected text field starts
+// typing in it.
+type typeStarter interface{ startsTyping(k tea.KeyMsg) bool }
 
 // pageEnterer is a section with forms: when its page gets the keys, the
 // cursor's text field takes typing again (esc may have left it).
@@ -542,7 +564,8 @@ type crumb struct {
 func (h *home) crumbs() ([]crumb, int) {
 	switch {
 	case h.ask != nil, h.confirm != nil:
-		// The path stays: "Streams › Callback › Confirm".
+		// The path stays, and ends with what is asked: "Streams ›
+		// Stream 2 › Remove?".
 		ask, c := h.ask, h.confirm
 		h.ask, h.confirm = nil, nil
 		out, _ := h.crumbs()
@@ -550,7 +573,16 @@ func (h *home) crumbs() ([]crumb, int) {
 		for i := range out {
 			out[i].click = nil
 		}
-		return append(out, crumb{text: "Confirm"}), len(out)
+		topic := "Confirm?"
+		switch {
+		case c != nil && c.topic != "":
+			topic = c.topic
+		case c != nil && c.action != "":
+			topic = c.action + "?"
+		case ask != nil:
+			topic = ask.action() + "?"
+		}
+		return append(out, crumb{text: topic}), len(out)
 	case h.quitAsk:
 		return []crumb{{text: "Quit?"}}, 0
 	case h.keysO:
@@ -801,6 +833,8 @@ type confirmState struct {
 	choices []string
 	pick    func(i int) tea.Cmd
 	cur     int // the focused button; 0 is Cancel
+	// topic ends the path while the dialog shows ("Remove?").
+	topic string
 }
 
 // buttons are the dialog's buttons, Cancel first.
@@ -815,7 +849,8 @@ func (c *confirmState) buttons() []string {
 	return []string{"Cancel", action}
 }
 
-// askFirst opens a dialog.
+// askFirst opens a dialog. Destructive and account-wide questions start
+// on Cancel; a choice of what to do (choices) starts on the first one.
 func (h *home) askFirst(c *confirmState) tea.Cmd {
 	h.confirm = c
 	return nil
@@ -859,6 +894,8 @@ func (h *home) confirmKey(s string) tea.Cmd {
 	case "ctrl+c":
 		h.confirm = nil
 		return h.quit()
+	case "?":
+		return h.setFlash("←/→ or tab choose · enter presses · y confirms · n or esc cancels")
 	}
 	return h.setFlash(s + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
@@ -883,16 +920,14 @@ func (h *home) dialogButtons(labels []string, cur int, press func(i int) tea.Cmd
 func (h *home) confirmView(w int) string {
 	c := h.confirm
 	var b strings.Builder
-	b.WriteString(h.st.Bold.Render("Confirm") + "\n\n")
-	b.WriteString(styleLines(h.st.Warn, output.Wrap(c.question, w)) + "\n\n")
+	// The question, what happens, the buttons; the command is on the
+	// bottom line, once.
+	b.WriteString(styleLines(h.st.Bold, output.Wrap(c.question, w)) + "\n\n")
 	for _, n := range c.notes {
 		b.WriteString(output.Wrap(n, w) + "\n")
 	}
 	if len(c.notes) > 0 {
 		b.WriteString("\n")
-	}
-	if c.command != "" {
-		b.WriteString(h.st.Dim.Render(truncate("$ "+h.withSession(c.command), w)) + "\n\n")
 	}
 	b.WriteString(h.dialogButtons(c.buttons(), c.cur, h.pressConfirm))
 	return b.String()
