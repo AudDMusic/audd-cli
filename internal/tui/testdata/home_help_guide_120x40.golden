@@ -21,10 +21,11 @@ AudD  ·  profile default
                  │                           │   Windows (Scoop)         scoop bucket add auddmusic
                  │                           │                           https://github.com/AudDMusic/scoop-bucket then
                  │                           │                           scoop install auddmusic/audd
-                 │                           │   Windows (installer)     download audd_<version>_windows_amd64.msi (or
-                 │                           │                           _arm64.msi) from
+                 │                           │   Windows (installer)     download and run
                  │                           │                           https://github.com/AudDMusic/audd-cli/releases…
-                 │                           │                           and run it; it adds audd to your PATH
+                 │                           │                           (or
+                 │                           │                           https://github.com/AudDMusic/audd-cli/releases…
+                 │                           │                           on ARM); it adds audd to your PATH
                  │                           │   Go                      go install
                  │                           │                           github.com/AudDMusic/audd-cli/cmd/audd@latest
                  │                           │   Any system              download an archive from
@@ -33,8 +34,7 @@ AudD  ·  profile default
                  │                           │ 
                  │                           │ The install script puts audd in ~/.local/bin and checks the download
                  │                           │ against the release's checksums.
-                 │                           │ 
- ctrl+k commands │                           │ Run it without installing:
+ ctrl+k commands │                           │ 
  ? keys  q quit  │ 9%
 ↑/↓ pgdn scroll  / search  n N next, previous  { } headings  [ ] pages
 $ audd docs cli                                                                                                   y copy

@@ -57,6 +57,12 @@ checksum:
   # The Windows installers, built and signed by the release workflow.
   extra_files:
     - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*.msi'
+    # The same installers under names without the version, so
+    # releases/latest/download/audd_windows_<arch>.msi always works.
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*_windows_amd64.msi'
+      name_template: audd_windows_amd64.msi
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*_windows_arm64.msi'
+      name_template: audd_windows_arm64.msi
 
 sboms:
   - artifacts: archive
@@ -86,6 +92,12 @@ release:
   extra_files:
     - glob: ./scripts/install.sh
     - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*.msi'
+    # The same installers under names without the version, so
+    # releases/latest/download/audd_windows_<arch>.msi always works.
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*_windows_amd64.msi'
+      name_template: audd_windows_amd64.msi
+    - glob: '{{ envOrDefault "AUDD_MSI_DIR" "./no-msi" }}/*_windows_arm64.msi'
+      name_template: audd_windows_arm64.msi
 
 # skip_upload: auto keeps prereleases (vX.Y.Z-rc.N) out of Homebrew, Scoop,
 # and winget; they ship only on GitHub, npm `next`, and Docker version tags.

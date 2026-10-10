@@ -11,7 +11,7 @@
 | macOS (Homebrew) | `brew install auddmusic/tap/audd` |
 | macOS, Linux (script) | `curl -fsSL https://github.com/AudDMusic/audd-cli/releases/latest/download/install.sh \| sh` |
 | Windows (Scoop) | `scoop bucket add auddmusic https://github.com/AudDMusic/scoop-bucket` then `scoop install auddmusic/audd` |
-| Windows (installer) | download `audd_<version>_windows_amd64.msi` (or `_arm64.msi`) from the [releases page](https://github.com/AudDMusic/audd-cli/releases/latest) and run it; it adds `audd` to your PATH |
+| Windows (installer) | download and run the installer for [x64](https://github.com/AudDMusic/audd-cli/releases/latest/download/audd_windows_amd64.msi) or [ARM64](https://github.com/AudDMusic/audd-cli/releases/latest/download/audd_windows_arm64.msi); it adds `audd` to your PATH |
 | Go | `go install github.com/AudDMusic/audd-cli/cmd/audd@latest` |
 | Manually | download an archive from [Releases](https://github.com/AudDMusic/audd-cli/releases) and put `audd` on your `PATH` |
 
