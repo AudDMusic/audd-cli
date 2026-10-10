@@ -158,15 +158,17 @@ func TestRecognizeBatchWithConfirmation(t *testing.T) {
 	tm.Send(key("y"))
 	waitFor("Job j1: 1 recognized, 1 no match, 0 failed")
 	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
-	v := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second)).View()
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))
+	v := final.View()
 	if <-asked != "yes" {
 		t.Fatal("the answer did not reach the command")
 	}
 	if !strings.Contains(v, "a.mp3") || !strings.Contains(v, "Imagine Dragons — Warriors") || !strings.Contains(v, "no match") {
 		t.Fatalf("batch results:\n%s", v)
 	}
-	if !strings.Contains(v, "$ "+displayCommand([]string{"recognize", dir, "--max-files", "2"})) {
-		t.Fatalf("command:\n%s", v)
+	// The footer shortens long paths, so check the command itself.
+	if got, want := final.(*home).command(), displayCommand([]string{"recognize", dir, "--max-files", "2"}); got != want {
+		t.Fatalf("command = %q, want %q", got, want)
 	}
 }
 
