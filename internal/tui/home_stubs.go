@@ -17,7 +17,6 @@ func (s *stubSection) command() string        { return "" }
 func (s *stubSection) capturing() bool        { return false }
 func (s *stubSection) back() bool             { return false }
 
-func newListenSection(h *home) section     { return &stubSection{h, "Listen"} }
 func newNowPlayingSection(h *home) section { return &stubSection{h, "Now playing"} }
 func newStreamsSection(h *home) section    { return &stubSection{h, "Streams"} }
 func newHistorySection(h *home) section    { return &stubSection{h, "History"} }
