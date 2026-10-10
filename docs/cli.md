@@ -88,15 +88,19 @@ field and ctrl+u clears it. `[` and `]` switch tabs from anywhere. The path at
 the top of the page shows where you are, and the line above the key hints
 says what just happened.
 
-A key works only where it is listed in the hints at the bottom (or by `?`);
-any other key says it does nothing. Letters that change something work on a
-page, never on the menu or a tab bar, and each has one meaning everywhere:
-`o` opens in the browser, `c` copies, `r` refreshes, `d` removes (after
-asking), `e` edits, `x` exports, `s` stops. `1`-`7` jump from the menu or a
-tab bar. Changing the account's callback URL or a stream's URL, removing a
-stream, and unsetting a setting ask first and name the old and new values;
-`y` confirms and Enter alone never does. `q` asks first while a command is
-running.
+What a page can do is on buttons under it: Tab (or down from the end of the
+page) reaches them, left and right move between them, and Enter presses one.
+A letter shown on a button, such as `(o)`, presses it from anywhere on the
+page; each letter means one thing everywhere (`o` opens in the browser, `c`
+copies, `r` refreshes, `d` removes, `e` edits, `x` exports, `s` stops). A key
+works only where it is listed; any other key says it does nothing. `1`-`7`
+jump to a section except while typing in a field.
+
+Saved values (a setting, the callback URL, a stream's URL, the token) are
+read-only until Enter or Edit; Esc cancels the edit and puts the old value
+back. Saving, removing, signing out, and spending requests ask first in a
+dialog with Cancel focused and a button named for the action; `y` confirms,
+`n` or Esc cancels. `q` asks first while a command is running.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
