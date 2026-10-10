@@ -21,7 +21,8 @@ import (
 )
 
 // fakeRun stands in for HomeRun: it records each run and answers from
-// handlers matched by the start of the command ("streams add").
+// handlers matched by the start of the command ("streams add"); the
+// longest match wins.
 type fakeRun struct {
 	mu       sync.Mutex
 	calls    [][]string
@@ -60,10 +61,14 @@ func (f *fakeRun) run(ctx context.Context, args []string, io RunIO) int {
 	hs := append([]fakeHandler(nil), f.handlers...)
 	f.mu.Unlock()
 	line := strings.Join(args, " ")
-	for _, h := range hs {
-		if strings.HasPrefix(line, h.prefix) {
-			return h.fn(args, io)
+	var best *fakeHandler
+	for i, h := range hs {
+		if strings.HasPrefix(line, h.prefix) && (best == nil || len(h.prefix) > len(best.prefix)) {
+			best = &hs[i]
 		}
+	}
+	if best != nil {
+		return best.fn(args, io)
 	}
 	io.Stderr.Write([]byte(`{"schema_version":1,"error":{"code":"unexpected","message":"no fake for ` + line + `","hint":""}}` + "\n"))
 	return 1

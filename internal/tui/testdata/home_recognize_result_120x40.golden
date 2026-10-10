@@ -1,0 +1,40 @@
+AudD  ·  profile default
+                 │ song.mp3
+*1 Recognize     │ 
+ 2 Listen        │ Warriors
+ 3 Now playing   │ Imagine Dragons
+ 4 Streams       │ Warriors · Universal Music · 2014
+ 5 History       │ 
+ 6 Account       │ https://lis.tn/Warriors
+ 7 Settings      │ 
+ 8 Help          │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+esc back to the form  r run again  o open the link  c copy it  d details
+$ audd recognize song.mp3                                                                                         y copy
