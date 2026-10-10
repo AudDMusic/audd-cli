@@ -34,7 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ Recognized with audd · 3
+ ? keys  q quit  │ Recognized with audd · 3 recognitions
 
-←/→ tabs  ↓ open  esc back  o open link  c copy link  ? keys
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd browse --tab recent                                                                                        y copy

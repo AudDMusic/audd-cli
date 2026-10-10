@@ -129,22 +129,23 @@ var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the plan comes first); on a box: tick it; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"ctrl+o", "pick a file or folder (← goes to the parent folder, s picks the folder)"}, {"s", "stop a batch or a recording"}, {"→ or enter", "result: details of the song or of a file"}, {"o, c", "result: open the song link in the browser, copy it"}}},
-	{"Now playing", []keyHelp{{"←/→ ↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in or out"}, {"h", "history of the stream"}, {"o, c", "open the song link in the browser, copy it"}, {"r", "refresh"}}},
-	{"Streams", []keyHelp{{"a", "add a stream"}, {"d", "remove the stream (asks first)"}, {"e", "change its URL"}, {"→ or enter", "recent plays of the stream"}, {"/", "filter"}, {"o, c, i", "open the song link in the browser, copy it, copy the ISRC"}, {"x", "export to CSV or JSON"}, {"r", "refresh"}, {"enter, s", "Recorder: start, stop"}, {"pgdn/pgup", "History & reports: scroll the results"}}},
-	{"Recognitions", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"→ or enter", "details, or a job's files"}, {"R, F", "resume a job; resume it and retry its failed files"}, {"s", "stop a resumed job"}, {"x", "export to CSV or JSON"}, {"o, c, i, u", "open the song link in the browser, copy the link, ISRC, UPC"}, {"r", "refresh"}}},
-	{"Account", []keyHelp{{"r", "refresh"}, {"enter", "Usage: go to Billing. Billing: a payment link for the selected plan (renews your own)"}, {"b", "Billing: buy requests"}, {"h", "Billing: payments"}, {"o, c", "a payment link: open it in the browser, copy it"}, {"v, c", "API token: show or hide, copy"}, {"T", "API token: make a new one (type rotate to confirm)"}, {"enter, L", "Profiles: switch, sign out (asks first)"}, {"p", "sign-in: paste the address the browser was sent to"}}},
-	{"Settings", []keyHelp{{"→ or enter, e", "change a setting"}, {"d", "unset it (asks first)"}, {"r", "reload"}}},
-	{"Help", []keyHelp{{"/", "search the guide"}, {"n, N", "next or previous match"}, {"{ }", "previous or next heading"}, {"→ or enter", "open a step, a heading, or a command's details"}, {"o, c", "Links: open in the browser, copy"}}},
-	{"Sign in", []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}, {"o, c, p", "open the sign-in page in the browser, copy it, paste the address"}}},
-	{"Commands (ctrl+k)", []keyHelp{{"type", "filter the commands"}, {"enter", "open the command's form, then run it"}, {"r, e", "result: run again, edit"}, {"s", "stop"}}},
+	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the plan comes first); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"esc", "leave the field you type in; again: back"}, {"ctrl+o", "in Input: pick a file or folder (← parent folder, s picks the folder)"}, {"s", "stop a batch or a recording"}, {"→ or enter", "result: details"}, {"o, c", "result: open the song link in the browser, copy it"}}},
+	{"Now playing", []keyHelp{{"←/→/↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in, or back to all streams"}, {"h", "history of the stream"}, {"o, c", "open the song link in the browser, copy it"}, {"r", "refresh"}}},
+	{"Streams", []keyHelp{{"a", "List: add a stream"}, {"e", "List: change the selected stream's URL (asks first)"}, {"d", "List: remove the selected stream (asks first)"}, {"→ or enter", "recent plays of the stream"}, {"/", "filter"}, {"o, c", "open the song link in the browser, copy it"}, {"x", "export to CSV or JSON"}, {"r", "refresh"}, {"enter, s", "Recorder: start; stop (asks first)"}, {"pgdn/pgup", "History & reports: scroll the results"}}},
+	{"Recognitions", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"→ or enter", "details, or a job's files"}, {"t", "resume an unfinished job"}, {"f", "resume a job and retry its failed files"}, {"c", "Jobs: copy the job's command; elsewhere copy the song link"}, {"o", "open the song link in the browser"}, {"i, u", "copy the ISRC, the UPC"}, {"x", "export to CSV or JSON"}, {"r", "refresh"}}},
+	{"Account", []keyHelp{{"r", "refresh"}, {"enter", "Usage: go to Billing. Billing: a payment link for the selected plan (renews your own)"}, {"b", "Billing: buy requests"}, {"m", "Billing: payments"}, {"o, c", "a payment link: open it in the browser, copy it"}, {"v, c", "API token: show or hide, copy"}, {"g", "API token: make a new one (type rotate to confirm)"}, {"enter, l", "Profiles: switch, sign out (asks first)"}, {"p", "sign-in: paste the address the browser was sent to"}}},
+	{"Settings", []keyHelp{{"→ or enter, e", "change a setting"}, {"d", "unset it, when it is not the default (asks first)"}, {"r", "reload"}}},
+	{"Help", []keyHelp{{"/", "search the guide"}, {"n", "next match"}, {"{ }", "previous or next heading"}, {"→ or enter", "open a step or a command's details"}, {"o, c", "Links: open in the browser, copy"}}},
+	{"Sign in", []keyHelp{{"↑/↓", "choose"}, {"enter", "go (a click works too)"}, {"o, c, p", "open the sign-in page in the browser, copy it, paste the address"}}},
+	{"Commands (ctrl+k)", []keyHelp{{"type", "filter the commands"}, {"enter", "open the command's form; on Run, run it"}, {"r, e", "result: run again, edit"}, {"s", "stop"}}},
 }
 
 // letterKeys is the one meaning of each letter, for the Keys page.
 var letterKeys = []keyHelp{
-	{"a", "add"}, {"b", "buy requests"}, {"c", "copy (a link, a path, the token)"}, {"d", "remove or unset, after asking"},
-	{"e", "edit"}, {"h", "history"}, {"i, u", "copy the ISRC, the UPC"}, {"o", "open in the browser"},
-	{"r", "refresh"}, {"R, F", "resume a job; retrying failed files"}, {"s", "stop"}, {"v", "show or hide the token"},
+	{"a", "add"}, {"b", "buy requests"}, {"c", "copy (a link, a path, a command, the token)"}, {"d", "remove or unset, after asking"},
+	{"e", "edit"}, {"f", "resume a job, retrying failed files"}, {"g", "make a new API token"}, {"h", "a stream's history"},
+	{"i, u", "copy the ISRC, the UPC"}, {"l", "sign out"}, {"m", "payments"}, {"n", "next match"}, {"o", "open in the browser"},
+	{"p", "paste a sign-in address"}, {"r", "refresh (or run again)"}, {"s", "stop"}, {"t", "resume a job"}, {"v", "show or hide the token"},
 	{"x", "export"}, {"y", "copy the command at the bottom"}, {"/", "filter or search"},
 }
 
@@ -325,8 +326,6 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 			return s.search.Focus()
 		case "n":
 			s.findMatch(s.scroll.off+1, 1)
-		case "N":
-			s.findMatch(s.scroll.off-1, -1)
 		case "}":
 			s.jumpHeading(1)
 		case "{":
@@ -377,7 +376,8 @@ func (s *helpSection) openLink() tea.Cmd {
 func (s *helpSection) stepDone(i int) bool {
 	switch i {
 	case 0:
-		return !s.h.signedOut
+		// The test token is a try, not a sign-in.
+		return !s.h.signedOut && !s.h.testToken
 	case 1:
 		return s.h.recognized
 	case 2:
@@ -560,7 +560,7 @@ func (s *helpSection) view(w, h int) string {
 		case s.query != "" && s.matchN < 0:
 			status = fmt.Sprintf("No match for %q · %s", s.query, status)
 		case s.query != "":
-			status = fmt.Sprintf("%q · n next, N previous · %s", s.query, status)
+			status = fmt.Sprintf("%q · n next match · %s", s.query, status)
 		}
 		return bar + fit(text, w, textH) + "\n" + truncate(st.Dim.Render(status), w)
 	case 2:
@@ -655,7 +655,7 @@ func (s *helpSection) keysText(w int) string {
 	var b strings.Builder
 	b.WriteString(st.Bold.Render("Moving around") + "\n")
 	b.WriteString(indent(output.Wrap(tipText, max(10, w-2)), "  ") + "\n")
-	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a field, letters and digits go into it: esc leaves the field, ctrl+u clears it, and 1-7, q, and ? work again once you are out. A key that does nothing where you press it says so at the bottom.", max(10, w-2)), "  ") + "\n\n")
+	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a field, letters and digits go into it: esc leaves the field, ctrl+u clears it. A key works only where it is listed (at the bottom, or here); any other key says it does nothing. Questions take y to confirm, n or esc to cancel; enter alone never confirms.", max(10, w-2)), "  ") + "\n\n")
 	b.WriteString(keyLines(moveKeys, w) + "\n")
 	b.WriteString("\n" + st.Bold.Render("Everywhere") + "\n")
 	b.WriteString(keyLines(globalKeys, w) + "\n")
@@ -700,7 +700,7 @@ func (s *helpSection) keys() []keyHelp {
 		if s.searching {
 			return []keyHelp{{"type", "search"}, {"enter", "find"}, {"esc", "cancel"}}
 		}
-		return []keyHelp{{"↑/↓", "scroll"}, {"/", "search"}, {"n N", "next, previous match"}, {"{ }", "headings"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"/", "search"}, {"n", "next match"}, {"{ }", "headings"}}
 	case 2:
 		if s.details {
 			return []keyHelp{{"↑/↓", "scroll"}, {"enter", "fill in and run"}}

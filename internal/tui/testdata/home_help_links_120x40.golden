@@ -36,5 +36,5 @@ AudD  ·  profile default
  ctrl+k commands │ 
  ? keys  q quit  │ 
 
-←/→ tabs  ↓ open  esc back  o open in browser  c copy  ? keys
+←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

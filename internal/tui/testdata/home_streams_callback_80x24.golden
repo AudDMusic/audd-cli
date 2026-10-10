@@ -10,10 +10,10 @@ AudD  ·  profile default
                  │ them) is fine.
                  │ 
                  │   Callback URL* https://audd.tech/empty/
-                 │   [ ] Add Apple Music data
-                 │   [ ] Add Spotify data
-                 │   [ ] Add Deezer data
-                 │   [ ] Add MusicBrainz data
+                 │   [ ] Add Apple Music data (link, artwork, track length)
+                 │   [ ] Add Spotify data (link, artwork, popularity)
+                 │   [ ] Add Deezer data (link, artwork)
+                 │   [ ] Add MusicBrainz data (IDs and release details)
                  │ 
                  │   [ Set ]  [ Use the placeholder ]
                  │ Press ↓ or enter to fill this in.

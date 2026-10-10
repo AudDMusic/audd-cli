@@ -5,8 +5,9 @@ AudD  ·  profile default
  3 Streams       │   Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
  4 Recognitions  │   The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page.
  5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. While you type in a
- 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it, and 1-7, q, and ?
-*7 Help          >   work again once you are out. A key that does nothing where you press it says so at the bottom.
+ 6 Settings      │   field, letters and digits go into it: esc leaves the field, ctrl+u clears it. A key works only
+*7 Help          >   where it is listed (at the bottom, or here); any other key says it does nothing. Questions take y
+                 │   to confirm, n or esc to cancel; enter alone never confirms.
                  │ 
                  │   ↑/↓            move in the menu, a list, or a form
                  │   → or enter     go in: open the section, the page, the selected item
@@ -16,7 +17,7 @@ AudD  ·  profile default
                  │   [ ]            previous or next tab, from anywhere in the section
                  │ 
                  │ Everywhere
-                 │   1-7            jump to a section (not while typing in a field)
+                 │   1-7            jump to a section, from the menu or a tab bar
                  │   ctrl+k or :    run any command; ctrl+k again closes it
                  │   y              copy the command shown at the bottom
                  │   ?              keys for this screen
@@ -29,12 +30,11 @@ AudD  ·  profile default
                  │ Letters
                  │   a              add
                  │   b              buy requests
-                 │   c              copy (a link, a path, the token)
+                 │   c              copy (a link, a path, a command, the token)
                  │   d              remove or unset, after asking
                  │   e              edit
-                 │   h              history
- ctrl+k commands │   i, u           copy the ISRC, the UPC
- ? keys  q quit  │ ↓ 88 more lines below
+ ctrl+k commands │   f              resume a job, retrying failed files
+ ? keys  q quit  │ ↓ 98 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys
 ctrl+k runs any audd command

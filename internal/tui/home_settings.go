@@ -63,13 +63,49 @@ func (s *settingsSection) load() {
 			case t == "":
 				r.value, r.source = "(not set)", config.SettingDefault
 			default:
-				r.value, r.source = config.MaskToken(t), src.Describe()
+				r.value, r.source = config.MaskToken(t), tokenSourceWords(src, s.h.testToken)
 			}
 		} else {
 			r.value, r.source = config.SettingSource(p, k, os.Getenv)
 		}
 		s.rows = append(s.rows, r)
 	}
+}
+
+// tokenSourceWords says where the API token comes from, in plain words.
+func tokenSourceWords(src config.TokenSource, test bool) string {
+	switch {
+	case test:
+		return "test token for this session"
+	case src == config.SourceFlag:
+		return "from --token"
+	case src == config.SourceEnv:
+		return "from AUDD_API_TOKEN"
+	case src == config.SourceConfig:
+		return "saved token"
+	case src == config.SourceLogin:
+		return "from audd login"
+	}
+	return string(src)
+}
+
+// editable says why a setting can not be changed here ("" when it can).
+func (s *settingsSection) notEditable(r settingRow) string {
+	switch r.source {
+	case "from AUDD_API_TOKEN":
+		return "The token comes from AUDD_API_TOKEN; change it in your shell"
+	case "from --token", "test token for this session":
+		return "This session's token was given when audd started; sign in or paste a token in Account to save one"
+	case config.SettingEnv:
+		return "This setting comes from an environment variable; change it in your shell"
+	}
+	return ""
+}
+
+// isDefault reports whether a setting has its default value (nothing to
+// unset).
+func (s *settingsSection) isDefault(r settingRow) bool {
+	return r.source == config.SettingDefault
 }
 
 func (s *settingsSection) selected() *settingRow {
@@ -217,6 +253,8 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 				s.edit.problem = ""
 			}
 			return nil
+		case "up", "down", "tab", "shift+tab":
+			return s.h.setFlash("Enter saves, esc cancels")
 		}
 		switch s.edit.kind {
 		case fEnum:
@@ -236,9 +274,17 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 	case "up", "k":
 		s.cur = max(0, s.cur-1)
 	case "enter", "e", "right":
+		if r := s.selected(); r != nil {
+			if why := s.notEditable(*r); why != "" {
+				return s.h.setFlash(why)
+			}
+		}
 		s.startEdit()
-	case "d", "delete", "backspace":
-		return s.askUnset()
+	case "d":
+		if r := s.selected(); r != nil && !s.isDefault(*r) {
+			return s.askUnset()
+		}
+		return s.h.setFlash("This setting has its default value already")
 	case "r":
 		s.load()
 	}
@@ -306,7 +352,15 @@ func (s *settingsSection) keys() []keyHelp {
 	case s.edit != nil:
 		return []keyHelp{{"type", "the value"}, {"enter", "save"}, {"esc", "cancel"}}
 	}
-	return []keyHelp{{"↑/↓", "move"}, {"→/enter/e", "change"}, {"d", "unset"}, {"r", "reload"}}
+	k := []keyHelp{{"↑/↓", "move"}}
+	r := s.selected()
+	if r != nil && s.notEditable(*r) == "" {
+		k = append(k, keyHelp{"→/enter/e", "change"})
+	}
+	if r != nil && !s.isDefault(*r) && s.notEditable(*r) == "" {
+		k = append(k, keyHelp{"d", "unset"})
+	}
+	return append(k, keyHelp{"r", "reload"})
 }
 
 func (s *settingsSection) crumbs() []string {

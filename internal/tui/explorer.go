@@ -351,6 +351,10 @@ type explorer struct {
 	blur bool
 	// mark, when set, makes tabs and rows clickable (interactive mode).
 	mark func(s string, fn func() tea.Cmd) string
+	// flashTo, when set, shows messages in the screen's status line.
+	flashTo func(s string) tea.Cmd
+	// onSetURL, when set, takes a stream's new URL (to ask first).
+	onSetURL func(id int, url string) tea.Cmd
 	// onResume, when set, resumes a job (r, R) instead of quitting.
 	onResume func(id string, retry bool) tea.Cmd
 }
@@ -584,6 +588,9 @@ func (m *explorer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *explorer) setFlash(s string) tea.Cmd {
+	if m.flashTo != nil {
+		return m.flashTo(s)
+	}
 	m.flash = s
 	m.flashN++
 	id := m.flashN

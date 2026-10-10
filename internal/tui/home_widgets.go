@@ -58,6 +58,10 @@ type field struct {
 	lockable, locked bool
 	// novalidate: a button that works whatever the fields say.
 	novalidate bool
+	// quiet: a disabled button whose reason the page says itself.
+	quiet bool
+	// placeholder is shown in an empty text field ("e.g. 30d").
+	placeholder string
 }
 
 func newInput() textinput.Model {
@@ -122,6 +126,14 @@ func (f *field) setValue(v string) {
 		f.input.SetValue(v)
 		f.input.CursorEnd()
 	}
+}
+
+// placeholderText is what an empty field shows.
+func (f *field) placeholderText() string {
+	if f.placeholder != "" {
+		return f.placeholder
+	}
+	return "·"
 }
 
 // formatProblem is what is wrong with a value typed so far, leaving out
@@ -279,12 +291,62 @@ func (f *form) move(d int) {
 	}
 	if c := f.current(); c != nil && c.isText() {
 		c.problem = c.formatProblem()
-		if c.lockable {
-			c.locked = true
-		}
+		// A field with an existing value is read-only again; any other
+		// takes typing again when the cursor comes back.
+		c.locked = c.lockable
 	}
 	f.cursor = (f.cursor + d + n) % n
 	f.focus()
+}
+
+// focusStart puts the cursor where a form starts: its first required
+// field, or its main button when nothing is required.
+func (f *form) focusStart() {
+	for i, x := range f.visible() {
+		if x.required {
+			f.cursor = i
+			f.focus()
+			return
+		}
+	}
+	if b := f.firstButton(); b != nil {
+		f.focusName(b.name)
+		return
+	}
+	f.cursor = 0
+	f.focus()
+}
+
+// hasRequired reports whether a field shown is required.
+func (f *form) hasRequired() bool {
+	for _, x := range f.visible() {
+		if x.required {
+			return true
+		}
+	}
+	return false
+}
+
+// resume makes the text field under the cursor take typing again,
+// unless it holds an existing value.
+func (f *form) resume() {
+	if c := f.current(); c != nil && c.isText() && !c.lockable {
+		c.locked = false
+		f.focus()
+	}
+}
+
+// leaveField stops typing in the text field under the cursor (esc): the
+// field stays selected, and enter types in it again. It reports whether
+// there was a field to leave.
+func (f *form) leaveField() bool {
+	c := f.current()
+	if c == nil || !c.isText() || c.locked {
+		return false
+	}
+	c.locked = true
+	c.problem = c.formatProblem()
+	return true
 }
 
 // validate checks every field shown; on the first that is wrong it puts
@@ -328,7 +390,11 @@ func (f *form) press(b *field) string {
 	}
 	if b.disabled != nil {
 		if why := b.disabled(); why != "" {
-			f.err = why
+			if f.h != nil {
+				f.h.setFlash(why)
+			} else {
+				f.err = why
+			}
 			return ""
 		}
 	}
@@ -370,64 +436,51 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 		switch s {
 		case " ", "enter":
 			c.on = !c.on
-		case "j":
-			f.move(1)
-		case "k":
-			f.move(-1)
 		}
 		return "", nil
 	case fEnum:
 		// ←/→ change the choice without wrapping (← on the first one goes
-		// back, see leftExits); space and enter step through it.
+		// back, see leftExits); enter goes on to the next field.
 		n := len(c.options)
 		switch s {
-		case "right", "l":
+		case "right":
 			if c.choice < n-1 {
 				c.choice++
 			}
-		case "left", "h":
+		case "left":
 			if c.choice > 0 {
 				c.choice--
 			}
-		case " ", "enter":
-			if n > 0 {
-				c.choice = (c.choice + 1) % n
-			}
-		case "j":
+		case "enter":
 			f.move(1)
-		case "k":
-			f.move(-1)
 		}
 		return "", nil
 	case fButton:
 		switch s {
-		case "enter", " ":
+		case "enter":
 			return f.press(c), nil
-		case "right", "l":
+		case "right":
 			if f.buttonAt(f.cursor + 1) {
 				f.move(1)
 			}
-		case "left", "h":
+		case "left":
 			if f.buttonAt(f.cursor - 1) {
 				f.move(-1)
 			}
-		case "j":
-			f.move(1)
-		case "k":
-			f.move(-1)
 		}
 		return "", nil
 	}
 	if c.locked {
-		// An existing value is changed only on purpose.
-		switch s {
-		case "enter", "e":
+		// An existing value is changed only on purpose; a field left
+		// with esc takes typing again after enter.
+		switch {
+		case s == "enter", s == "e" && c.lockable:
 			c.locked = false
 			c.input.CursorEnd()
 			return "", c.input.Focus()
 		}
 		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
-			return "", f.h.setFlash("Press enter or e to change " + c.label)
+			return "", f.h.setFlash("Press enter to type in " + c.label)
 		}
 		return "", nil
 	}
@@ -461,16 +514,18 @@ func (f *form) rowKeys(primary string) []keyHelp {
 	switch {
 	case c == nil:
 	case c.kind == fBool:
-		k = append(k, keyHelp{"space/enter", "toggle"})
+		k = append(k, keyHelp{"space/enter", "tick or untick"})
 	case c.kind == fEnum:
-		k = append(k, keyHelp{"←/→", "change"})
+		k = append(k, keyHelp{"←/→", "change"}, keyHelp{"enter", "next field"})
 	case c.kind == fButton:
 		k = append(k, keyHelp{"enter", strings.ToLower(c.label)})
 		if f.buttonAt(f.cursor-1) || f.buttonAt(f.cursor+1) {
 			k = append(k, keyHelp{"←/→", "buttons"})
 		}
-	case c.locked:
+	case c.locked && c.lockable:
 		k = append(k, keyHelp{"enter/e", "change it"})
+	case c.locked:
+		k = append(k, keyHelp{"enter", "type in it"})
 	default:
 		k = append(k, keyHelp{"enter", primary})
 	}
@@ -540,7 +595,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			case off != "":
 				label = st.Dim.Render(label)
 			}
-			if off != "" && why == "" {
+			if off != "" && why == "" && !x.quiet {
 				why = off
 			}
 			buttons = append(buttons, f.h.mark(label, f.click(i)))
@@ -566,6 +621,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				x.input.EchoMode = textinput.EchoPassword
 				x.input.EchoCharacter = '•'
 			}
+			x.input.Placeholder = x.placeholder
 			val := x.input.View()
 			label := padRight(x.label+req, lw)
 			if cur && color && !x.locked {
@@ -579,10 +635,13 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 					val = strings.Repeat("•", min(len(val), 12))
 				}
 				if val == "" {
-					val = st.Dim.Render("·")
+					val = st.Dim.Render(x.placeholderText())
 				}
-				if cur {
+				switch {
+				case cur && x.lockable:
 					val += st.Dim.Render("  (enter or e to change)")
+				case cur:
+					val += st.Dim.Render("  (enter to type)")
 				}
 			}
 			b.WriteString(truncate(mark+label+val, w))
@@ -944,19 +1003,23 @@ func (p *picker) selected() *pickItem {
 func (p *picker) update(k tea.KeyMsg) (bool, tea.Cmd) {
 	p.filter.Focus() // keys come here: the list has them
 	n := len(p.matches())
+	move := func(to int) (bool, tea.Cmd) {
+		p.cursor = max(0, min(n-1, to))
+		return false, nil
+	}
 	switch k.String() {
-	case "down", "ctrl+n", "ctrl+j":
-		p.cursor = min(n-1, p.cursor+1)
-		return false, nil
-	case "up", "ctrl+p":
-		p.cursor = max(0, p.cursor-1)
-		return false, nil
+	case "down":
+		return move(p.cursor + 1)
+	case "up":
+		return move(p.cursor - 1)
 	case "pgdown":
-		p.cursor = min(n-1, p.cursor+10)
-		return false, nil
+		return move(p.cursor + 10)
 	case "pgup":
-		p.cursor = max(0, p.cursor-10)
-		return false, nil
+		return move(p.cursor - 10)
+	case "home":
+		return move(0)
+	case "end":
+		return move(n - 1)
 	case "enter":
 		return p.selected() != nil, nil
 	case "ctrl+u":
@@ -984,6 +1047,8 @@ func (p *picker) view(w, h int, st output.Styles, color, focused bool) string {
 	b.WriteString(p.filter.View() + "\n\n")
 	m := p.matches()
 	listH := max(1, h-2)
+	p.cursor = max(0, min(len(m)-1, p.cursor))
+	p.off = max(0, p.off)
 	if p.cursor < p.off {
 		p.off = p.cursor
 	}

@@ -295,7 +295,7 @@ var moveKeys = []keyHelp{
 
 // globalKeys are the keys that work everywhere.
 var globalKeys = []keyHelp{
-	{"1-7", "jump to a section (not while typing in a field)"},
+	{"1-7", "jump to a section, from the menu or a tab bar"},
 	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
 	{"y", "copy the command shown at the bottom"},
 	{"?", "keys for this screen"},

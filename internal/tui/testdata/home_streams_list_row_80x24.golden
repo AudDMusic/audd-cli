@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ Streams · 3
+ ? keys  q quit  │ Streams · 3 streams
 
-↑/↓ move  → open  ←/esc back  a add  d remove  ? keys
+↑/↓ move  → open  ←/esc back  a add  e edit URL  ? keys
 $ audd streams list                                                       y copy

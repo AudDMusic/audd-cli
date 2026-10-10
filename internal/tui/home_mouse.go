@@ -161,7 +161,13 @@ func (h *home) mouse(m tea.MouseMsg) tea.Cmd {
 	if m.Action != tea.MouseActionPress {
 		return nil
 	}
-	if h.ask != nil {
+	if h.prompt() {
+		// A question takes only clicks on its buttons.
+		if m.Button == tea.MouseButtonLeft {
+			if fn := h.hitAt(m.X, m.Y); fn != nil {
+				return fn()
+			}
+		}
 		return nil
 	}
 	if h.keysO {

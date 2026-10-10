@@ -34,7 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  ctrl+k commands │ 
- ? keys  q quit  │ Streams · 3
+ ? keys  q quit  │ Streams · 3 streams
 
-←/→ tabs  ↓ open  esc back  a add  d remove  ? keys
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams list                                                                                               y copy

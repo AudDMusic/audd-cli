@@ -331,7 +331,10 @@ func (m *explorer) submit(p inputPurpose, val string) tea.Cmd {
 	case inputSetURL:
 		id, _ := strconv.Atoi(m.pending["id"])
 		if val == "" || m.d.SetStreamURL == nil {
-			return m.setFlash("Cancelled")
+			return m.setFlash("Cancelled. Nothing was changed.")
+		}
+		if m.onSetURL != nil {
+			return m.onSetURL(id, val)
 		}
 		return m.streamAction(func(ctx context.Context) error { return m.d.SetStreamURL(ctx, id, val) }, fmt.Sprintf("Updated the URL of stream %d", id))
 	}

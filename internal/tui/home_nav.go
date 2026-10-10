@@ -161,9 +161,19 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 			h.paletteO = false
 			return nil
 		}
-		if !h.palette.capturing() && s == "?" {
-			h.keysO = true
-			return nil
+		if !h.palette.capturing() {
+			switch {
+			case s == "?":
+				h.keysO = true
+				return nil
+			case s == "y":
+				if c := h.command(); c != "" {
+					return h.copy(c, "the command: "+c)
+				}
+				return h.setFlash("No command to copy here")
+			case !navKeys[s] && !listed(h.palette.keys(), s):
+				return h.noop(s)
+			}
 		}
 		return h.send("palette", k)
 	}
@@ -212,28 +222,30 @@ func (h *home) sidebarKey(k tea.KeyMsg) tea.Cmd {
 	}
 	h.backTo = nil
 	switch s {
-	case "down", "j":
+	case "down":
 		if h.showSignin {
 			h.showSignin = false
 		} else {
 			h.cur = (h.cur + 1) % len(h.order)
 		}
 		return h.activate()
-	case "up", "k":
+	case "up":
 		if h.showSignin {
 			h.showSignin = false
 		} else {
 			h.cur = (h.cur + len(h.order) - 1) % len(h.order)
 		}
 		return h.activate()
-	case "enter", "right", "l", "tab":
+	case "enter", "right":
 		if h.showSignin {
 			h.focus = focusContent
 		} else {
 			h.focus = h.entryFocus()
 		}
-		return h.activate()
-	case "esc", "left", "h":
+		cmd := h.activate()
+		h.pageEntered()
+		return cmd
+	case "esc", "left":
 		h.seenTip()
 		return h.setFlash("This is the menu, the top level · → opens a section, q quits")
 	}
@@ -241,7 +253,8 @@ func (h *home) sidebarKey(k tea.KeyMsg) tea.Cmd {
 }
 
 // tabsKey: ←/→ switch tabs, ↓ or enter goes into the page, ← on the
-// first tab or esc goes back.
+// first tab or esc goes back. A section's own keys work on its page
+// only, never from here.
 func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 	t := h.tabs()
 	if t == nil {
@@ -254,7 +267,7 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 	}
 	i, n := t.tabIndex(), len(t.tabNames())
 	switch s {
-	case "left", "h", "shift+tab":
+	case "left", "shift+tab":
 		if i > 0 {
 			return h.selectTab(i - 1)
 		}
@@ -262,7 +275,7 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 			return h.setFlash(t.tabNames()[i] + " is the first tab")
 		}
 		return h.backOne()
-	case "right", "l", "tab":
+	case "right", "tab":
 		if i < n-1 {
 			return h.selectTab(i + 1)
 		}
@@ -271,39 +284,20 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 		return h.stepTab(-1)
 	case "]":
 		return h.stepTab(1)
-	case "down", "j", "enter":
+	case "down", "enter":
 		h.focus = focusContent
+		h.pageEntered()
 		return nil
 	case "esc":
 		return h.backOne()
-	case "up", "k":
+	case "up":
 		return h.setFlash("This is the tab bar · ↓ opens the page, esc goes back")
-	}
-	if h.pageKeyHere(s) {
-		// A key the page's hints name (a to add a stream) works from its
-		// tab bar too. Nothing typed here ever goes into a text field.
-		h.focus = focusContent
-		return h.send(h.activeID(), k)
 	}
 	return h.noop(s)
 }
 
-// pageKeyHere reports whether s is one of the current page's own keys
-// (named in its hints), and the page is not on a text field.
-func (h *home) pageKeyHere(s string) bool {
-	cur := h.active()
-	if cur.capturing() || navKeys[s] {
-		return false
-	}
-	for _, k := range cur.keys() {
-		if keyMatches(k.key, s) {
-			return true
-		}
-	}
-	return false
-}
-
-// pageKey handles a key on the section's page (level 3 and deeper).
+// pageKey handles a key on the section's page (level 3 and deeper). A
+// key does something only when it moves around or the page lists it.
 func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
 	cur := h.active()
@@ -311,12 +305,15 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	if s == "esc" || s == "left" && leftExits(cur) {
 		return h.backOne()
 	}
-	if (s == "up" || s == "k" && !typing) && h.tabs() != nil && upExits(cur) {
+	if s == "up" && h.tabs() != nil && upExits(cur) {
 		h.focus = focusTabs
 		return nil
 	}
 	if typing {
 		return h.send(h.activeID(), k)
+	}
+	if len(s) == 1 && s >= "1" && s <= "7" {
+		return h.setFlash(s + " jumps to a section from the menu or a tab bar")
 	}
 	if cmd, ok := h.globalKey(s); ok {
 		return cmd
@@ -331,6 +328,20 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 		return h.noop(s)
 	}
 	return h.send(h.activeID(), k)
+}
+
+// pageEnterer is a section with forms: when its page gets the keys, the
+// cursor's text field takes typing again (esc may have left it).
+type pageEnterer interface{ pageEntered() }
+
+// pageEntered tells the active section its page has the keys.
+func (h *home) pageEntered() {
+	if h.focus != focusContent {
+		return
+	}
+	if p, ok := h.active().(pageEnterer); ok {
+		p.pageEntered()
+	}
 }
 
 // backOne is esc: exactly one level up. Something opened on the page
@@ -372,12 +383,11 @@ func keyName(s string) string {
 }
 
 // navKeys are the keys every page takes for moving around; a section
-// gets them even when its hints do not name them.
+// gets them even when its hints do not name them. No other key acts
+// unless the page lists it.
 var navKeys = map[string]bool{
 	"up": true, "down": true, "left": true, "right": true, "enter": true, "esc": true,
 	"tab": true, "shift+tab": true, "pgup": true, "pgdown": true, "home": true, "end": true,
-	"backspace": true, "delete": true, "ctrl+d": true, "ctrl+u": true, " ": true,
-	"j": true, "k": true, "g": true, "G": true,
 }
 
 // sectionKnows reports whether the page does something with s: a key
@@ -387,7 +397,12 @@ func (h *home) sectionKnows(s string) bool {
 	if navKeys[s] {
 		return true
 	}
-	for _, k := range h.active().keys() {
+	return listed(h.active().keys(), s)
+}
+
+// listed reports whether hints name the key s.
+func listed(keys []keyHelp, s string) bool {
+	for _, k := range keys {
 		if keyMatches(k.key, s) {
 			return true
 		}
@@ -486,7 +501,7 @@ func (h *home) runningCommand() string {
 func (h *home) quitView(w int) string {
 	var b strings.Builder
 	b.WriteString(h.st.Bold.Render("Quit audd?") + "\n\n")
-	b.WriteString("This is still running:\n\n  " + h.st.Accent.Render("$ "+h.runningCommand()) + "\n\n")
+	b.WriteString("This is still running:\n\n  " + h.st.Accent.Render("$ "+h.withSession(h.runningCommand())) + "\n\n")
 	b.WriteString(styleLines(h.st.Warn, output.Wrap("Quitting stops it. Files a batch already finished are kept, and audd jobs resume continues the rest.", w)) + "\n\n")
 	b.WriteString("Press y to quit, any other key to keep it running.")
 	return b.String()
@@ -503,7 +518,15 @@ type crumb struct {
 func (h *home) crumbs() ([]crumb, int) {
 	switch {
 	case h.ask != nil, h.confirm != nil:
-		return []crumb{{text: "Confirm"}}, 0
+		// The path stays: "Streams › Callback › Confirm".
+		ask, c := h.ask, h.confirm
+		h.ask, h.confirm = nil, nil
+		out, _ := h.crumbs()
+		h.ask, h.confirm = ask, c
+		for i := range out {
+			out[i].click = nil
+		}
+		return append(out, crumb{text: "Confirm"}), len(out)
 	case h.quitAsk:
 		return []crumb{{text: "Quit?"}}, 0
 	case h.keysO:
@@ -626,8 +649,10 @@ func (h *home) footer() []keyHelp {
 	switch {
 	case h.ask != nil && h.ask.typed != "":
 		return []keyHelp{{"type", h.ask.typed}, {"enter", "confirm"}, {"esc", "cancel"}}
+	case h.confirm != nil && h.confirm.choices != nil:
+		return []keyHelp{{"←/→", "choose"}, {"enter", "take it"}, {"esc", "cancel"}}
 	case h.prompt():
-		return []keyHelp{{"y/enter", "confirm"}, {"n/esc", "cancel"}}
+		return []keyHelp{{"y", "confirm"}, {"n/esc", "cancel"}}
 	case h.keysO:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
@@ -635,10 +660,9 @@ func (h *home) footer() []keyHelp {
 	case h.focus == focusSidebar:
 		return []keyHelp{{"↑/↓", "move"}, {"→", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"q", "quit"}, {"?", "keys"}}
 	case h.focus == focusTabs && h.tabs() != nil:
-		k := []keyHelp{{"←/→", "tabs"}, {"↓", "open"}, {"esc", "back"}}
-		_, _, _, acts := sortKeys(h.active().keys())
-		k = append(k, acts[:min(2, len(acts))]...)
-		return append(k, keyHelp{"?", "keys"})
+		// The page's own keys work on the page, so they are not listed
+		// here.
+		return []keyHelp{{"←/→", "tabs"}, {"↓", "open"}, {"esc", "back"}, {"?", "keys"}}
 	}
 	cur := h.active()
 	return composeKeys(cur.keys(), leftExits(cur), cur.capturing())
@@ -732,6 +756,11 @@ type confirmState struct {
 	command  string   // the command it runs
 	yes      func() tea.Cmd
 	cancel   string // said when the answer is no
+	// choices, when set, make it a choice instead of a yes or no: ←/→
+	// pick one and enter takes it (pick gets its index).
+	choices []string
+	choice  int
+	pick    func(i int) tea.Cmd
 }
 
 // ask opens a confirmation.
@@ -742,10 +771,31 @@ func (h *home) askFirst(c *confirmState) tea.Cmd {
 
 func (h *home) confirmKey(s string) tea.Cmd {
 	c := h.confirm
+	if c.choices != nil {
+		switch s {
+		case "left":
+			c.choice = max(0, c.choice-1)
+			return nil
+		case "right", "tab":
+			c.choice = min(len(c.choices)-1, c.choice+1)
+			return nil
+		case "enter":
+			h.confirm = nil
+			return h.wrap(c.owner, c.pick(c.choice))
+		case "esc":
+			h.confirm = nil
+			return h.setFlash(c.cancel)
+		}
+		return h.setFlash("←/→ choose, enter takes it, esc cancels")
+	}
 	switch s {
-	case "y", "Y", "enter":
+	case "y", "Y":
 		h.confirm = nil
 		return h.wrap(c.owner, c.yes())
+	case "enter":
+		// Enter never confirms: a second enter can not spend or change
+		// anything by accident.
+		return h.setFlash("Press y to confirm, or n to cancel")
 	case "n", "N", "esc":
 		h.confirm = nil
 		msg := c.cancel
@@ -772,9 +822,34 @@ func (h *home) confirmView(w int) string {
 		b.WriteString("\n")
 	}
 	if c.command != "" {
-		b.WriteString(h.st.Dim.Render(truncate("$ "+c.command, w)) + "\n\n")
+		b.WriteString(h.st.Dim.Render(truncate("$ "+h.withSession(c.command), w)) + "\n\n")
 	}
-	b.WriteString("Press y or enter to confirm, n or esc to cancel.")
+	if c.choices != nil {
+		var parts []string
+		for i, ch := range c.choices {
+			label := "[ " + ch + " ]"
+			if i == c.choice {
+				label = "[>" + ch + "<]"
+				if h.color {
+					label = h.st.Bold.Reverse(true).Render(" " + ch + " ")
+				}
+			}
+			parts = append(parts, h.mark(label, func() tea.Cmd {
+				h.confirm = nil
+				return h.wrap(c.owner, c.pick(i))
+			}))
+		}
+		b.WriteString("  " + strings.Join(parts, "  ") + "\n\n")
+		b.WriteString("←/→ choose, enter takes it, esc cancels.")
+		return b.String()
+	}
+	yes := h.mark("[ Confirm ]", func() tea.Cmd {
+		h.confirm = nil
+		return h.wrap(c.owner, c.yes())
+	})
+	no := h.mark("[ Cancel ]", func() tea.Cmd { return h.confirmKey("n") })
+	b.WriteString("  " + yes + "  " + no + "\n\n")
+	b.WriteString("Press y to confirm, n or esc to cancel.")
 	return b.String()
 }
 

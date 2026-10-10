@@ -186,7 +186,7 @@ func TestHelpPages(t *testing.T) {
 func TestHelpGuideSearch(t *testing.T) {
 	useFakeTree(t)
 	h := newTestHome(t, &fakeRun{}, homeOpts{start: "help"})
-	v := drive(t, h, 120, 40, "Getting started", key("]"), "AUDD CLI", key("/"), typeText("exit codes"), key("enter"), `"exit codes"`)
+	v := drive(t, h, 120, 40, "Getting started", key("]"), "Using interactive mode", key("down"), key("/"), typeText("exit codes"), key("enter"), `"exit codes"`)
 	s := h.subs["help"].(*helpSection)
 	if s.matchN <= 0 || !strings.Contains(strings.ToLower(s.guide[s.scroll.off]), "exit codes") {
 		t.Fatalf("search did not scroll to a match (line %d):\n%s", s.scroll.off, v)

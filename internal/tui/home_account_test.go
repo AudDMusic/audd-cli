@@ -76,8 +76,8 @@ func TestAccountTokenRevealAndRotate(t *testing.T) {
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), key("]"), "0123…cdef", key("v"), "0123456789abcdef0123456789abcdef",
-		key("T"), "Type rotate", typeText("rota"), key("enter"), "That does not match", typeText("te"), key("enter"), "fedc…3210", "Rotated")
+	v := drive(t, h, 120, 40, "Paid until", key("]"), key("]"), key("]"), "0123…cdef", key("down"), key("v"), "0123456789abcdef0123456789abcdef",
+		key("g"), "Type rotate", typeText("rota"), key("enter"), "That does not match", typeText("te"), key("enter"), "fedc…3210", "Rotated")
 	if ok := <-answered; !ok {
 		t.Fatal("typing rotate confirms")
 	}

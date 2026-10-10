@@ -416,14 +416,16 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	switch key {
-	case "y", "Y", "enter":
+	case "y", "Y":
 		h.answer(true)
 		return nil
 	case "n", "N":
 		h.answer(false)
 		return h.setFlash("Cancelled. Nothing was sent.")
+	case "enter":
+		return h.setFlash("Press y to confirm, or n to cancel")
 	}
-	return h.setFlash("y or enter confirms, n or esc cancels")
+	return h.setFlash("y confirms, n or esc cancels")
 }
 
 // askView is the confirmation in the content pane.
@@ -438,7 +440,7 @@ func (h *home) askView(w, ht int) string {
 		b.WriteString("\n")
 	}
 	b.WriteString(styleLines(h.st.Warn, output.Wrap(s.msg.question, w)) + "\n\n")
-	b.WriteString(h.st.Dim.Render("$ "+displayCommand(s.msg.run.req.args)) + "\n\n")
+	b.WriteString(h.st.Dim.Render("$ "+h.withSession(displayCommand(s.msg.run.req.args))) + "\n\n")
 	if s.typed != "" {
 		b.WriteString(fmt.Sprintf("Type %s and press enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))
 		b.WriteString(s.input.View() + "\n")
@@ -446,7 +448,10 @@ func (h *home) askView(w, ht int) string {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}
 	} else {
-		b.WriteString("Press y or enter to confirm, n or esc to cancel.\n")
+		yes := h.mark("[ Confirm ]", func() tea.Cmd { h.answer(true); return nil })
+		no := h.mark("[ Cancel ]", func() tea.Cmd { h.answer(false); return h.setFlash("Cancelled. Nothing was sent.") })
+		b.WriteString("  " + yes + "  " + no + "\n\n")
+		b.WriteString("Press y to confirm, n or esc to cancel.\n")
 	}
 	return b.String()
 }

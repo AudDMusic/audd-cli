@@ -124,7 +124,7 @@ func (m *explorer) statusLine() string {
 			return truncate(m.st.Warn.Render(r.hint), m.w)
 		}
 		n := len(l.visible())
-		s := fmt.Sprintf("%s · %d", l.title, n)
+		s := l.title + " · " + output.Plural(n, rowNoun(l.kind))
 		if l.filter != "" {
 			s += fmt.Sprintf(" matching %q", l.filter)
 		}
@@ -168,30 +168,91 @@ func (m *explorer) keyList() []string {
 	return keys
 }
 
-// embeddedKeys are the hints in interactive mode, which adds how to go
-// back and the keys of the screen around it.
+// embeddedKeys are the hints in interactive mode: only what applies to
+// the view and the selected row. The screen around it adds how to go
+// back and its own keys.
 func (m *explorer) embeddedKeys() []string {
 	l := m.top()
 	switch {
+	case m.purpose != inputNone:
+		return []string{"enter done"}
 	case m.tab == tabUsage:
 		return []string{"→/enter plans and payments", "r refresh", "x export"}
 	case l == nil:
 		return nil
-	case l.detail:
-		return []string{"↑/↓ scroll", "o open link", "c copy link", "i copy ISRC", "u copy UPC"}
 	}
-	keys := []string{"↑/↓ move", "→ open"}
+	r := l.selected()
+	rowKeys := func() []string {
+		var k []string
+		if r == nil {
+			return k
+		}
+		if r.link != "" {
+			k = append(k, "o open link", "c copy link")
+		}
+		if r.copies["i"] != "" {
+			k = append(k, "i copy ISRC")
+		}
+		if r.copies["u"] != "" {
+			k = append(k, "u copy UPC")
+		}
+		return k
+	}
+	if l.detail {
+		return append([]string{"↑/↓ scroll"}, rowKeys()...)
+	}
+	keys := []string{"↑/↓ move"}
+	if r != nil && (r.detail != nil || l.kind == "jobs" || l.kind == "streams") {
+		keys = append(keys, "→ open")
+	}
 	switch l.kind {
 	case "streams":
-		keys = append(keys, "a add", "d remove", "e change URL")
+		keys = append(keys, "a add")
+		if r != nil {
+			keys = append(keys, "e edit URL", "d remove")
+		}
 	case "jobs", "items":
-		keys = append(keys, "R resume", "F retry failed")
+		if j := m.jobOf(l); j != nil {
+			if j.Status != "done" && j.Done < j.Total {
+				keys = append(keys, "t resume")
+			}
+			if j.Failed > 0 {
+				keys = append(keys, "f retry failed")
+			}
+			if l.kind == "jobs" {
+				keys = append(keys, "c copy the command")
+			}
+		}
 	}
-	keys = append(keys, "o open link", "c copy link", "/ filter", "x export", "r refresh", "i copy ISRC", "u copy UPC")
+	if l.kind != "jobs" {
+		keys = append(keys, rowKeys()...)
+	}
+	keys = append(keys, "/ filter", "x export", "r refresh")
 	if len(m.allowed) > 1 {
 		keys = append(keys, "tab next tab")
 	}
 	return keys
+}
+
+// jobOf is the job a level is about: the selected one on the list, the
+// opened one in its files.
+func (m *explorer) jobOf(l *level) *JobRow {
+	if l.kind == "jobs" {
+		if r := l.selected(); r != nil {
+			if j, ok := r.data.(JobRow); ok {
+				return &j
+			}
+		}
+		return nil
+	}
+	for _, r := range m.tabs[tabJobs][0].rows {
+		if r.key == l.arg {
+			if j, ok := r.data.(JobRow); ok {
+				return &j
+			}
+		}
+	}
+	return nil
 }
 
 func (m *explorer) helpView() string {
@@ -227,7 +288,8 @@ func (m *explorer) levelView(l *level, h int) string {
 	}
 	if l.detail {
 		if r := l.selected(); r != nil && r.detail != nil {
-			lines := strings.Split(r.detail(m.detailStyles()), "\n")
+			// Long paths and URLs wrap instead of being cut.
+			lines := hardWrap(strings.Split(output.Wrap(r.detail(m.detailStyles()), m.w), "\n"), m.w)
 			if l.dscroll > len(lines)-1 {
 				l.dscroll = max(0, len(lines)-1)
 			}
@@ -260,11 +322,34 @@ func (m *explorer) levelView(l *level, h int) string {
 		return m.st.Dim.Render("Nothing here yet.")
 	}
 	cols := l.cols
-	if l.kind == "streams" {
+	var pick []int // the cells shown, when not all
+	switch l.kind {
+	case "streams":
 		cols = streamColsFor(m.w)
+	case "recent":
+		if m.w < 100 {
+			// When, song, and source; the album is in the details.
+			cols = []column{recentCols[0], recentCols[1], {title: "Source", width: 14}}
+			pick = []int{0, 1, 3}
+		}
+	case "jobs":
+		if m.w < 100 {
+			cols = cols[:4:4] // job, status, done, failed
+			cols = append(cols, jobCols[4])
+		}
+	}
+	var note string
+	if l.kind == "items" {
+		if j := m.jobOf(l); j != nil {
+			note = m.st.Dim.Render(truncate("$ "+jobCommand(j.Command), m.w))
+			h--
+		}
 	}
 	widths := colWidths(cols, m.w)
 	var b strings.Builder
+	if note != "" {
+		b.WriteString(note + "\n")
+	}
 	head := cellsLine(colTitles(cols), widths)
 	if !m.color {
 		head = "  " + head
@@ -279,6 +364,15 @@ func (m *explorer) levelView(l *level, h int) string {
 	}
 	for i := l.offset; i < len(rows) && i < l.offset+listH; i++ {
 		cells := rows[i].cells
+		if pick != nil {
+			var sel []string
+			for _, c := range pick {
+				if c < len(cells) {
+					sel = append(sel, cells[c])
+				}
+			}
+			cells = sel
+		}
 		for c, col := range cols {
 			if col.mid && c < len(cells) && c < len(widths) {
 				cells = append([]string(nil), cells...)
@@ -392,4 +486,29 @@ func truncMiddle(s string, w int) string {
 	}
 	tail := w - 1 - head
 	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+}
+
+// rowNoun is what a list's rows are, for its count ("3 files").
+func rowNoun(kind string) string {
+	switch kind {
+	case "recent":
+		return "recognition"
+	case "jobs":
+		return "job"
+	case "items":
+		return "file"
+	case "streams":
+		return "stream"
+	case "plays":
+		return "play"
+	}
+	return "row"
+}
+
+// jobCommand is a job's command as typed.
+func jobCommand(args []string) string {
+	if len(args) > 0 && args[0] == "audd" {
+		args = args[1:]
+	}
+	return displayCommand(args)
 }

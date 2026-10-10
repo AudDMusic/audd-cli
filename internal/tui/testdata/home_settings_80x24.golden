@@ -2,7 +2,7 @@ AudD  ·  profile default
                  │ Settings
  1 Recognize     │ Settings  profile default
  2 Now playing   │ 
- 3 Streams       │ › token                        0123…cdef  (audd config set t…
+ 3 Streams       │ › token                        0123…cdef  (saved token)
  4 Recognitions  │     API token, kept in the system credential store
  5 Account       │   format                       auto  (default)
 *6 Settings      >     default output format: table, json, jsonl, csv (auto: ta…

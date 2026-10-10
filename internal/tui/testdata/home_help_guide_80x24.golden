@@ -17,8 +17,8 @@ AudD  ·  profile default
                  │   shows the command each action runs; y copies it.
                  │ • ctrl+k runs any command from a form. ? lists the keys of
                  │   the screen; the Keys tab lists them all.
- ctrl+k commands │ ↓ 451 more lines below
+ ctrl+k commands │ ↓ 456 more lines below
  ? keys  q quit  │ 3%
 
-←/→ tabs  ↓ open  esc back  / search  n N next, previous match  ? keys
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd docs cli                                                           y copy

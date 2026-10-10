@@ -397,6 +397,10 @@ func TestHomeShellNavigation(t *testing.T) {
 		t.Fatal("enter opens the section")
 	}
 	press(h, key("6"))
+	if h.activeID() != "now-playing" || !strings.Contains(h.View(), "6 jumps to a section from the menu or a tab bar") {
+		t.Fatalf("on a page, digits do not jump: %s", h.activeID())
+	}
+	press(h, key("esc"), key("6"))
 	if h.activeID() != "settings" {
 		t.Fatalf("6 jumps to Settings: %s", h.activeID())
 	}
@@ -463,6 +467,10 @@ func TestLeftReturnsToSidebar(t *testing.T) {
 			t.Fatalf("%s: right opens the section", id)
 		}
 		press(h, key("left"))
+		if id == "recognize" {
+			// The cursor is in Input: left first leaves the field.
+			press(h, key("left"))
+		}
 		if h.focus != focusSidebar {
 			t.Fatalf("%s: left right after right goes back to the sidebar", id)
 		}
@@ -474,8 +482,8 @@ func TestLeftReturnsToSidebar(t *testing.T) {
 	if h.focus != focusContent {
 		t.Fatal("left inside typed text stays in the field")
 	}
-	press(h, key("left"), key("left"))
+	press(h, key("left"), key("left"), key("left"))
 	if h.focus != focusSidebar {
-		t.Fatal("left at the start of the field goes back to the sidebar")
+		t.Fatal("left at the start of the field leaves it, then goes back to the sidebar")
 	}
 }

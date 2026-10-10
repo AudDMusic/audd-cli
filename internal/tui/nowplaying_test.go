@@ -499,7 +499,7 @@ func TestNowPlayingScreenGridAndZoom(t *testing.T) {
 
 	m = npTestModel(t, sampleFeed(), nil, true)
 	view = runModel(t, m, "Feeling Good", key("right"), key("enter"))
-	if !strings.Contains(view, "stream 2 of 3") || !strings.Contains(view, "Stream 2  https://radio.example/b.mp3") || !strings.Contains(view, "LAST PLAYED · ended 21 min ago") || !strings.Contains(view, "played 3:50") {
+	if !strings.Contains(view, "2 of 3 streams") || !strings.Contains(view, "Stream 2  https://radio.example/b.mp3") || !strings.Contains(view, "LAST PLAYED · ended 21 min ago") || !strings.Contains(view, "played 3:50") {
 		t.Fatalf("zoom on the second stream:\n%s", view)
 	}
 }

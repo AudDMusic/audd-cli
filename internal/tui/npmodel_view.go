@@ -69,7 +69,7 @@ func (m *npModel) headerLine() string {
 	left := m.st.Bold.Render("Now playing")
 	right := ""
 	if len(m.stations) > 1 {
-		right = m.st.Dim.Render(fmt.Sprintf("stream %d of %d", m.sel+1, len(m.stations)))
+		right = m.st.Dim.Render(fmt.Sprintf("%d of %d streams", m.sel+1, len(m.stations)))
 	}
 	return spread(left, right, m.w)
 }
@@ -86,6 +86,9 @@ func (m *npModel) footerLine() string {
 
 // keyList is the key hints for the current view.
 func (m *npModel) keyList() []string {
+	if m.embedded {
+		return m.embeddedKeys()
+	}
 	var keys []string
 	switch {
 	case m.help:
@@ -333,7 +336,34 @@ func (m *npModel) gridView(h int) string {
 		}
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cards...))
 	}
-	return strings.Join(rows, "\n")
+	out := strings.Join(rows, "\n")
+	if hidden := len(m.stations) - min(len(m.stations), (firstRow+visibleRows)*cols); hidden > 0 && m.embedded {
+		out = fit(out, m.w, max(1, h-1)) + "\n" + m.st.Dim.Render(fmt.Sprintf("↓ %d more streams", hidden))
+	}
+	return out
+}
+
+// embeddedKeys are the hints in interactive mode, for the view shown:
+// the grid, one stream, or its history.
+func (m *npModel) embeddedKeys() []string {
+	var keys []string
+	cur := m.current()
+	link := cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != ""
+	switch {
+	case m.history:
+		keys = []string{"h back to the stream"}
+	case m.single():
+		if len(m.stations) > 1 {
+			keys = append(keys, "←/→ previous, next stream", "enter all streams")
+		}
+		keys = append(keys, "h history")
+	default:
+		keys = []string{"←/→/↑/↓ select", "enter zoom in", "h history"}
+	}
+	if link && !m.history {
+		keys = append(keys, "o open link", "c copy link")
+	}
+	return append(keys, "r refresh")
 }
 
 func (m *npModel) gridCard(i, w int) string {

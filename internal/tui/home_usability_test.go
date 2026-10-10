@@ -66,7 +66,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); foot != "y/enter confirm  n/esc cancel" || strings.Contains(v, "y copy") {
+	if foot := footerText(v); foot != "y confirm  n/esc cancel" || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Confirm") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -76,7 +76,11 @@ func TestCallbackChangeAsks(t *testing.T) {
 	if s.cbForm.value("url") != "https://hooks.example/audd" {
 		t.Fatal("the typed URL is kept after cancelling")
 	}
-	press(h, key("enter"), key("y"))
+	press(h, key("enter"), key("enter"))
+	if h.confirm == nil || len(f.commands()) > 1 && strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
+		t.Fatal("enter does not confirm")
+	}
+	press(h, key("y"))
 	f.waitFor(t, "streams callback set https://hooks.example/audd")
 }
 
@@ -329,7 +333,7 @@ func TestSettingsEditor(t *testing.T) {
 func TestAddStreamWithATakenID(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams"})
 	s := h.subs["streams"].(*streamsSection)
-	press(h, key("a"))
+	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/new.mp3")...)
 	press(h, key("down"))
 	press(h, typeText("1")...)

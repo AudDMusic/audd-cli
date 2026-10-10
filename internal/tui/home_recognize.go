@@ -7,14 +7,23 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AudDMusic/audd-cli/internal/media"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
 // providers are the --return metadata blocks, in the order shown.
-var providers = []struct{ name, label string }{
-	{"apple_music", "Apple Music"}, {"spotify", "Spotify"}, {"deezer", "Deezer"}, {"musicbrainz", "MusicBrainz"},
+var providers = []struct{ name, label, what string }{
+	{"apple_music", "Apple Music", "link, artwork, track length"},
+	{"spotify", "Spotify", "link, artwork, popularity"},
+	{"deezer", "Deezer", "link, artwork"},
+	{"musicbrainz", "MusicBrainz", "IDs and release details"},
+}
+
+// providerField is the box that adds a provider's data to results.
+func providerField(name, label, what string) *field {
+	return boolField("return:"+name, "Add "+label+" data ("+what+")", "AudD adds "+label+"'s data to each result: "+what+".")
 }
 
 // recognizeSection is audd recognize: one file or URL, or a batch; or
@@ -32,6 +41,7 @@ type recognizeSection struct {
 	bs      *batchState
 	rec     recognition
 	details bool
+	dscroll scrollView // the details of a single result
 	runArgs []string
 	m       micState
 }
@@ -42,19 +52,28 @@ func newRecognizeSection(h *home) section {
 	in := textField("input", "Input", "A file, URL, folder, or glob; enter recognizes it. ctrl+o picks a file.")
 	in.required = true
 	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
+	in.placeholder = "a file, URL, or folder"
 	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
 	sec.setValue("10")
-	fields := []*field{src, in, sec, textField("device", "Device", "Input device; empty for the system default")}
+	dev := textField("device", "Device", "The microphone to record from; empty for the system default")
+	dev.placeholder = "system default"
+	fields := []*field{src, in, sec, dev}
 	for _, p := range providers {
-		fields = append(fields, boolField("return:"+p.name, "Add "+p.label+" data", "--return "+p.name))
+		fields = append(fields, providerField(p.name, p.label, p.what))
 	}
+	limit := textField("limit", "Limit", "12-second chunks per file: a number, or type none to scan whole files")
+	limit.placeholder = "e.g. 5, or none"
+	maxFiles := textField("max-files", "Max files", "For folders, globs, and lists: a number of files, or type none")
+	maxFiles.placeholder = "e.g. 100, or none"
+	at := textField("at", "Clip at", "Send 12 seconds from this time: 90, 1:30, or 1m30s (needs ffmpeg)")
+	at.placeholder = "e.g. 1:30"
 	fields = append(fields,
 		boolField("enterprise", "Enterprise: scan the whole file", "Every match with its position. Billed per 12-second chunk; needs a limit."),
-		textField("limit", "Limit", "12-second chunks per file: a number, or type none to scan whole files"),
+		limit,
 		boolField("tracklist", "Tracklist", "Merge consecutive matches into tracks with start and end times"),
-		textField("max-files", "Max files", "For folders, globs, and lists: a number of files, or type none"),
-		textField("at", "Clip at", "Send 12 seconds from this time: 90, 1:30, or 1m30s (needs ffmpeg)"),
-		boolField("no-cache", "Send even if cached", "--no-cache"),
+		maxFiles,
+		at,
+		boolField("no-cache", "Send even if cached", "Recognize again even when an earlier result is saved (uses requests)"),
 		buttonField("recognize", "Recognize"),
 		buttonField("plan", "Show the plan"),
 		buttonField("listen", "Listen"),
@@ -73,6 +92,7 @@ func newRecognizeSection(h *home) section {
 	s.form.get("plan").novalidate = true
 	s.form.get("limit").need = "Enterprise recognition is billed per 12-second chunk: set a limit (chunks per file), or type none to scan whole files"
 	s.form.get("max-files").need = "Folders, globs, and lists need a file limit: a number, or type none"
+	s.form.get("listen").quiet = true // the page says why, under the form
 	s.form.get("listen").disabled = func() string {
 		if t := s.m.tools; t != nil && t.FFmpeg == "" && t.Sox == "" {
 			return "Listening needs ffmpeg or sox: install one (see below), then come back"
@@ -137,12 +157,17 @@ func (s *recognizeSection) init() tea.Cmd {
 	return s.findDevices()
 }
 
+func (s *recognizeSection) pageEntered() { s.form.resume() }
+
 func (s *recognizeSection) capturing() bool {
-	return s.browser != nil || s.phase == "form" && s.form.capturing()
+	return s.browser == nil && s.phase == "form" && s.form.capturing()
 }
 
 func (s *recognizeSection) back() bool {
 	switch {
+	case s.browser == nil && s.phase == "form" && s.form.leaveField():
+		// Esc first leaves the field being typed in.
+		return true
 	case s.browser != nil:
 		s.browser = nil
 		return true
@@ -169,8 +194,14 @@ func (s *recognizeSection) back() bool {
 // result).
 func (s *recognizeSection) crumbs() []string {
 	out := []string{"File"}
-	if s.mic() {
+	in := s.form.value("input")
+	switch {
+	case s.mic():
 		out[0] = "Microphone"
+	case strings.Contains(in, "://"):
+		out[0] = "URL"
+	case s.form.get("max-files").required:
+		out[0] = "Folder"
 	}
 	switch {
 	case s.browser != nil:
@@ -255,13 +286,19 @@ func (s *recognizeSection) keys() []keyHelp {
 	}
 	switch {
 	case s.browser != nil:
-		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "open or pick"}, {"s", "pick the folder"}, {"esc", "close"}}
+		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "open or pick"}, {"←", "parent folder"}, {"s", "pick this folder"}, {"esc", "close"}}
 	case s.phase == "running":
 		return []keyHelp{{"s", "stop"}}
 	case s.phase == "result" && s.bs != nil && s.bs.detail:
 		return []keyHelp{{"o", "open link"}, {"c", "copy link"}, {"esc", "back to the list"}}
 	case s.phase == "result" && s.bs != nil:
 		return []keyHelp{{"↑/↓", "move"}, {"→/enter", "details"}, {"o", "open link"}, {"c", "copy link"}, {"esc", "back to the form"}}
+	case s.phase == "result" && s.details:
+		k := []keyHelp{{"↑/↓", "scroll"}}
+		if s.rec.link != "" {
+			k = append(k, keyHelp{"o", "open link"}, keyHelp{"c", "copy link"})
+		}
+		return append(k, keyHelp{"esc", "back to the result"})
 	case s.phase == "result":
 		k := []keyHelp{}
 		if s.rec.view != nil {
@@ -276,7 +313,10 @@ func (s *recognizeSection) keys() []keyHelp {
 		return append(k, keyHelp{"esc", "back to the form"})
 	}
 	k := s.form.rowKeys("recognize")
-	return append(k, keyHelp{"ctrl+o", "pick a file"})
+	if c := s.form.current(); c != nil && c.name == "input" {
+		k = append(k, keyHelp{"ctrl+o", "pick a file"})
+	}
+	return k
 }
 
 // validLimit accepts a whole number or the typed word none.
@@ -507,7 +547,20 @@ func (s *recognizeSection) view(w, h int) string {
 		}
 		if s.rec.view != nil {
 			v := *s.rec.view
-			b.WriteString(s.h.cardText(v, s.details, w, h-2))
+			text := s.h.cardText(v, s.details, w, h-2)
+			lines := strings.Split(text, "\n")
+			for i, l := range lines {
+				// A click on the song link opens it.
+				if s.rec.link != "" && strings.Contains(ansi.Strip(l), s.rec.link) {
+					lines[i] = s.h.mark(l, func() tea.Cmd { return s.resultKey("o") })
+				}
+			}
+			if s.details {
+				s.dscroll.lines = lines
+				b.WriteString(s.dscroll.view(w, max(1, h-2)))
+			} else {
+				b.WriteString(strings.Join(lines, "\n"))
+			}
 		} else {
 			b.WriteString(s.rec.text)
 			if s.mic() {
@@ -579,9 +632,13 @@ func (s *recognizeSection) resultKey(ks string) tea.Cmd {
 		link = batchLink(s.bs.selected())
 	}
 	switch ks {
-	case "up", "k", "down", "j":
-		if s.bs != nil && !s.bs.detail {
-			s.bs.move(map[string]int{"up": -1, "k": -1, "down": 1, "j": 1}[ks])
+	case "up", "down":
+		_, ht := s.h.contentSize()
+		switch {
+		case s.bs != nil && !s.bs.detail:
+			s.bs.move(map[string]int{"up": -1, "down": 1}[ks])
+		case s.details:
+			s.dscroll.key(ks, ht-2)
 		}
 		return nil
 	case "enter", "right":
@@ -593,8 +650,10 @@ func (s *recognizeSection) resultKey(ks string) tea.Cmd {
 			s.bs.detail = s.bs.selected() != nil
 		case s.mic() && ks == "enter" && s.rec.view == nil:
 			return s.startListen()
+		case s.details:
+			return s.h.setFlash("This is the whole result · esc goes back")
 		case s.rec.view != nil:
-			s.details = true
+			s.details, s.dscroll.off = true, 0
 		}
 		return nil
 	case "o":

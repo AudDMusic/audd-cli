@@ -203,7 +203,7 @@ func TestUIBatchWithConfirmation(t *testing.T) {
 		t.Fatalf("%d recognitions", n)
 	}
 	// The job is in History.
-	s.press(kEsc, "4")
+	s.press(kEsc, kEsc, "4")
 	s.press("\t")
 	s.wait("done")
 }
@@ -213,13 +213,13 @@ func TestUIAddAndRemoveStream(t *testing.T) {
 	t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
 	s := e.ui("ui", "--section", "streams")
 	s.wait("No streams yet")
-	s.press("a")
+	s.press(kDown, "a")
 	s.wait("Add a stream")
 	s.typeText("https://radio.example/7.mp3")
 	s.press(kDown)
 	s.typeText("7")
 	s.press(kDown, kDown, kEnter) // past "start" to Add
-	s.wait("Streams · 1")
+	s.wait("Streams · 1 stream")
 	if st := e.streams.Streams(); len(st) != 1 || st[0].RadioID != 7 || !strings.Contains(s.out.String(), "Added stream 7") {
 		t.Fatalf("streams: %+v", st)
 	}
@@ -255,7 +255,7 @@ func TestUIRotateToken(t *testing.T) {
 	s.wait("Paid until")
 	s.press("]", "]", "]")
 	s.wait("0123…cdef")
-	s.press("T")
+	s.press(kDown, "g")
 	s.wait("Type rotate")
 	s.typeText("rotate")
 	s.press(kEnter)
@@ -287,7 +287,7 @@ func TestUIHelpSearch(t *testing.T) {
 	s.wait("Getting started")
 	s.press("]")
 	s.wait("AUDD CLI")
-	s.press("/")
+	s.press(kDown, "/")
 	s.typeText("exit codes")
 	s.press(kEnter)
 	s.wait(`"exit codes" · n next`)

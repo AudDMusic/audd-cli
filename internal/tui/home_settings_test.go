@@ -40,7 +40,7 @@ func TestSettingsSection(t *testing.T) {
 		}
 	}
 	h = newTestHome(t, f, homeOpts{start: "settings"})
-	drive(t, h, 120, 40, "background_recorder", key("down"), key("down"), key("d"),
-		"Unset max_requests in profile default?", "It goes back to its default.", key("y"), "max_requests is back to its default")
-	f.waitFor(t, "config unset max_requests")
+	drive(t, h, 120, 40, "background_recorder", key("d"),
+		"Unset token in profile default?", "no API token for this profile", key("y"), "API token removed from profile default")
+	f.waitFor(t, "config unset token")
 }

@@ -53,7 +53,7 @@ func TestHistoryResumesJob(t *testing.T) {
 		`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"matched","result":{"artist":"Portishead","title":"Roads"}}`+"\n"+
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("F"), "Job k3x9: 3 recognized")
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("f"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -68,7 +68,7 @@ func TestStreamsSectionPages(t *testing.T) {
 	// ↓ from the tab bar goes into the list: its first row has the keys.
 	snap(t, "streams_list_row", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("down"), key("down"), "$ audd streams list")
 	snap(t, "streams_callback", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), "Callback URL: https")
-	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "pid 4242")
+	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "process 4242")
 
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	drain(h, h.activate(), 0)
@@ -101,6 +101,7 @@ func TestStreamsExportWritesFile(t *testing.T) {
 	s := h.subs["streams"].(*streamsSection)
 	s.dataForm.get("kind").setValue("export")
 	s.dataForm.get("since").setValue("all")
+	s.dataForm.get("format").setValue("jsonl")
 	s.syncData()
 	// The command names the very file that is written.
 	if want := "audd streams export --since all --format jsonl > " + shellQuote(s.exportPath()); h.command() != want || filepath.Dir(s.exportPath()) != dir {
@@ -130,7 +131,7 @@ func TestStreamsAddAndRemove(t *testing.T) {
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	NewExplorerData = func(a *app.App) (ExplorerData, error) { return d, nil }
 	drain(h, h.activate(), 0)
-	press(h, key("a"))
+	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/7.mp3")...)
 	press(h, key("down"))
 	press(h, typeText("7")...)

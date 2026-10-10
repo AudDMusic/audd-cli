@@ -123,6 +123,10 @@ func (s *accountSection) init() tea.Cmd {
 }
 
 func (s *accountSection) openPage(p int) tea.Cmd {
+	if !s.pay.running {
+		// What a payment link showed is gone once the page is left.
+		s.pay.res, s.pay.args, s.payLink = nil, nil, ""
+	}
 	s.page = max(0, min(len(accountPages)-1, p))
 	s.checkLogin()
 	if s.needsLogin() {
@@ -264,7 +268,7 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 			return s.showToken(!s.revealed)
 		case "c":
 			return s.token.start(runReq{args: []string{"token", "show", "--reveal"}, tag: "copy"})
-		case "T":
+		case "g":
 			return s.token.start(runReq{args: []string{"token", "rotate"}, typed: "rotate", tag: "rotate"})
 		case "r":
 			return s.token.start(runReq{args: []string{"token", "refresh-local"}, tag: "refresh"})
@@ -284,6 +288,9 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 	}
 	if s.buying {
 		act, cmd := s.buyIn.update(k)
+		if k.Type == tea.KeyRunes || ks == "backspace" || ks == "ctrl+u" {
+			s.pay.res = nil // an old error goes with the change
+		}
 		if act == "buy" {
 			v := s.buyIn.value("requests")
 			n, err := strconv.Atoi(strings.ReplaceAll(v, ",", ""))
@@ -328,7 +335,7 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 	case "b":
 		s.buying = true
 		s.buyIn.focusName("requests")
-	case "h":
+	case "m":
 		s.showHist = !s.showHist
 		if s.showHist && s.history.res == nil {
 			return s.history.start(runReq{args: []string{"billing", "history"}, format: "table"})
@@ -392,6 +399,29 @@ func (s *accountSection) extraPrice() float64 {
 	return 0
 }
 
+// priceLine says what 1,000 extra requests cost, before any link.
+func (s *accountSection) priceLine() string {
+	if c := s.extraPrice(); c > 0 {
+		return fmt.Sprintf("Extra requests cost %s per 1,000 on your plan.", money(c))
+	}
+	lo, hi := 0.0, 0.0
+	for _, p := range s.plans {
+		if c := num(p["extra_price_cents_per_1000"]); c > 0 {
+			if lo == 0 || c < lo {
+				lo = c
+			}
+			hi = max(hi, c)
+		}
+	}
+	switch {
+	case lo == 0:
+		return "The price is shown on the payment page before you pay."
+	case lo == hi:
+		return fmt.Sprintf("Extra requests cost %s per 1,000.", money(lo))
+	}
+	return fmt.Sprintf("Extra requests cost %s to %s per 1,000, depending on your plan.", money(lo), money(hi))
+}
+
 // canSignOut reports whether the profile has anything to sign out of.
 func (s *accountSection) canSignOut() bool { return !s.h.signedOut || s.loggedIn }
 
@@ -424,7 +454,7 @@ func (s *accountSection) profilesKey(ks string) tea.Cmd {
 			s.switchTo = names[s.profCur]
 			return s.prof.start(runReq{args: []string{"auth", "switch", s.switchTo}, tag: "switch"})
 		}
-	case "L":
+	case "l":
 		if s.canSignOut() {
 			return s.askSignOut()
 		}
@@ -537,14 +567,12 @@ func (s *accountSection) billingView(w, h int) string {
 		}
 		b.WriteString("Open this link to review and pay (nothing is charged until you confirm there):\n\n  ")
 		b.WriteString(st.Accent.Render(s.payLink) + "\n\n")
-		b.WriteString(st.Dim.Render("enter opens it in the browser, c copies it, x closes it."))
+		b.WriteString(st.Dim.Render("enter or o opens it in the browser, c copies it, esc closes it."))
 		return b.String()
 	}
 	if s.buying {
 		b.WriteString(st.Bold.Render("Buy extra requests") + "\n\n")
-		if c := s.extraPrice(); c > 0 {
-			b.WriteString(fmt.Sprintf("Extra requests cost %s per 1,000 on your plan.\n\n", money(c)))
-		}
+		b.WriteString(s.priceLine() + "\n\n")
 		b.WriteString(s.buyIn.view(w, st, s.h.color))
 		return b.String()
 	}
@@ -597,7 +625,7 @@ func (s *accountSection) tokenView(w, h int) string {
 	} else if s.token.running {
 		b.WriteString(st.Dim.Render("Loading…") + "\n")
 	}
-	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows or hides the whole token, c copies it without showing it, r fetches it from your account again. T makes a new token (rotates it): the current one stops working everywhere.", w)))
+	b.WriteString("\n" + styleLines(st.Dim, output.Wrap("v shows or hides the whole token, c copies it without showing it, r fetches it from your account again. g makes a new token: the current one stops working everywhere.", w)))
 	return b.String()
 }
 
@@ -619,23 +647,23 @@ func (s *accountSection) keys() []keyHelp {
 		case s.payLink != "":
 			return []keyHelp{{"enter", "open in browser"}, {"o", "open in browser"}, {"c", "copy link"}, {"esc", "close"}}
 		case s.showHist:
-			return []keyHelp{{"↑/↓", "scroll"}, {"h", "plans"}}
+			return []keyHelp{{"↑/↓", "scroll"}, {"m", "back to the plans"}}
 		}
 		act := "subscribe"
 		if s.planCur == s.currentPlan() {
 			act = "renew"
 		}
-		return []keyHelp{{"↑/↓", "plan"}, {"enter", act}, {"b", "buy requests"}, {"h", "payments"}, {"r", "refresh"}}
+		return []keyHelp{{"↑/↓", "plan"}, {"enter", act}, {"b", "buy requests"}, {"m", "payments"}, {"r", "refresh"}}
 	case 3:
 		reveal := "reveal"
 		if s.revealed {
 			reveal = "hide"
 		}
-		return []keyHelp{{"v", reveal}, {"c", "copy"}, {"r", "fetch again"}, {"T", "new token"}}
+		return []keyHelp{{"v", reveal}, {"c", "copy"}, {"r", "fetch again"}, {"g", "new token"}}
 	}
 	k := []keyHelp{{"↑/↓", "profile"}, {"enter", "switch"}}
 	if s.canSignOut() {
-		k = append(k, keyHelp{"L", "sign out"})
+		k = append(k, keyHelp{"l", "sign out"})
 	}
 	return k
 }
@@ -708,7 +736,9 @@ func (s *accountSection) back() bool {
 			s.pay.stop()
 			return true
 		case s.buying:
-			s.buying = false
+			if !s.buyIn.leaveField() {
+				s.buying = false
+			}
 			return true
 		case s.payLink != "":
 			s.payLink = ""

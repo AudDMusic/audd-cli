@@ -5,10 +5,10 @@ AudD  ·  profile default
  3 Streams       │   Source   ‹ Microphone ›
  4 Recognitions  │   Seconds  10
  5 Account       │   Device   ‹ default ›
- 6 Settings      │   [ ] Add Apple Music data
- 7 Help          │   [ ] Add Spotify data
-                 │   [ ] Add Deezer data
-                 │   [ ] Add MusicBrainz data
+ 6 Settings      │   [ ] Add Apple Music data (link, artwork, track length)
+ 7 Help          │   [ ] Add Spotify data (link, artwork, popularity)
+                 │   [ ] Add Deezer data (link, artwork)
+                 │   [ ] Add MusicBrainz data (IDs and release details)
                  │ 
                  │   [>Listen<]
                  │ 

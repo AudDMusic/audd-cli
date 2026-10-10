@@ -359,8 +359,7 @@ func (p *palette) openForm(path string) tea.Cmd {
 	}
 	p.forms[path] = cf
 	p.phase = "form"
-	cf.form.cursor = 0
-	cf.form.focus()
+	cf.form.focusStart()
 	return nil
 }
 
@@ -634,7 +633,11 @@ func (p *palette) view(w, h int) string {
 		c := p.cf.info.cmd
 		b.WriteString(st.Bold.Render("audd "+p.cf.info.path) + "  " + st.Dim.Render(c.Short) + "\n\n")
 		b.WriteString(p.cf.form.view(w, st, p.h.color))
-		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("* required. The command runs as shown at the bottom; it asks here before anything that needs a confirmation.", w)))
+		note := "The command runs as shown at the bottom; it asks here before anything that needs a confirmation."
+		if p.cf.form.hasRequired() {
+			note = "* required. " + note
+		}
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(note, w)))
 		return b.String()
 	}
 	head := st.Dim.Render(truncate("$ "+displayCommand(p.argv), w)) + "\n\n"
@@ -711,7 +714,9 @@ func (p *palette) back() bool {
 		p.phase = "form"
 		return true
 	case "form":
-		p.phase = "list"
+		if !p.cf.form.leaveField() {
+			p.phase = "list"
+		}
 		return true
 	}
 	if p.picker.filter.Value() != "" {

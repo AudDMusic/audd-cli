@@ -4,12 +4,12 @@ AudD  ·  profile default
  2 Now playing   │ Background recorder
 *3 Streams       > The background recorder saves every stream result on this
  4 Recognitions  │ computer, so Recognitions, reports, and Now playing stay
- 5 Account       │ complete while audd is closed. It runs in the background;
- 6 Settings      │ streams.background_recorder in Settings starts it
- 7 Help          │ automatically.
+ 5 Account       │ complete while audd is closed. It runs in the background; the
+ 6 Settings      │ background recorder setting in Settings starts it with audd.
+ 7 Help          │ 
+                 │ The recorder is running (process 4242).
+                 │ Results are saved in /data/streams-default.db
                  │ 
-                 │ Running:        yes (pid 4242)
-                 │ Store:          /data/streams-default.db
                  │ 
                  │ 
                  │ 
@@ -20,5 +20,5 @@ AudD  ·  profile default
  ctrl+k commands │ 
  ? keys  q quit  │ 
 
-←/→ tabs  ↓ open  esc back  s stop  r refresh  ? keys
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd streams recorder status                                            y copy

@@ -5,17 +5,17 @@ AudD  ·  profile default
  3 Streams       │ 
  4 Recognitions  │ Your account, usage, and billing need a sign-in to your AudD account.
 *5 Account       > 
- 6 Settings      │ · Sign in
- 7 Help          │     Sign in to your AudD account in the browser (or with a code on another device). audd saves your
+ 6 Settings      │ To only recognize music, an API token is enough:
+ 7 Help          │ 
+                 │ · Sign in
+                 │     Sign in to your AudD account in the browser (or with a code on another device). audd saves your
                  │     API token.
                  │ 
+                 │   Paste an API token
+                 │     Use the API token from your dashboard at https://dashboard.audd.io.
                  │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
+                 │   Try with the test token
+                 │     The public test token: 10 requests a day, standard endpoint only. Nothing is saved.
                  │ 
                  │ 
                  │ 

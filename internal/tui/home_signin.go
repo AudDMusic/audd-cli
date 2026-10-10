@@ -63,7 +63,9 @@ func (s *signinSection) back() bool {
 		s.step = ""
 		return true
 	case "paste":
-		s.step = ""
+		if !s.paste.leaveField() {
+			s.step = ""
+		}
 		return true
 	}
 	return false
@@ -117,9 +119,6 @@ func (s *signinSection) keysFor(p *cmdPanel) []keyHelp {
 // choices is how many choices the screen offers: the Account section
 // only offers the sign-in (a token alone does not reach the account).
 func (s *signinSection) choices() int {
-	if s.heading != "" && !s.h.signedOut {
-		return 1
-	}
 	return len(signinChoices)
 }
 
@@ -164,9 +163,9 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	switch k.String() {
-	case "down", "j", "tab":
+	case "down", "tab":
 		s.choice = (s.choice + 1) % s.choices()
-	case "up", "k", "shift+tab":
+	case "up", "shift+tab":
 		s.choice = (s.choice + s.choices() - 1) % s.choices()
 	case "enter":
 		switch s.choice {
@@ -208,9 +207,7 @@ func (s *signinSection) view(w, h int) string {
 	if s.heading != "" {
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
 		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
-		if s.choices() > 1 {
-			b.WriteString(output.Wrap("To only recognize music, an API token is enough:", w) + "\n\n")
-		}
+		b.WriteString(output.Wrap("To only recognize music, an API token is enough:", w) + "\n\n")
 	} else {
 		b.WriteString(st.Bold.Render("Welcome to AudD") + "\n\n")
 		b.WriteString(output.Wrap("Recognize music in files, URLs, and from the microphone, and monitor streams. Choose how audd gets your API token:", w) + "\n\n")
@@ -218,11 +215,9 @@ func (s *signinSection) view(w, h int) string {
 	for i, c := range signinChoices[:s.choices()] {
 		item := s.h.listRow(c.title, i == s.choice) + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
 		b.WriteString(s.h.mark(item, func() tea.Cmd {
-			if s.choice == i {
-				return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
-			}
+			// A click opens the choice, as enter does.
 			s.choice = i
-			return nil
+			return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
 		}) + "\n\n")
 	}
 	if s.heading == "" {

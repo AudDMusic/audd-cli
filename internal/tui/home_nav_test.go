@@ -113,14 +113,15 @@ func focusShown(t *testing.T, h *home, what string) {
 }
 
 type navState struct {
-	focus focusArea
-	n     int
-	id    string
+	focus  focusArea
+	n      int
+	id     string
+	typing bool
 }
 
 func stateOf(h *home) navState {
 	items, _ := h.crumbs()
-	return navState{h.focus, len(items), h.activeID()}
+	return navState{h.focus, len(items), h.activeID(), h.focus == focusContent && h.active().capturing()}
 }
 
 // escClimbs presses esc and checks that it went up exactly one level,
@@ -138,6 +139,8 @@ func escClimbs(t *testing.T, h *home, what string) {
 	switch before.focus {
 	case focusContent:
 		ok = after.id == before.id && after.focus == focusContent && after.n == before.n-1 ||
+			// Leaving the field being typed in.
+			before.typing && !after.typing && after.focus == focusContent && after.n == before.n ||
 			after.id == before.id && tabbed && after.focus == focusTabs && after.n == before.n ||
 			!tabbed && after.focus == focusSidebar
 	case focusTabs:
@@ -221,7 +224,9 @@ func TestHierarchy(t *testing.T) {
 				if h.focus != focusContent {
 					t.Fatalf("%s: enter goes into the page", what)
 				}
-				escClimbs(t, h, what)
+				for i := 0; i < 3 && h.focus == focusContent; i++ {
+					escClimbs(t, h, what) // a field first, then the page
+				}
 				if h.focus != focusTabs {
 					t.Fatalf("%s: esc from the page goes to the tab bar", what)
 				}
@@ -260,7 +265,7 @@ func TestEscClimbsFromDeepLevels(t *testing.T) {
 	}{
 		{"help command details", homeOpts{start: "help"}, []string{"]", "]", "down", "down", "right"}, "Help › Commands › audd docs"},
 		{"help guide search", homeOpts{start: "help"}, []string{"]", "down", "/"}, "Help › Guide › Search"},
-		{"streams add", homeOpts{start: "streams"}, []string{"a"}, "Streams › List › Add a stream"},
+		{"streams add", homeOpts{start: "streams"}, []string{"down", "a"}, "Streams › List › Add a stream"},
 		{"streams plays", homeOpts{start: "streams"}, []string{"down", "right"}, "Streams › List › Stream 1 · recent plays"},
 		{"recognitions details", homeOpts{start: "recognitions"}, []string{"down", "right"}, "Recognitions › Recent › Details"},
 		{"recognitions job", homeOpts{start: "recognitions"}, []string{"]", "down", "right"}, "Recognitions › Jobs › Job k3x9"},
@@ -420,10 +425,14 @@ func TestBracketsSwitchTabs(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams"})
 	s := h.subs["streams"].(*streamsSection)
 	press(h, key("a"))
+	if s.adding {
+		t.Fatal("a on the tab bar does nothing: actions work on the page")
+	}
+	press(h, key("down"), key("a"))
 	if !s.adding {
 		t.Fatal("a opens the add form")
 	}
-	press(h, key("esc"), key("]"))
+	press(h, key("esc"), key("esc"), key("]"))
 	if s.page != 1 || h.focus != focusTabs {
 		t.Fatalf("] from the page: page %d focus %v", s.page, h.focus)
 	}
@@ -577,12 +586,12 @@ func TestMouseSignIn(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{signedOut: true}), 100, 30)
 	click(t, h, "Paste an API token")
 	s := h.subs["signin"].(*signinSection)
-	if s.choice != 1 || s.step != "" {
-		t.Fatal("click selects a choice")
+	if s.choice != 1 || s.step != "paste" {
+		t.Fatal("a click opens the choice")
 	}
-	click(t, h, "Paste an API token")
-	if s.step != "paste" {
-		t.Fatal("a second click goes")
+	press(h, typeText("abc")...)
+	if s.paste.value("token") != "abc" {
+		t.Fatalf("typing goes into the token field: %q", s.paste.value("token"))
 	}
 }
 
@@ -679,20 +688,22 @@ func TestUnknownKeyFlash(t *testing.T) {
 func TestFormKeptAfterLeaving(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams"})
 	s := h.subs["streams"].(*streamsSection)
-	press(h, key("a"))
+	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/1")...)
-	press(h, key("esc"), key("esc"), key("esc"))
-	if h.focus != focusSidebar {
-		t.Fatalf("esc ×3 reaches the sidebar: %v", h.focus)
+	for i := 0; i < 5 && h.focus != focusSidebar; i++ {
+		press(h, key("esc"))
 	}
-	press(h, key("right"), key("a"))
+	if h.focus != focusSidebar {
+		t.Fatalf("esc reaches the sidebar: %v", h.focus)
+	}
+	press(h, key("right"), key("down"), key("a"))
 	if got := s.add.value("url"); got != "https://radio.example/1" || !strings.Contains(h.View(), "https://radio.example/1") {
 		t.Fatalf("the add form lost its URL: %q", got)
 	}
 
 	h = navHome(t, homeOpts{start: "recognize"})
 	press(h, typeText("song.mp3")...)
-	press(h, key("esc"), key("2"), key("1"))
+	press(h, key("esc"), key("esc"), key("2"), key("1"))
 	if got := recognizeOf(h).form.value("input"); got != "song.mp3" {
 		t.Fatalf("Recognize lost its input: %q", got)
 	}
@@ -700,9 +711,11 @@ func TestFormKeptAfterLeaving(t *testing.T) {
 	h = navHome(t, homeOpts{})
 	drain(h, h.openPalette("streams add"), 0)
 	press(h, typeText("https://radio.example/2")...)
-	press(h, key("esc"), key("esc"))
+	for i := 0; i < 4 && h.paletteO; i++ {
+		press(h, key("esc"))
+	}
 	if h.paletteO {
-		t.Fatal("esc twice closes the palette")
+		t.Fatal("esc closes the palette")
 	}
 	drain(h, h.openPalette("streams add"), 0)
 	if got := h.palette.cf.form.value("arg:0"); got != "https://radio.example/2" {

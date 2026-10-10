@@ -76,32 +76,44 @@ func (b *fileBrowser) load() {
 // the browser was closed.
 func (b *fileBrowser) key(k string, h int) (picked string, done bool) {
 	n := len(b.entries)
+	if n == 0 {
+		switch k {
+		case "left":
+			b.dir = filepath.Dir(b.dir)
+			b.load()
+		case "esc":
+			return "", true
+		case "s":
+			return b.rel(b.dir), true
+		}
+		return "", false
+	}
 	switch k {
-	case "down", "j":
+	case "down":
 		b.cursor = min(n-1, b.cursor+1)
-	case "up", "k":
+	case "up":
 		b.cursor = max(0, b.cursor-1)
 	case "pgdown":
 		b.cursor = min(n-1, b.cursor+h)
 	case "pgup":
 		b.cursor = max(0, b.cursor-h)
-	case "home", "g":
+	case "home":
 		b.cursor = 0
-	case "end", "G":
+	case "end":
 		b.cursor = n - 1
-	case "left", "backspace", "h":
+	case "left", "backspace":
 		b.dir = filepath.Dir(b.dir)
 		b.load()
-	case "esc", "q":
+	case "esc":
 		return "", true
-	case "s", ".":
+	case "s":
 		// The folder itself, as a batch.
 		e := b.entries[b.cursor]
 		if e.dir && e.name != ".." {
 			return b.rel(filepath.Join(b.dir, e.name)), true
 		}
 		return b.rel(b.dir), true
-	case "enter", "right", "l":
+	case "enter", "right":
 		e := b.entries[b.cursor]
 		if e.dir {
 			if e.name == ".." {

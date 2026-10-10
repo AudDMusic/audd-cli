@@ -7,6 +7,9 @@ import (
 )
 
 func (m *npModel) setFlash(s string) tea.Cmd {
+	if m.flashTo != nil {
+		return m.flashTo(s)
+	}
 	m.flash = s
 	m.flashN++
 	id := m.flashN

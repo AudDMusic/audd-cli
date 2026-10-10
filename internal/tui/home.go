@@ -376,6 +376,7 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 		h.focus = focusContent
 	}
 	cmd := h.activate()
+	h.pageEntered()
 	if h.focus == focusTabs && h.tabs() == nil {
 		h.focus = focusContent
 	}
@@ -479,11 +480,12 @@ func (h *home) send(id string, msg tea.Msg) tea.Cmd {
 	return h.wrap(id, s.update(msg))
 }
 
+// setFlash says something in the status line; it stays until the next
+// key or click.
 func (h *home) setFlash(s string) tea.Cmd {
 	h.flash = s
 	h.flashN++
-	id := h.flashN
-	return tea.Tick(4*time.Second, func(time.Time) tea.Msg { return clearHomeFlashMsg{id: id} })
+	return nil
 }
 
 // copy puts s on the clipboard with the next frame.
@@ -577,6 +579,10 @@ func (h *home) route(m subMsg) tea.Cmd {
 
 // command is the command for the footer.
 func (h *home) command() string {
+	return h.withSession(h.rawCommand())
+}
+
+func (h *home) rawCommand() string {
 	if h.confirm != nil {
 		return h.confirm.command
 	}
@@ -584,6 +590,18 @@ func (h *home) command() string {
 		return h.palette.command()
 	}
 	return h.active().command()
+}
+
+// withSession adds what the session adds to every run (the test token),
+// so the command shown and copied is the one that runs.
+func (h *home) withSession(c string) string {
+	if !h.testToken || !strings.HasPrefix(c, "audd ") || strings.Contains(c, "--token") {
+		return c
+	}
+	if i := strings.Index(c, " > "); i >= 0 {
+		return c[:i] + " --token test" + c[i:]
+	}
+	return c + " --token test"
 }
 
 // openPalette opens the command palette, on a command's form when path

@@ -3,14 +3,14 @@ AudD  ·  profile default
 *1 Recognize     > Recognize music in a file, URL, or folder
  2 Now playing   │ 
  3 Streams       │   Source     ‹ File, URL, or folder ›
- 4 Recognitions  │ › Input*                                                    
- 5 Account       │   [ ] Add Apple Music data
- 6 Settings      │   [ ] Add Spotify data
- 7 Help          │   [ ] Add Deezer data
-                 │   [ ] Add MusicBrainz data
+ 4 Recognitions  │ › Input*     a file, URL, or folder                         
+ 5 Account       │   [ ] Add Apple Music data (link, artwork, track length)
+ 6 Settings      │   [ ] Add Spotify data (link, artwork, popularity)
+ 7 Help          │   [ ] Add Deezer data (link, artwork)
+                 │   [ ] Add MusicBrainz data (IDs and release details)
                  │   [ ] Enterprise: scan the whole file
-                 │   Max files  ·
-                 │   Clip at    ·
+                 │   Max files  e.g. 100, or none
+                 │   Clip at    e.g. 1:30
                  │   [ ] Send even if cached
                  │ 
                  │   [ Recognize ]  [ Show the plan ]
