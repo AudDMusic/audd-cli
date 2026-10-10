@@ -88,11 +88,15 @@ field and ctrl+u clears it. `[` and `]` switch tabs from anywhere. The path at
 the top of the page shows where you are, and the line above the key hints
 says what just happened.
 
-Each letter has one meaning everywhere: `o` opens in the browser, `c`
-copies, `r` refreshes, `d` removes (after asking), `e` edits, `x` exports,
-`s` stops. Changing the account's callback URL, removing a stream, and
-unsetting a setting ask first and say what happens; `q` asks first while a
-command is running.
+A key works only where it is listed in the hints at the bottom (or by `?`);
+any other key says it does nothing. Letters that change something work on a
+page, never on the menu or a tab bar, and each has one meaning everywhere:
+`o` opens in the browser, `c` copies, `r` refreshes, `d` removes (after
+asking), `e` edits, `x` exports, `s` stops. `1`-`7` jump from the menu or a
+tab bar. Changing the account's callback URL or a stream's URL, removing a
+stream, and unsetting a setting ask first and name the old and new values;
+`y` confirms and Enter alone never does. `q` asks first while a command is
+running.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
