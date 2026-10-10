@@ -135,7 +135,9 @@ jobs:
           name: ${{ needs.windows-build.outputs.signing == 'true' && format('windows-signed-{0}', matrix.arch) || format('windows-unsigned-{0}', matrix.arch) }}
           path: ${{ runner.temp }}/exe
       - name: Install WiX
-        run: dotnet tool install --global wix --version 5.0.2
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
       - name: Build the installer
         id: build
         shell: pwsh
