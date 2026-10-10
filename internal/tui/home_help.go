@@ -115,7 +115,7 @@ var helpLinks = []struct{ label, url string }{
 var gettingStarted = []struct{ title, text, cmd string }{
 	{"Sign in", "Sign in to your AudD account (or paste an API token) so audd can recognize music and show your account.", "audd login"},
 	{"Recognize a file", "Pick a file, URL, or folder and recognize it. This fills in AudD's example song.", "audd recognize https://audd.tech/example.mp3"},
-	{"Listen", "Record a few seconds from the microphone and identify the song.", "audd listen"},
+	{"Use the microphone", "In Recognize, set Source to Microphone to record a few seconds and identify the song.", "audd listen"},
 	{"Add a stream", "Have AudD monitor a radio or other live stream, then watch it in Now playing.", "audd streams add <url> --id 1"},
 	{"Run any command", "Press ctrl+k to search every command and run it from a form.", "audd commands"},
 }
@@ -125,8 +125,7 @@ var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓ tab", "move between fields"}, {"space", "tick a box"}, {"ctrl+o", "pick a file or folder"}, {"enter", "next field, or press a button"}, {"s", "stop a batch"}, {"o, c, d", "result: open, copy the link, details"}}},
-	{"Listen", []keyHelp{{"enter", "listen"}, {"s or esc", "stop"}, {"o, c", "open or copy the song link"}}},
+	{"Recognize", []keyHelp{{"↑/↓ tab", "move between fields"}, {"←/→", "Source: a file or the microphone"}, {"space", "tick a box"}, {"ctrl+o", "pick a file or folder"}, {"enter", "next field, or press a button"}, {"s", "stop a batch or a recording"}, {"o, c, d", "result: open, copy the link, details"}}},
 	{"Now playing", []keyHelp{{"←/→", "previous or next stream"}, {"enter", "zoom in or out"}, {"h", "history of the stream"}, {"o, c", "open or copy the song link"}, {"r", "refresh"}}},
 	{"Streams", []keyHelp{{"[ ]", "pages: streams, callback, recorder, history and reports"}, {"a", "add a stream"}, {"d", "remove the stream (asks first)"}, {"u", "change its URL"}, {"enter", "recent plays of the stream"}, {"s, x", "recorder: start, stop"}}},
 	{"History", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"enter", "details, or a job's files"}, {"r, R", "resume a job, retry its failed files"}, {"e", "export to CSV or JSON"}, {"o, c, i, u", "open the link, copy link, ISRC, UPC"}}},

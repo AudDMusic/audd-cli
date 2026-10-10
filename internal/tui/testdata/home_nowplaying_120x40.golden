@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │ Now playing                                                                             stream 1 of 3
  1 Recognize     │ 
- 2 Listen        │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
-*3 Now playing   │ ┃ Stream 1                                       ┃│ Stream 2                                       │
- 4 Streams       │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
- 5 History       │ ┃ Warriors                                       ┃│ Feeling Good                                   │
- 6 Account       │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
- 7 Settings      │ ┃ Warriors (album) · Label · 2019                ┃│ Feeling Good (album) · Label · 2019            │
- 8 Help          │ ┃ played 2:50                                    ┃│ played 3:50                                    │
+*2 Now playing   │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
+ 3 Streams       │ ┃ Stream 1                                       ┃│ Stream 2                                       │
+ 4 History       │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
+ 5 Account       │ ┃ Warriors                                       ┃│ Feeling Good                                   │
+ 6 Settings      │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
+ 7 Help          │ ┃ Warriors (album) · Label · 2019                ┃│ Feeling Good (album) · Label · 2019            │
+                 │ ┃ played 2:50                                    ┃│ played 3:50                                    │
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛╰────────────────────────────────────────────────╯
                  │ ╭────────────────────────────────────────────────╮
                  │ │ Stream 3                                       │

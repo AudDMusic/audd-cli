@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │ [Account]  Usage   Billing   API token   Profiles 
  1 Recognize     │ Sign in to see this
- 2 Listen        │ 
- 3 Now playing   │ Your account, usage, and billing need a sign-in to your AudD
- 4 Streams       │ account.
- 5 History       │ 
-*6 Account       │ › Sign in
- 7 Settings      │     Sign in to your AudD account in the browser (or with a
- 8 Help          │     code on another device). audd saves your API token.
+ 2 Now playing   │ 
+ 3 Streams       │ Your account, usage, and billing need a sign-in to your AudD
+ 4 History       │ account.
+*5 Account       │ 
+ 6 Settings      │ › Sign in
+ 7 Help          │     Sign in to your AudD account in the browser (or with a
+                 │     code on another device). audd saves your API token.
                  │ 
                  │ 
                  │ 

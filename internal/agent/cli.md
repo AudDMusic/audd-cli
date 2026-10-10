@@ -63,14 +63,15 @@ permissions; `audd auth status` shows what was approved.
 ## Interactive mode
 
 On a terminal, `audd` with no arguments (or `audd ui`) opens a full-screen
-interface: Recognize, Listen, Now playing, Streams, History, Account,
-Settings, and Help. The bottom line shows the command each action runs, and
-`y` copies it. `ctrl+k` opens a palette of every command with a form for its
+interface: Recognize, Now playing, Streams, History, Account, Settings, and
+Help. Recognize takes a file, URL, or folder, or switches its Source to the
+microphone (`audd listen`). The bottom line shows the command each action
+runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its
 arguments and flags; `?` lists the keys of the screen, and `q` quits.
 
 Interactive mode runs the same commands, with the same limits and
 confirmations: it asks before spending more than one request and never adds
-`--yes`. `audd ui --section <name>` opens a section (`recognize`, `listen`,
+`--yes`. `audd ui --section <name>` opens a section (`recognize`,
 `now-playing`, `streams`, `history`, `account`, `settings`, `help`).
 
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help

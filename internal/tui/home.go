@@ -54,15 +54,21 @@ func init() {
 }
 
 // HomeSections are the section names audd ui --section accepts, in
-// sidebar order.
-var HomeSections = []string{"recognize", "listen", "now-playing", "streams", "history", "account", "settings", "help"}
+// sidebar order. It also accepts listen: Recognize with the microphone.
+var HomeSections = []string{"recognize", "now-playing", "streams", "history", "account", "settings", "help"}
 
-var homeTitles = []string{"Recognize", "Listen", "Now playing", "Streams", "History", "Account", "Settings", "Help"}
+var homeTitles = []string{"Recognize", "Now playing", "Streams", "History", "Account", "Settings", "Help"}
+
+// isListen reports whether a section name asks for the microphone.
+func isListen(name string) bool { return strings.ToLower(strings.TrimSpace(name)) == "listen" }
 
 func sectionIndex(name string) (int, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if name == "" {
 		return -1, nil
+	}
+	if isListen(name) {
+		name = "recognize"
 	}
 	for i, s := range HomeSections {
 		if s == name || strings.ReplaceAll(s, "-", "") == strings.ReplaceAll(name, "-", "") {
@@ -90,6 +96,9 @@ func RunHome(ctx context.Context, a *app.App, section string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	m := newHome(ctx, sessionApp(a), idx)
+	if isListen(section) {
+		m.useMic()
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(a.In), tea.WithOutput(m.arts.out))
 	_, err = p.Run()
 	m.arts.finish()
@@ -248,7 +257,7 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 	case h.signedOut:
 		h.showSignin, h.focus = true, focusContent
 	default:
-		// The sidebar has the keys, so 1-8, ? and q work right away;
+		// The sidebar has the keys, so 1-7, ? and q work right away;
 		// enter goes into the section.
 		h.cur, h.focus = 0, focusSidebar
 	}
@@ -260,7 +269,6 @@ func (h *home) build() {
 	h.order = append([]string(nil), HomeSections...)
 	h.subs = map[string]section{
 		"recognize":   newRecognizeSection(h),
-		"listen":      newListenSection(h),
 		"now-playing": newNowPlayingSection(h),
 		"streams":     newStreamsSection(h),
 		"history":     newHistorySection(h),
@@ -310,8 +318,14 @@ func (h *home) activate() tea.Cmd {
 	return h.wrap(id, h.subs[id].init())
 }
 
-// show switches the content pane to a section.
+// show switches the content pane to a section. listen is Recognize with
+// the microphone.
 func (h *home) show(id string, focus bool) tea.Cmd {
+	mic := id == "listen"
+	if mic {
+		h.useMic()
+		id = "recognize"
+	}
 	if id == "signin" {
 		h.showSignin = true
 	} else {
@@ -325,7 +339,18 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 	if focus {
 		h.focus = focusContent
 	}
-	return h.activate()
+	cmd := h.activate()
+	if s, ok := h.subs["recognize"].(*recognizeSection); ok && mic {
+		cmd = tea.Batch(cmd, h.wrap("recognize", s.findDevices()))
+	}
+	return cmd
+}
+
+// useMic switches Recognize to the microphone.
+func (h *home) useMic() {
+	if s, ok := h.subs["recognize"].(*recognizeSection); ok {
+		s.setSource(true)
+	}
 }
 
 // send delivers a message to a section and wraps its reply.
@@ -489,7 +514,7 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 			return h.copy(c, "the command: "+c)
 		}
 		return h.setFlash("No command to copy here")
-	case "1", "2", "3", "4", "5", "6", "7", "8":
+	case "1", "2", "3", "4", "5", "6", "7":
 		return h.show(h.order[s[0]-'1'], true)
 	}
 	if h.focus == focusSidebar {

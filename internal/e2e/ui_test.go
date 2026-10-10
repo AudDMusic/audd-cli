@@ -169,6 +169,18 @@ func TestUIRecognizeFile(t *testing.T) {
 	}
 }
 
+// --section listen opens Recognize with the microphone.
+func TestUISectionListen(t *testing.T) {
+	e := uiEnv(t)
+	t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+	s := e.ui("ui", "--section", "listen")
+	s.wait("Identify the music playing near you")
+	s.wait("audd listen")
+	if code := s.quit(); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+}
+
 func TestUIBatchWithConfirmation(t *testing.T) {
 	e := uiEnv(t)
 	t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
@@ -191,7 +203,7 @@ func TestUIBatchWithConfirmation(t *testing.T) {
 		t.Fatalf("%d recognitions", n)
 	}
 	// The job is in History.
-	s.press(kEsc, "5")
+	s.press(kEsc, "4")
 	s.press("\t")
 	s.wait("done")
 }

@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │  Getting started  [Guide]  Commands   Keys   Exit codes and output   Links 
  1 Recognize     │   Install                 │ AUDD CLI
- 2 Listen        │   Sign in                 │ 
- 3 Now playing   │   Interactive mode        │ audd recognizes music in files, URLs, folders, long recordings, and from
- 4 Streams       │   Recognize music         │ the microphone; monitors streams; and manages your AudD account. It
- 5 History       │     Whole recordings (ent…│ prints tables on a terminal and JSON when its output is piped.
- 6 Account       │     Folders, globs, and l…│ 
- 7 Settings      │     Results cache         │ Get your API token at https://dashboard.audd.io, or run audd login.
-*8 Help          │   Limits and confirmations│ 
+ 2 Now playing   │   Sign in                 │ 
+ 3 Streams       │   Interactive mode        │ audd recognizes music in files, URLs, folders, long recordings, and from
+ 4 History       │   Recognize music         │ the microphone; monitors streams; and manages your AudD account. It
+ 5 Account       │     Whole recordings (ent…│ prints tables on a terminal and JSON when its output is piped.
+ 6 Settings      │     Folders, globs, and l…│ 
+*7 Help          │     Results cache         │ Get your API token at https://dashboard.audd.io, or run audd login.
+                 │   Limits and confirmations│ 
                  │   Streams                 │ Install
                  │     Background recorder   │ 
                  │     Cover art             │   Where                   Command

@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │  Getting started   Guide   Commands   Keys   Exit codes and …
  1 Recognize     │ Links
- 2 Listen        │ 
- 3 Now playing   │ › This guide online             https://docs.audd.io/cli
- 4 Streams       │   The AudD API docs             https://docs.audd.io
- 5 History       │   Your dashboard (API token, plans)https://dashboard.audd.io
- 6 Account       │   Report a problem              https://github.com/AudDMusic…
- 7 Settings      │   Email AudD                    mailto:api@audd.io
-*8 Help          │ 
+ 2 Now playing   │ 
+ 3 Streams       │ › This guide online             https://docs.audd.io/cli
+ 4 History       │   The AudD API docs             https://docs.audd.io
+ 5 Account       │   Your dashboard (API token, plans)https://dashboard.audd.io
+ 6 Settings      │   Report a problem              https://github.com/AudDMusic…
+*7 Help          │   Email AudD                    mailto:api@audd.io
+                 │ 
                  │ Enter opens the link, c copies it.
                  │ 
                  │ 

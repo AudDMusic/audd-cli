@@ -83,11 +83,12 @@ func TestRecognizeOneFile(t *testing.T) {
 	}
 }
 
-// keyFocus is the down presses that move the form cursor from the input
-// to the named field.
+// keyFocus is the down presses that move the form cursor from where it
+// is (the input, at first) to the named field.
 func keyFocus(h *home, name string) []tea.KeyMsg {
 	var out []tea.KeyMsg
-	for _, f := range recognizeOf(h).form.visible() {
+	f := recognizeOf(h).form
+	for _, f := range f.visible()[f.cursor:] {
 		if f.name == name {
 			break
 		}

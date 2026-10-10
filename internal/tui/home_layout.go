@@ -167,7 +167,7 @@ func (h *home) hintsLine() string {
 	case h.paletteO:
 		keys = h.palette.keys()
 	case h.focus == focusSidebar:
-		keys = []keyHelp{{"↑/↓", "section"}, {"enter", "open"}, {"1-8", "jump"}, {"ctrl+k", "commands"}, {"?", "keys"}, {"q", "quit"}}
+		keys = []keyHelp{{"↑/↓", "section"}, {"enter", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"?", "keys"}, {"q", "quit"}}
 	default:
 		keys = h.active().keys()
 		if h.narrow() {
@@ -197,7 +197,7 @@ func (h *home) commandLine() string {
 // globalKeys are the keys that work everywhere.
 var globalKeys = []keyHelp{
 	{"ctrl+k or :", "command palette: run any command"},
-	{"1-8", "jump to a section"},
+	{"1-7", "jump to a section"},
 	{"↑/↓ j/k", "move in the sidebar"},
 	{"enter", "open the section"},
 	{"esc", "back (to the sidebar)"},

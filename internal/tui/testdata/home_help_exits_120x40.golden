@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │  Getting started   Guide   Commands   Keys  [Exit codes and output]  Links 
  1 Recognize     │ Exit codes
- 2 Listen        │   0    ok           success, including no match
- 3 Now playing   │   1    unexpected   unexpected error, or no match with --fail-on-no-match
- 4 Streams       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
- 5 History       │   3    auth         missing or rejected API token, or sign-in needed (audd login)
- 6 Account       │   4    quota        quota, plan, or feature not available on the account
- 7 Settings      │   5    network      network or server error; retrying may help
-*8 Help          │   6    safety       a bound is missing (--limit, --max-files), a confirmation is needed (--yes),
+ 2 Now playing   │   0    ok           success, including no match
+ 3 Streams       │   1    unexpected   unexpected error, or no match with --fail-on-no-match
+ 4 History       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
+ 5 Account       │   3    auth         missing or rejected API token, or sign-in needed (audd login)
+ 6 Settings      │   4    quota        quota, plan, or feature not available on the account
+*7 Help          │   5    network      network or server error; retrying may help
+                 │   6    safety       a bound is missing (--limit, --max-files), a confirmation is needed (--yes),
                  │                     --max-requests was reached, or an unfinished job for the same files needs
                  │                     --resume or --new
                  │   7    partial      a batch finished with some files failed

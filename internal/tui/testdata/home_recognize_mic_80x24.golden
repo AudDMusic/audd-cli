@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │ Identify the music playing near you
+*1 Recognize     │ 
+ 2 Now playing   │   Source   ‹ Microphone ›
+ 3 Streams       │   Seconds  10
+ 4 History       │   Device   ‹ default ›
+ 5 Account       │   [ ] Add Apple Music data
+ 6 Settings      │   [ ] Add Spotify data
+ 7 Help          │   [ ] Add Deezer data
+                 │   [ ] Add MusicBrainz data
+                 │ 
+                 │   [>Listen<]
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+ ctrl+k commands │ 
+ ? keys  q quit  │ 
+↑/↓ field  ←/→ choose  space toggle  enter listen  esc sidebar
+$ audd listen                                                             y copy

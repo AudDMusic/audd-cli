@@ -195,7 +195,11 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newHome(context.Background(), sessionApp(a), idx)
+	h := newHome(context.Background(), sessionApp(a), idx)
+	if isListen(o.start) {
+		h.useMic()
+	}
+	return h
 }
 
 // runHome drives h on a w×ht terminal: waits for wait, sends keys, waits
@@ -335,7 +339,7 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 func TestHomeShellNavigation(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{}), 120, 40)
 	v := h.View()
-	for _, s := range []string{"AudD", "profile default", "1 Recognize", "8 Help", "ctrl+k"} {
+	for _, s := range []string{"AudD", "profile default", "1 Recognize", "7 Help", "ctrl+k"} {
 		if !strings.Contains(v, s) {
 			t.Fatalf("missing %q:\n%s", s, v)
 		}
@@ -344,7 +348,7 @@ func TestHomeShellNavigation(t *testing.T) {
 	if h.focus != focusSidebar {
 		t.Fatal("esc goes back to the sidebar")
 	}
-	press(h, key("down"), key("down"))
+	press(h, key("down"))
 	if h.activeID() != "now-playing" {
 		t.Fatalf("down moves the sidebar: %s", h.activeID())
 	}
@@ -352,9 +356,9 @@ func TestHomeShellNavigation(t *testing.T) {
 	if h.focus != focusContent {
 		t.Fatal("enter opens the section")
 	}
-	press(h, key("7"))
+	press(h, key("6"))
 	if h.activeID() != "settings" {
-		t.Fatalf("7 jumps to Settings: %s", h.activeID())
+		t.Fatalf("6 jumps to Settings: %s", h.activeID())
 	}
 	press(h, tea.KeyMsg{Type: tea.KeyF1})
 	if h.activeID() != "help" {
@@ -380,7 +384,7 @@ func TestHomeShellNavigation(t *testing.T) {
 func TestHomeNarrowTabStrip(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "streams"}), 70, 24)
 	v := h.View()
-	if strings.Contains(v, "│") || !strings.Contains(v, "[4 Streams]") {
+	if strings.Contains(v, "│") || !strings.Contains(v, "[3 Streams]") {
 		t.Fatalf("narrow terminals show a tab strip:\n%s", v)
 	}
 	if n := strings.Count(v, "\n") + 1; n != 24 {

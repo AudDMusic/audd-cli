@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │  Getting started   Guide  [Commands]  Keys   Exit codes and …
  1 Recognize     │ >                                                           
- 2 Listen        │ 
- 3 Now playing   │ > completion      Print a shell completion script
- 4 Streams       │   docs            Print AudD documentation as markdown
- 5 History       │   now-playing     Show the latest songs on your streams
- 6 Account       │   recognize       Identify music in files, URLs, and folders
- 7 Settings      │   streams         Manage stream monitoring
-*8 Help          │   streams add     Add a stream to monitor
+ 2 Now playing   │ 
+ 3 Streams       │ > completion      Print a shell completion script
+ 4 History       │   docs            Print AudD documentation as markdown
+ 5 Account       │   now-playing     Show the latest songs on your streams
+ 6 Settings      │   recognize       Identify music in files, URLs, and folders
+*7 Help          │   streams         Manage stream monitoring
+                 │   streams add     Add a stream to monitor
                  │   streams remove  Stop monitoring a stream
                  │   streams report  Plays grouped
                  │ 

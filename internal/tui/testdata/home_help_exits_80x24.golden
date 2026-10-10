@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │  Getting started   Guide   Commands   Keys  [Exit codes and …
  1 Recognize     │ Exit codes
- 2 Listen        │   0    ok           success, including no match
- 3 Now playing   │   1    unexpected   unexpected error, or no match with
- 4 Streams       │                     --fail-on-no-match
- 5 History       │   2    usage        invalid arguments or input, or a missing
- 6 Account       │                     tool such as ffmpeg
- 7 Settings      │   3    auth         missing or rejected API token, or sign-in
-*8 Help          │                     needed (audd login)
+ 2 Now playing   │   0    ok           success, including no match
+ 3 Streams       │   1    unexpected   unexpected error, or no match with
+ 4 History       │                     --fail-on-no-match
+ 5 Account       │   2    usage        invalid arguments or input, or a missing
+ 6 Settings      │                     tool such as ffmpeg
+*7 Help          │   3    auth         missing or rejected API token, or sign-in
+                 │                     needed (audd login)
                  │   4    quota        quota, plan, or feature not available on
                  │                     the account
                  │   5    network      network or server error; retrying may

@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │ audd streams add  Add a stream to monitor
  1 Recognize     │ 
- 2 Listen        │ › url*                                                      
- 3 Now playing   │   --id*   ·
- 4 Streams       │   [ ] --start
- 5 History       │ 
- 6 Account       │   [ Run ]
- 7 Settings      │ 
- 8 Help          │ * required. The command runs as shown at the bottom; it asks
+ 2 Now playing   │ › url*                                                      
+ 3 Streams       │   --id*   ·
+ 4 History       │   [ ] --start
+ 5 Account       │ 
+ 6 Settings      │   [ Run ]
+ 7 Help          │ 
+                 │ * required. The command runs as shown at the bottom; it asks
                  │ here before anything that needs a confirmation.
                  │ 
                  │ 

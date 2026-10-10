@@ -1,13 +1,13 @@
 AudD  ·  profile default
                  │ Settings  profile default
  1 Recognize     │ 
- 2 Listen        │ › token                        0123…cdef  (audd config set t…
- 3 Now playing   │     API token, kept in the system credential store
- 4 Streams       │   format                       auto  (default)
- 5 History       │     default output format: table, json, jsonl, csv (auto: ta…
- 6 Account       │   max_requests                 no limit  (default)
-*7 Settings      │     default --max-requests for every command
- 8 Help          │   concurrency                  4  (default)
+ 2 Now playing   │ › token                        0123…cdef  (audd config set t…
+ 3 Streams       │     API token, kept in the system credential store
+ 4 History       │   format                       auto  (default)
+ 5 Account       │     default output format: table, json, jsonl, csv (auto: ta…
+*6 Settings      │   max_requests                 no limit  (default)
+ 7 Help          │     default --max-requests for every command
+                 │   concurrency                  4  (default)
                  │     parallel requests for batch recognition
                  │   streams.background_recorder  true  (default)
                  │     start the background stream recorder automatically

@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -15,7 +16,8 @@ var providers = []struct{ name, label string }{
 	{"apple_music", "Apple Music"}, {"spotify", "Spotify"}, {"deezer", "Deezer"}, {"musicbrainz", "MusicBrainz"},
 }
 
-// recognizeSection is audd recognize: one file or URL, or a batch.
+// recognizeSection is audd recognize: one file or URL, or a batch; or
+// audd listen, with Source set to Microphone.
 type recognizeSection struct {
 	h       *home
 	form    *form
@@ -29,13 +31,17 @@ type recognizeSection struct {
 	rec     recognition
 	details bool
 	runArgs []string
+	m       micState
 }
 
 func newRecognizeSection(h *home) section {
 	s := &recognizeSection{h: h, panel: newPanel(h), phase: "form"}
+	src := enumField("source", "Source", "←/→ or space switches between a file and the microphone", []string{sourceFile, sourceMic})
 	in := textField("input", "Input", "A file, URL, folder, or glob. ctrl+o picks a file.")
 	in.required = true
-	fields := []*field{in}
+	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
+	sec.setValue("10")
+	fields := []*field{src, in, sec, textField("device", "Device", "Input device; empty for the system default")}
 	for _, p := range providers {
 		fields = append(fields, boolField("return:"+p.name, "Add "+p.label+" data", "--return "+p.name))
 	}
@@ -48,26 +54,63 @@ func newRecognizeSection(h *home) section {
 		boolField("no-cache", "Send even if cached", "--no-cache"),
 		buttonField("recognize", "Recognize"),
 		buttonField("plan", "Show the plan"),
+		buttonField("listen", "Listen"),
 	)
 	s.form = newForm(fields...)
 	s.sync()
+	s.form.focusName("input")
 	return s
 }
 
-// sync shows the enterprise options only with --enterprise, and the
-// metadata options only without it (the enterprise endpoint has none).
+// fileFields are the fields of a file, URL, or folder; micFields those of
+// the microphone. The providers are in both.
+var (
+	fileFields = []string{"input", "enterprise", "limit", "tracklist", "max-files", "at", "no-cache", "recognize", "plan"}
+	micFields  = []string{"seconds", "device", "listen"}
+)
+
+// sync shows the fields of the current source. For files, it shows the
+// enterprise options only with --enterprise, and the metadata options
+// only without it (the enterprise endpoint has none).
 func (s *recognizeSection) sync() {
-	ent := s.form.get("enterprise").on
+	mic := s.mic()
+	cur := s.form.current()
+	for _, n := range fileFields {
+		s.form.get(n).hidden = mic
+	}
+	for _, n := range micFields {
+		s.form.get(n).hidden = !mic
+	}
+	ent := !mic && s.form.get("enterprise").on
 	for _, p := range providers {
 		s.form.get("return:" + p.name).hidden = ent
 	}
 	s.form.get("limit").hidden = !ent
 	s.form.get("limit").required = ent
 	s.form.get("tracklist").hidden = !ent
+	// The cursor stays on its field when fields above it come and go.
+	if cur != nil && !cur.hidden {
+		s.form.focusName(cur.name)
+	}
+}
+
+// providers are the --return blocks ticked.
+func (s *recognizeSection) providers() []string {
+	var ret []string
+	for _, p := range providers {
+		if s.form.get("return:" + p.name).on {
+			ret = append(ret, p.name)
+		}
+	}
+	return ret
 }
 
 func (s *recognizeSection) title() string { return "Recognize" }
-func (s *recognizeSection) init() tea.Cmd { s.form.focus(); return nil }
+
+func (s *recognizeSection) init() tea.Cmd {
+	s.form.focus()
+	return s.findDevices()
+}
 
 func (s *recognizeSection) capturing() bool {
 	return s.browser != nil || s.phase == "form" && s.form.capturing()
@@ -82,6 +125,9 @@ func (s *recognizeSection) back() bool {
 		s.phase = "form"
 		return true
 	case s.phase == "running":
+		if s.mic() {
+			s.panel.stop()
+		}
 		return true // s stops it
 	}
 	return false
@@ -89,9 +135,8 @@ func (s *recognizeSection) back() bool {
 
 // prefill sets the input (Help: getting started).
 func (s *recognizeSection) prefill(input string) {
-	s.phase = "form"
+	s.setSource(false)
 	s.form.get("input").setValue(input)
-	s.form.focusName("input")
 }
 
 // args is the command for the form as it is.
@@ -112,16 +157,8 @@ func (s *recognizeSection) args(dry bool) []string {
 		if f.get("tracklist").on {
 			args = append(args, "--tracklist")
 		}
-	} else {
-		var ret []string
-		for _, p := range providers {
-			if f.get("return:" + p.name).on {
-				ret = append(ret, p.name)
-			}
-		}
-		if len(ret) > 0 {
-			args = append(args, "--return", strings.Join(ret, ","))
-		}
+	} else if ret := s.providers(); len(ret) > 0 {
+		args = append(args, "--return", strings.Join(ret, ","))
 	}
 	if v := f.value("max-files"); v != "" {
 		args = append(args, "--max-files", v)
@@ -142,10 +179,16 @@ func (s *recognizeSection) command() string {
 	if s.phase != "form" && s.runArgs != nil {
 		return displayCommand(s.runArgs)
 	}
+	if s.mic() {
+		return displayCommand(s.micArgs())
+	}
 	return displayCommand(s.args(false))
 }
 
 func (s *recognizeSection) keys() []keyHelp {
+	if s.browser == nil && s.mic() {
+		return s.micKeys()
+	}
 	switch {
 	case s.browser != nil:
 		return []keyHelp{{"enter", "open or pick"}, {"s", "pick the folder"}, {"esc", "close"}}
@@ -233,6 +276,16 @@ func (s *recognizeSection) startRun() tea.Cmd {
 }
 
 func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
+	switch m := msg.(type) {
+	case listenSetupMsg:
+		s.setupDone(m)
+		return nil
+	case listenTickMsg:
+		if m.id == s.m.tick && s.phase == "running" {
+			return tea.Tick(time.Second, func(time.Time) tea.Msg { return listenTickMsg{m.id} })
+		}
+		return nil
+	}
 	if mine, done := s.panel.handle(msg); mine {
 		if l, ok := msg.(runLineMsg); ok && s.bs != nil && l.pending == nil {
 			s.bs.add(l.line)
@@ -271,7 +324,13 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 			if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
 				return s.h.openPaletteLine(res.err.Hint)
 			}
+			if s.mic() {
+				return s.startListen()
+			}
 		case "r":
+			if s.mic() {
+				return s.startListen()
+			}
 			return s.startPlan(true)
 		case "o":
 			if s.rec.link != "" {
@@ -291,7 +350,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
-	if ks == "ctrl+o" {
+	if ks == "ctrl+o" && !s.mic() {
 		s.browser = newFileBrowser(s.form.value("input"))
 		return nil
 	}
@@ -302,8 +361,10 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		return s.startPlan(true)
 	case "plan":
 		return s.startPlan(false)
+	case "listen":
+		return s.startListen()
 	}
-	return cmd
+	return tea.Batch(cmd, s.findDevices())
 }
 
 // finished handles the end of the plan or of the recognition.
@@ -343,6 +404,9 @@ func (s *recognizeSection) view(w, h int) string {
 	var b strings.Builder
 	switch s.phase {
 	case "running":
+		if s.mic() {
+			return s.micRunning()
+		}
 		if s.batch && s.bs != nil {
 			if s.panel.pending != nil {
 				return s.panel.view(w, h)
@@ -357,6 +421,9 @@ func (s *recognizeSection) view(w, h int) string {
 		if res == nil {
 			return ""
 		}
+		if res.err != nil && s.mic() {
+			return errorText(st, res.err, w) + "\n\n" + st.Dim.Render("Press r to try again.")
+		}
 		if res.err != nil {
 			if s.batch && s.bs != nil && len(s.bs.results) > 0 {
 				b.WriteString(s.bs.view(st, w, h-4, false) + "\n\n")
@@ -367,16 +434,27 @@ func (s *recognizeSection) view(w, h int) string {
 		if s.batch && s.bs != nil {
 			return s.bs.view(st, w, h, false)
 		}
-		b.WriteString(st.Dim.Render(truncate(s.form.value("input"), w)) + "\n\n")
+		if !s.mic() {
+			b.WriteString(st.Dim.Render(truncate(s.form.value("input"), w)) + "\n\n")
+		}
 		if s.rec.view != nil {
 			v := *s.rec.view
 			b.WriteString(s.h.cardText(v, s.details, w, h-2))
 		} else {
 			b.WriteString(s.rec.text)
+			if s.mic() {
+				b.WriteString("\n\n" + st.Dim.Render("Press enter to listen again."))
+			}
 		}
 		if len(res.notes) > 0 {
 			b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(strings.Join(res.notes, "\n"), w)))
 		}
+		return b.String()
+	}
+	if s.mic() {
+		b.WriteString(st.Bold.Render("Identify the music playing near you") + "\n\n")
+		b.WriteString(s.form.view(w, st, s.h.color))
+		b.WriteString(s.micNotes(w))
 		return b.String()
 	}
 	b.WriteString(st.Bold.Render("Recognize music in a file, URL, or folder") + "\n\n")

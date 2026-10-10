@@ -1,13 +1,13 @@
 AudD  ·  profile default  ·  user@example.com · Startup  ·  3,766 requests left
                  │  Account   Usage  [Billing]  API token   Profiles 
  1 Recognize     │ Requests over the allowance  0
- 2 Listen        │ Amount owed                  $0.00
- 3 Now playing   │ 
- 4 Streams       │ Plans
- 5 History       │ › startup_plan     Startup        $450.00/month  100,000 req…
-*6 Account       │   pro_plan         Pro            $900.00/month  250,000 req…
- 7 Settings      │ 
- 8 Help          │ Payment links never charge anything: you review and pay in
+ 2 Now playing   │ Amount owed                  $0.00
+ 3 Streams       │ 
+ 4 History       │ Plans
+*5 Account       │ › startup_plan     Startup        $450.00/month  100,000 req…
+ 6 Settings      │   pro_plan         Pro            $900.00/month  250,000 req…
+ 7 Help          │ 
+                 │ Payment links never charge anything: you review and pay in
                  │ the browser.
                  │ 
                  │ 
