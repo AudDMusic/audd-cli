@@ -365,12 +365,24 @@ func newAskState(owner string, m runAskMsg, h *home) *askState {
 	return s
 }
 
+// askWaiting is a confirmation that waits for the one on screen.
+type askWaiting struct {
+	owner string
+	msg   runAskMsg
+}
+
+// answer replies to the confirmation on screen and shows the next one.
 func (h *home) answer(ok bool) {
 	if h.ask == nil {
 		return
 	}
 	h.ask.msg.reply <- ok
 	h.ask = nil
+	if len(h.asks) > 0 {
+		next := h.asks[0]
+		h.asks = h.asks[1:]
+		h.ask = newAskState(next.owner, next.msg, h)
+	}
 }
 
 // askKey handles a key while a confirmation is open.

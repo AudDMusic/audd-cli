@@ -176,3 +176,75 @@ func (s *stubSection) keys() []keyHelp        { return nil }
 func (s *stubSection) command() string        { return "" }
 func (s *stubSection) capturing() bool        { return false }
 func (s *stubSection) back() bool             { return false }
+
+// Home-level messages returned through a section reach the home model.
+func TestWrapLetsHomeMessagesThrough(t *testing.T) {
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{}), 100, 30)
+	for _, m := range []tea.Msg{clearHomeOSCMsg{}, clearHomeFlashMsg{id: 1}, headerMsg{}, subMsg{owner: "x"}} {
+		got := wrap("recognize", func() tea.Msg { return m })()
+		if _, isSub := got.(subMsg); isSub && m != (tea.Msg)(subMsg{owner: "x"}) {
+			t.Fatalf("%T was wrapped", m)
+		}
+	}
+	h.osc = "x"
+	drain(h, wrap("recognize", func() tea.Msg { return clearHomeOSCMsg{} }), 0)
+	if h.osc != "" {
+		t.Fatal("the clipboard sequence is never cleared")
+	}
+}
+
+// A second confirmation waits for the first instead of replacing it.
+func TestAsksQueue(t *testing.T) {
+	f := &fakeRun{}
+	answers := make(chan string, 2)
+	for _, name := range []string{"one", "two"} {
+		name := name
+		f.on("ask "+name, func(args []string, io RunIO) int {
+			if io.Ask("Question " + name + "?") {
+				answers <- name
+			}
+			return 0
+		})
+	}
+	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
+	s := withTestSection(h)
+	p2 := newPanel(h)
+	drain(h, tea.Batch(wrap("recognize", s.p.start(runReq{args: []string{"ask", "one"}})), wrap("recognize", p2.start(runReq{args: []string{"ask", "two"}}))), 0)
+	if h.ask == nil || len(h.asks) != 1 {
+		t.Fatalf("one question on screen and one waiting: %v %d", h.ask != nil, len(h.asks))
+	}
+	first := h.ask.msg.question
+	h.Update(key("y"))
+	if h.ask == nil || h.ask.msg.question == first {
+		t.Fatal("the waiting question comes next")
+	}
+	h.Update(key("y"))
+	got := map[string]bool{<-answers: true, <-answers: true}
+	if !got["one"] || !got["two"] {
+		t.Fatalf("answers: %v", got)
+	}
+}
+
+// After switching profiles, the new sections' runs finish and messages
+// of the old ones are dropped.
+func TestSwitchProfileRoutes(t *testing.T) {
+	f := &fakeRun{}
+	f.reply("auth switch", `{"schema_version":1,"active_profile":"work"}`, "", 0)
+	f.reply("account", "Account  user@example.com\n", "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "account", loggedIn: true}), 120, 40)
+	drain(h, h.activate(), 0)
+	old := h.gen
+	// As the Account section returns it, wrapped for its owner.
+	drain(h, h.wrap("account", h.switchProfile("work")), 0)
+	if h.gen != old+1 || h.flags.Profile != "work" {
+		t.Fatalf("gen %d profile %q", h.gen, h.flags.Profile)
+	}
+	acc := h.subs["account"].(*accountSection)
+	if acc.overview.running {
+		t.Fatal("the account run after the switch never finished")
+	}
+	// A tick for the old Streams section is dropped.
+	if cmd := h.route(subMsg{owner: "streams", gen: old, msg: streamsTickMsg{}}); cmd != nil {
+		t.Fatal("old-session messages are dropped")
+	}
+}

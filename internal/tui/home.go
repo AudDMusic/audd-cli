@@ -139,10 +139,14 @@ type keyHelp struct{ key, help string }
 // it alone.
 type subMsg struct {
 	owner string
+	gen   int // the session the section belongs to (see home.gen)
 	msg   tea.Msg
 }
 
-func wrap(owner string, cmd tea.Cmd) tea.Cmd {
+// wrap tags what cmd returns for owner (in session 0; see home.wrap).
+func wrap(owner string, cmd tea.Cmd) tea.Cmd { return wrapGen(owner, 0, cmd) }
+
+func wrapGen(owner string, gen int, cmd tea.Cmd) tea.Cmd {
 	if cmd == nil {
 		return nil
 	}
@@ -154,15 +158,19 @@ func wrap(owner string, cmd tea.Cmd) tea.Cmd {
 		case tea.BatchMsg:
 			out := make(tea.BatchMsg, len(m))
 			for i, c := range m {
-				out[i] = wrap(owner, c)
+				out[i] = wrapGen(owner, gen, c)
 			}
 			return out
-		case tea.QuitMsg, artMsg:
+		case tea.QuitMsg, artMsg, subMsg, headerMsg, clearHomeFlashMsg, clearHomeOSCMsg:
+			// Messages for the home model itself, or already tagged.
 			return m
 		}
-		return subMsg{owner: owner, msg: msg}
+		return subMsg{owner: owner, gen: gen, msg: msg}
 	}
 }
+
+// wrap tags what cmd returns for owner in the current session.
+func (h *home) wrap(owner string, cmd tea.Cmd) tea.Cmd { return wrapGen(owner, h.gen, cmd) }
 
 type focusArea int
 
@@ -201,6 +209,10 @@ type home struct {
 	paletteO bool
 	keysO    bool // ? overlay
 	ask      *askState
+	asks     []askWaiting // confirmations waiting behind ask
+	// gen counts sessions: switching profiles builds new sections, and
+	// messages for the old ones are dropped.
+	gen int
 
 	signedOut bool
 	testToken bool
@@ -295,7 +307,7 @@ func (h *home) activate() tea.Cmd {
 		return nil
 	}
 	h.inits[id] = true
-	return wrap(id, h.subs[id].init())
+	return h.wrap(id, h.subs[id].init())
 }
 
 // show switches the content pane to a section.
@@ -324,9 +336,9 @@ func (h *home) send(id string, msg tea.Msg) tea.Cmd {
 	}
 	if !h.inits[id] && id != "palette" {
 		h.inits[id] = true
-		return tea.Batch(wrap(id, s.init()), wrap(id, s.update(msg)))
+		return tea.Batch(h.wrap(id, s.init()), h.wrap(id, s.update(msg)))
 	}
-	return wrap(id, s.update(msg))
+	return h.wrap(id, s.update(msg))
 }
 
 func (h *home) setFlash(s string) tea.Cmd {
@@ -383,12 +395,32 @@ func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // route handles a section's message: run events are continued here, and
 // questions from runs open the confirmation.
 func (h *home) route(m subMsg) tea.Cmd {
+	cont := func(r *run) tea.Cmd { return wrapGen(m.owner, m.gen, h.runs.wait(r)) }
+	if m.gen != h.gen {
+		// A section of an earlier session: keep its runs draining (they
+		// were cancelled), answer its questions no, and drop the rest.
+		switch ev := m.msg.(type) {
+		case runAskMsg:
+			ev.reply <- false
+			return cont(ev.run)
+		case runLineMsg:
+			return cont(ev.run)
+		case runDoneMsg:
+			h.runs.done(ev.run.id)
+		}
+		return nil
+	}
 	switch ev := m.msg.(type) {
 	case runAskMsg:
-		h.ask = newAskState(m.owner, ev, h)
-		return wrap(m.owner, h.runs.wait(ev.run))
+		if h.ask != nil {
+			// One question at a time; this one waits its turn.
+			h.asks = append(h.asks, askWaiting{owner: m.owner, msg: ev})
+		} else {
+			h.ask = newAskState(m.owner, ev, h)
+		}
+		return cont(ev.run)
 	case runLineMsg:
-		return tea.Batch(wrap(m.owner, h.runs.wait(ev.run)), h.send(m.owner, ev))
+		return tea.Batch(cont(ev.run), h.send(m.owner, ev))
 	case runDoneMsg:
 		h.runs.done(ev.run.id)
 		cmds := []tea.Cmd{h.send(m.owner, ev)}
@@ -563,6 +595,13 @@ func (h *home) switchProfile(name string) tea.Cmd {
 	h.testToken = false
 	h.signedOut = h.noToken()
 	h.hdr, h.hdrLoaded = headerMsg{}, false
+	// The old sections' runs stop and their messages are dropped.
+	h.runs.mu.Lock()
+	for _, c := range h.runs.cancels {
+		c()
+	}
+	h.runs.mu.Unlock()
+	h.gen++
 	h.build()
 	return tea.Batch(h.setFlash("Switched to profile "+name), h.loadHeader(), h.show("account", true))
 }
