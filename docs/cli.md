@@ -97,7 +97,9 @@ works only where it is listed; any other key says it does nothing.
 When a text field is selected, you are typing in it: letters, digits, and
 symbols go in, left and right move the cursor (left at its start goes back),
 and ctrl+u clears it. Esc stops typing and keeps what you typed; the cursor
-stays on the form (Enter types again, and `1`-`7` jump to a section). Recognize
+stays on the form (Enter types again). `1`-`7` jump to a section from the
+menu, a tab bar, or a list, never in a form, and `q` quits only from the menu
+or a tab bar (inside a page it says to press Esc first). Recognize
 opens typing in its File, URL, or folder field; the other pages open with no
 text field selected. While you type a path, audd counts its files in the
 background and never looks through a whole disk without asking. Enter in a
@@ -113,12 +115,14 @@ change until you make another or leave the section. Spending requests
 token or the callback URL ask first in a dialog with a button named for the
 action. Every dialog opens on Cancel, so Enter twice never spends anything:
 move to the action with left, right, or Tab and press Enter (or click it);
-`n` or Esc cancels. `y` copies the command on the bottom line everywhere,
-in a dialog too. Without an API token, buttons that need one are dimmed and
-offer the ways to get one (streams need your own token, not the public test
-token). `q` quits right away from the menu or a tab bar; on a page with
-something typed and not saved, or while a command runs, it asks first and
-says what would be lost (ctrl+c twice quits). Paths can start with `~`.
+`n` or Esc cancels (`y` does nothing in a dialog; elsewhere it copies the
+command on the bottom line). Without an API token, buttons that need one are
+dimmed and offer the ways to get one (streams need your own token, not the
+public test token). When something typed is not saved or a command runs,
+`q` asks first and says what would be lost (ctrl+c twice quits). Paths can
+start with `~`. On the Callback page, Enter in the URL goes on to the data
+boxes and Save asks; Esc puts back the URL, and Revert changes puts back
+everything.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
@@ -184,11 +188,17 @@ audd jobs list
 audd jobs show <id>
 audd jobs resume <id>
 audd jobs resume <id> --retry-failed
+audd jobs resume <id> --retry-all-failed
 ```
 
 `audd jobs resume <id>` sends the files that are left. Files that failed after
 their upload started, or that were being sent when audd stopped, may have been
-counted, so they are sent again only with `--retry-failed`.
+counted, so they are sent again only with `--retry-failed`, which retries the
+failures a retry can fix (connection, server, rate limit, quota). Files that
+fail the same way again (audio that cannot be decoded, an unsupported format)
+are sent again only with `--retry-all-failed`. `audd jobs show` and the
+summary say which failures can be retried: "2 files failed: 1 can be retried,
+1 can't (corrupt.mp3: ...)".
 
 Running the same batch again while its job is unfinished offers to resume it.
 Without a terminal it stops with exit 6 (`resume_available`): pass `--resume`
