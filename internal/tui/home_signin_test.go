@@ -16,13 +16,14 @@ func useSigninMethod(t *testing.T, m string) {
 }
 
 func TestSignedOutFirstScreen(t *testing.T) {
-	useSigninMethod(t, "browser")
 	f := &fakeRun{}
 	h := newTestHome(t, f, homeOpts{signedOut: true})
 	for _, size := range [][2]int{{80, 24}, {120, 40}} {
 		v := runHome(t, newTestHome(t, f, homeOpts{signedOut: true}), size[0], size[1], "Try with the test token", "")
 		testutil.Golden(t, "home_signedout_"+itoa(size[0])+"x"+itoa(size[1]), []byte(v))
 	}
+	// After newTestHome, which pins the method for snapshots.
+	useSigninMethod(t, "browser")
 	sized(h, 120, 40)
 	if h.activeID() != "signin" || !strings.Contains(h.View(), "signed out") || !strings.Contains(h.View(), "$ audd login --browser") {
 		t.Fatalf("signed out:\n%s", h.View())
