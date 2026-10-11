@@ -30,6 +30,35 @@ type row struct {
 	view   *app.ResultView // the song whose cover the detail shows
 	data   any             // exported with e
 	hint   string          // what to do about it, in the status line
+	// matches: an enterprise result's songs, a list of their own that
+	// enter opens.
+	matches []row
+}
+
+var matchCols = []column{{title: "Where", width: 15}, {title: "Song", width: 0}, {title: "Album", width: 24}}
+
+// matchRows are the songs of an enterprise result, each with its own
+// details and link (nil for a single song).
+func matchRows(raw json.RawMessage, source string) []row {
+	_, ms, single := resultSummary(raw)
+	if single || len(ms) == 0 {
+		return nil
+	}
+	rows := make([]row, 0, len(ms))
+	for i, m := range ms {
+		m := m
+		r := newRow(fmt.Sprint(i), m.at, songLine(m.view), m.view.Album)
+		r.link = m.view.SongLink
+		r.copies = map[string]string{"i": m.view.ISRC, "u": m.view.UPC}
+		v := m.view
+		r.view = &v
+		r.detail = func(st detailStyles) string {
+			return st.dim.Render(source) + "\n" + st.dim.Render("At "+m.at) + "\n\n" + strings.Join(detailFields(m.view, st.key), "\n")
+		}
+		r.data = m.view
+		rows = append(rows, r)
+	}
+	return rows
 }
 
 type detailStyles struct {
@@ -44,7 +73,7 @@ func when(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.In(localZone).Format("Jan 02 15:04")
+	return t.In(localZone).Format("Jan 2 15:04")
 }
 
 // --- recognition results ---
@@ -160,6 +189,7 @@ func recentRows(items []RecentItem) []row {
 		r.link = v.SongLink
 		r.copies = map[string]string{"i": v.ISRC, "u": v.UPC}
 		r.view = singleView(it.Result)
+		r.matches = matchRows(it.Result, it.Source)
 		raw := it.Result
 		r.detail = func(st detailStyles) string {
 			return st.dim.Render(it.Source) + "\n\n" + resultDetail(raw, st)
@@ -174,12 +204,18 @@ var recentCols = []column{{title: "When", width: 12}, {title: "Song", width: 0},
 
 // --- jobs ---
 
-var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Command", width: 0, mid: true}}
+var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Input", width: 0, mid: true}}
 
 func jobRows(jobs []JobRow) []row {
 	rows := make([]row, 0, len(jobs))
 	for _, j := range jobs {
-		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), strings.Join(j.Command, " "),
+		// What was recognized: the folder's name ("music"), or the
+		// first file "and N more"; the whole command is on the job's page.
+		input := j.Inputs
+		if input == "" {
+			input = strings.Join(j.Command, " ")
+		}
+		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), input,
 			fmt.Sprintf("%d/%d, %d failed", j.Done, j.Total, j.Failed))
 		r.data = j
 		j := j
@@ -213,6 +249,7 @@ func jobItemRows(items []JobItem) []row {
 		r.link = v.SongLink
 		r.copies = map[string]string{"i": v.ISRC, "u": v.UPC}
 		r.view = singleView(it.Result)
+		r.matches = matchRows(it.Result, it.Input)
 		it := it
 		r.detail = func(st detailStyles) string {
 			var b strings.Builder
@@ -279,7 +316,7 @@ func streamRows(data []stationData, now time.Time) []row {
 	return rows
 }
 
-var playCols = []column{{title: "Time", width: 12}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played", width: 7}, {title: "Length", width: 7}}
+var playCols = []column{{title: "When", width: 18}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played", width: 7}, {title: "Length", width: 7}}
 
 // whenShort is the "When" cell of a stream: "now · 1:23" while a song
 // plays, "ended 2 min ago" for a result sent when the song ended, else the
@@ -294,10 +331,10 @@ func whenShort(p Play, now time.Time) string {
 	case p.PlayLength > 0:
 		return "ended " + agoAt(p.Ago(now), now)
 	}
-	return agoAt(p.Ago(now), now)
+	return "started " + agoAt(p.Ago(now), now)
 }
 
-func playRows(plays []Play) []row {
+func playRows(plays []Play, at time.Time) []row {
 	rows := make([]row, 0, len(plays))
 	for _, p := range plays {
 		played, length := "", ""
@@ -307,7 +344,7 @@ func playRows(plays []Play) []row {
 		if p.TrackLength > 0 {
 			length = clock(p.TrackLength)
 		}
-		r := newRow(p.key(), when(p.At), songLine(p.ResultView), p.Album, played, length)
+		r := newRow(p.key(), playWhen(p, at), songLine(p.ResultView), p.Album, played, length)
 		r.search += " " + strings.ToLower(p.Label+" "+p.ISRC)
 		r.link = p.SongLink
 		r.copies = map[string]string{"i": p.ISRC, "u": p.UPC}

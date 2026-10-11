@@ -178,6 +178,9 @@ func providerLinks(extra map[string]any) [][2]string {
 	// Other scalar fields the API added, so nothing is hidden.
 	var keys []string
 	for k, v := range extra {
+		if k == "start_seconds" || k == "end_seconds" {
+			continue // shown as where the match starts and ends
+		}
 		switch v.(type) {
 		case string, float64, bool:
 			keys = append(keys, k)
@@ -185,10 +188,11 @@ func providerLinks(extra map[string]any) [][2]string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
+		// Field names in words: "new_field" → "New field".
 		if s := str(extra[k]); s != "" {
-			out = append(out, [2]string{k, s})
+			out = append(out, [2]string{plainName(k), s})
 		} else if b, ok := extra[k].(bool); ok {
-			out = append(out, [2]string{k, fmt.Sprint(b)})
+			out = append(out, [2]string{plainName(k), fmt.Sprint(b)})
 		}
 	}
 	return out

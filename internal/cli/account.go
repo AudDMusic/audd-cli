@@ -101,7 +101,13 @@ func signInRows(row func(k, v string), methods []account.SignInMethod) {
 // planSummary is "Startup, $450.00/month, 100,000 requests included".
 func planSummary(p account.Plan) string {
 	parts := []string{}
-	if name := cmp.Or(p.Name, p.Key); name != "" {
+	// A plan without a name shows its key in words: "indie_plan_outside"
+	// → "Indie plan outside".
+	key := strings.ReplaceAll(p.Key, "_", " ")
+	if key != "" {
+		key = strings.ToUpper(key[:1]) + key[1:]
+	}
+	if name := cmp.Or(p.Name, key); name != "" {
 		parts = append(parts, name)
 	}
 	if p.MonthlyPriceCents > 0 {

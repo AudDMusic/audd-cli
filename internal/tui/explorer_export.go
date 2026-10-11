@@ -43,26 +43,32 @@ func (m *explorer) export(format string) tea.Cmd {
 	return m.writeExport(l.kind, format, header, cells, data)
 }
 
+// exportDoneMsg says how an export went (it is written in the
+// background).
+type exportDoneMsg struct{ text string }
+
 func (m *explorer) writeExport(kind, format string, header []string, cells [][]string, data any) tea.Cmd {
 	name := fmt.Sprintf("audd-%s-%s.%s", kind, m.now().Format("20060102-150405"), format)
 	path := filepath.Join(explorerExportDir, name)
-	f, err := os.Create(path)
-	if err != nil {
-		return m.setFlash("Export failed: " + err.Error())
+	return func() tea.Msg {
+		f, err := os.Create(path)
+		if err != nil {
+			return exportDoneMsg{"Export failed: " + err.Error()}
+		}
+		defer f.Close()
+		var werr error
+		if format == "csv" {
+			werr = writeCSV(f, header, cells)
+		} else {
+			enc := json.NewEncoder(f)
+			enc.SetIndent("", "  ")
+			werr = enc.Encode(map[string]any{"schema_version": output.SchemaVersion, "items": data})
+		}
+		if werr != nil {
+			return exportDoneMsg{"Export failed: " + werr.Error()}
+		}
+		return exportDoneMsg{"Saved " + name}
 	}
-	defer f.Close()
-	var werr error
-	if format == "csv" {
-		werr = writeCSV(f, header, cells)
-	} else {
-		enc := json.NewEncoder(f)
-		enc.SetIndent("", "  ")
-		werr = enc.Encode(map[string]any{"schema_version": output.SchemaVersion, "items": data})
-	}
-	if werr != nil {
-		return m.setFlash("Export failed: " + werr.Error())
-	}
-	return m.setFlash("Saved " + name)
 }
 
 func writeCSV(w io.Writer, header []string, cells [][]string) error {

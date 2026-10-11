@@ -16,6 +16,10 @@ type button struct {
 	label string // "Resume"
 	key   string // the letter shown on it, "" for none
 	do    func() tea.Cmd
+	// token: the button needs an API token. Without one it is shown
+	// dimmed, and pressing it says so and offers the ways to get one.
+	token bool
+	off   string // why it is off ("" when it works)
 }
 
 // actioner is a section with buttons: the ones that apply right now.
@@ -31,7 +35,18 @@ func (h *home) pageActions() []button {
 		return nil
 	}
 	if a, ok := h.active().(actioner); ok {
-		return a.actions()
+		acts := a.actions()
+		if h.signedOut {
+			for i := range acts {
+				if acts[i].token {
+					b := &acts[i]
+					b.off = b.label + " needs an API token"
+					next := b.do
+					b.do = func() tea.Cmd { return h.askToken(h.activeID(), b.label+" needs an API token.", next) }
+				}
+			}
+		}
+		return acts
 	}
 	return nil
 }
@@ -85,6 +100,9 @@ func (h *home) buttonsLine(acts []button, w int) string {
 		for _, i := range row {
 			b := acts[i]
 			label := "[ " + b.text() + " ]"
+			if b.off != "" {
+				label = h.st.Dim.Render(label)
+			}
 			if focused && i == h.btnCur {
 				label = "[>" + b.text() + "<]"
 				if h.color {
@@ -160,7 +178,7 @@ func sameButtons(a, b []button, pressed string) bool {
 // accelerator presses the button whose letter is s.
 func (h *home) accelerator(s string, acts []button) (tea.Cmd, bool) {
 	for i, b := range acts {
-		if b.key != "" && b.key == s {
+		if b.key != "" && b.key == s || s == "ctrl+z" && b.label == "Undo" {
 			h.btnCur = i
 			return h.pressButton(b), true
 		}
@@ -172,6 +190,9 @@ func (h *home) accelerator(s string, acts []button) (tea.Cmd, bool) {
 func (h *home) buttonHints(acts []button) []keyHelp {
 	b := acts[max(0, min(len(acts)-1, h.btnCur))]
 	k := []keyHelp{{"←/→", "buttons"}, {"enter", strings.ToLower(b.label)}, {"↑/esc", "back to the page"}}
+	if b.off != "" {
+		k[1] = keyHelp{"enter", "get an API token first"}
+	}
 	if b.key != "" {
 		k = append(k, keyHelp{b.key, strings.ToLower(b.label)})
 	}

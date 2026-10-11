@@ -92,7 +92,9 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		if s := m.current(); s != nil && len(s.Plays) > 0 && s.Plays[0].SongLink != "" {
 			if err := openURL(s.Plays[0].SongLink); err != nil {
-				return m, m.setFlash("Could not open the browser: " + err.Error())
+				m.osc = oscCopy(s.Plays[0].SongLink)
+				return m, tea.Batch(m.setFlash(noBrowser),
+					tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearCopyMsg{} }))
 			}
 			return m, m.setFlash("Opened in your browser: " + s.Plays[0].SongLink)
 		}

@@ -214,6 +214,16 @@ func (m *explorer) drill(l *level, r *row) tea.Cmd {
 		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
 		return m.load(m.tab, nl)
 	}
+	if len(r.matches) > 0 && l.kind != "matches" {
+		// An enterprise result: its songs are a list of their own.
+		title := r.cells[3] + " in " + r.cells[2] // a job's file
+		if l.kind == "recent" {
+			title = r.cells[1] + " in " + r.cells[3]
+		}
+		nl := &level{kind: "matches", arg: l.kind + ":" + r.key, title: title, cols: matchCols, rows: r.matches}
+		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
+		return nil
+	}
 	if r.detail != nil {
 		l.detail, l.dscroll = true, 0
 		if r.view != nil {
@@ -234,7 +244,9 @@ func (m *explorer) rowAction(s string, r *row) tea.Cmd {
 			return m.setFlash("No link to open")
 		}
 		if err := openURL(r.link); err != nil {
-			return m.setFlash("Could not open the browser: " + err.Error())
+			m.osc = oscCopy(r.link)
+			return tea.Batch(m.setFlash(noBrowser),
+				tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearCopyMsg{} }))
 		}
 		return m.setFlash("Opened in your browser: " + r.link)
 	case "c":

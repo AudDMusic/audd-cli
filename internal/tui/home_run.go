@@ -33,6 +33,9 @@ type runReq struct {
 	spends bool
 	// tag is for the section's own bookkeeping.
 	tag string
+	// agreed: the user already confirmed this run in a dialog of its
+	// own (after its dry run), so the command's question is answered yes.
+	agreed bool
 }
 
 // run is a run in flight.
@@ -146,6 +149,9 @@ func (h *home) start(req runReq) tea.Cmd {
 			}
 		}}
 		ask := func(q string) bool {
+			if req.agreed {
+				return true
+			}
 			reply := make(chan bool, 1)
 			msg := runAskMsg{run: r, question: q, notes: noteLines(errBuf.String()), reply: reply}
 			select {
@@ -371,9 +377,9 @@ type askState struct {
 }
 
 func newAskState(owner string, m runAskMsg, h *home) *askState {
-	// A command asks before spending more than one request: the plan
-	// was just shown, so the action button has the focus.
-	s := &askState{owner: owner, msg: m, typed: m.run.req.typed, cur: 1}
+	// A command asks before spending more than one request. Cancel has
+	// the focus, so a double enter never spends; y confirms.
+	s := &askState{owner: owner, msg: m, typed: m.run.req.typed}
 	if s.typed != "" {
 		ti := textinput.New()
 		ti.Prompt = "> "
@@ -471,9 +477,9 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 	case "n", "N":
 		return h.pressAsk(0)
 	case "?":
-		return h.setFlash("←/→ or tab choose · enter presses · y confirms · n or esc cancels")
+		return h.setFlash("y confirms · enter presses the selected button · ←/→ choose · n or esc cancels")
 	}
-	return h.setFlash(key + " does nothing here · ←/→ choose, enter presses, esc cancels")
+	return h.setFlash(keyName(key) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
 
 // pressAsk answers with button i: 0 is Cancel.
@@ -506,7 +512,7 @@ func (h *home) askView(w, ht int) string {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}
 	} else {
-		b.WriteString(h.dialogButtons([]string{"Cancel", s.action()}, s.cur, h.pressAsk) + "\n")
+		b.WriteString(h.dialogButtons([]string{"Cancel", s.action()}, s.cur, h.pressAsk, w) + "\n")
 	}
 	return b.String()
 }

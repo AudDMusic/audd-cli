@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	neturl "net/url"
 	"os"
@@ -108,8 +109,8 @@ func (s *nowPlayingSection) view(w, h int) string {
 	if s.err != nil {
 		e := output.AsError(s.err)
 		out := errorText(st, &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}, w)
-		if e.Code == "no_streams" {
-			out += "\n\n" + st.Dim.Render("Add a stream in Streams (press 3, then a).")
+		if e.Code == "no_streams" || e.Code == "no_token" {
+			return out
 		}
 		return out + "\n\n" + st.Dim.Render("r tries again.")
 	}
@@ -121,6 +122,9 @@ func (s *nowPlayingSection) view(w, h int) string {
 }
 
 func (s *nowPlayingSection) keys() []keyHelp {
+	if s.err != nil && output.AsError(s.err).Code == "no_streams" {
+		return []keyHelp{{"enter", "add a stream"}}
+	}
 	if s.np == nil {
 		return []keyHelp{{"r", "try again"}}
 	}
@@ -140,6 +144,15 @@ func (s *nowPlayingSection) back() bool {
 
 // actions are the buttons for the selected stream.
 func (s *nowPlayingSection) actions() []button {
+	if s.err != nil {
+		switch output.AsError(s.err).Code {
+		case "no_streams":
+			return []button{{label: "Add a stream", token: true, do: func() tea.Cmd { return s.h.addStream() }}}
+		case "no_token":
+			return s.h.tokenButtons(func() tea.Cmd { s.err = nil; return s.init() })
+		}
+		return []button{{label: "Try again", key: "r", do: func() tea.Cmd { s.err = nil; return s.init() }}}
+	}
 	if s.np == nil || len(s.np.stations) == 0 {
 		return nil
 	}
@@ -153,14 +166,14 @@ func (s *nowPlayingSection) actions() []button {
 	var b []button
 	switch {
 	case np.history:
-		b = append(b, button{"Back to the stream", "", press('h')})
+		b = append(b, button{label: "Back to the stream", key: "", do: press('h')})
 	default:
-		b = append(b, button{"History", "", press('h')})
+		b = append(b, button{label: "History", key: "", do: press('h')})
 	}
 	if cur := np.current(); cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != "" && !np.history {
-		b = append(b, button{"Open the song link", "o", press('o')}, button{"Copy the song link", "c", press('c')})
+		b = append(b, button{label: "Open the song link", key: "o", do: press('o')}, button{label: "Copy the song link", key: "c", do: press('c')})
 	}
-	return append(b, button{"Refresh", "r", func() tea.Cmd {
+	return append(b, button{label: "Refresh", key: "r", do: func() tea.Cmd {
 		_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
 		return tea.Batch(cmd, s.h.setFlash("Refreshed"))
 	}})
@@ -250,7 +263,7 @@ func (p *explorerPane) view(w, h int) string {
 	}
 	if p.err != nil {
 		e := output.AsError(p.err)
-		return errorText(p.h.st, &runError{Message: e.Message, Hint: e.Hint}, w)
+		return errorText(p.h.st, &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}, w)
 	}
 	if p.ex == nil {
 		return p.h.st.Dim.Render("Loading…")
@@ -294,11 +307,17 @@ func (p *explorerPane) back() bool {
 // actions are the buttons for what the pane shows: a list, or the page
 // of one row (a stream, a job, a song).
 func (p *explorerPane) actions() []button {
+	if p.err != nil {
+		if output.AsError(p.err).Code == "no_token" {
+			return p.h.tokenButtons(func() tea.Cmd { p.err = nil; return p.init() })
+		}
+		return nil
+	}
 	if p.ex == nil || p.ex.capturing() {
 		return nil
 	}
 	ex := p.ex
-	refresh := button{"Refresh", "r", func() tea.Cmd {
+	refresh := button{label: "Refresh", key: "r", do: func() tea.Cmd {
 		if ex.tab == tabUsage {
 			return tea.Batch(ex.load(tabUsage, nil), p.h.setFlash("Refreshed"))
 		}
@@ -307,13 +326,14 @@ func (p *explorerPane) actions() []button {
 		}
 		return nil
 	}}
-	export := button{"Export", "x", p.askExport}
+
+	export := button{label: "Export", key: "x", do: p.askExport}
 	if ex.tab == tabUsage {
 		return []button{refresh, export}
 	}
-	if u := p.undo; u != nil && (p.h.flash == u.msg || p.h.lastFlash == u.msg) {
-		// Undo, while the change's message shows.
-		return append(p.actionsFor(), button{"Undo", "u", func() tea.Cmd { p.undo = nil; return u.do() }})
+	if u := p.undo; u != nil {
+		// Undo, until the next change or until you leave the section.
+		return append(p.actionsFor(), button{label: "Undo", key: "u", do: func() tea.Cmd { p.undo = nil; return u.do() }})
 	}
 	return p.actionsFor()
 }
@@ -321,13 +341,14 @@ func (p *explorerPane) actions() []button {
 // actionsFor are the buttons for the list or the row's page.
 func (p *explorerPane) actionsFor() []button {
 	ex := p.ex
-	refresh := button{"Refresh", "r", func() tea.Cmd {
+	refresh := button{label: "Refresh", key: "r", do: func() tea.Cmd {
 		if l := ex.top(); l != nil {
 			return tea.Batch(ex.load(ex.tab, l), p.h.setFlash("Refreshed"))
 		}
 		return nil
 	}}
-	export := button{"Export", "x", p.askExport}
+
+	export := button{label: "Export", key: "x", do: p.askExport}
 	l := ex.top()
 	if l == nil {
 		return nil
@@ -338,11 +359,11 @@ func (p *explorerPane) actionsFor() []button {
 		if j == nil {
 			return b
 		}
-		if j.Status != "done" && j.Done < j.Total {
-			b = append(b, button{"Resume", "", func() tea.Cmd { return ex.resumeJob(jl, false) }})
+		if j.Pending > 0 {
+			b = append(b, button{label: "Resume", key: "", do: func() tea.Cmd { return ex.resumeJob(jl, false) }})
 		}
 		if j.Failed > 0 {
-			b = append(b, button{"Retry failed files", "", func() tea.Cmd { return ex.resumeJob(jl, true) }})
+			b = append(b, button{label: "Retry failed files", key: "", do: func() tea.Cmd { return ex.resumeJob(jl, true) }})
 		}
 		return b
 	}
@@ -351,32 +372,29 @@ func (p *explorerPane) actionsFor() []button {
 		switch l.kind {
 		case "streams":
 			b = append(b,
-				button{"History", "", func() tea.Cmd { return ex.drill(l, r) }},
-				button{"Edit URL", "e", p.startEditURL},
-				button{"Remove", "d", p.askRemove})
+				button{label: "History", key: "", do: func() tea.Cmd { return ex.drill(l, r) }},
+				button{label: "Edit URL", key: "e", token: true, do: p.startEditURL},
+				button{label: "Remove", key: "d", token: true, do: p.askRemove})
 			if u := p.streamURL(r.key); strings.Contains(u, "://") {
 				// No letters on the link buttons: o could mean the stream
 				// URL or the song link.
-				b = append(b, button{"Open the stream URL", "", func() tea.Cmd {
-					if err := openURL(u); err != nil {
-						return p.h.setFlash("Could not open the browser: " + err.Error())
-					}
-					return p.h.setFlash("Opened in your browser: " + u)
+				b = append(b, button{label: "Open the stream URL", key: "", do: func() tea.Cmd {
+					return p.h.openLink(u)
 				}})
 			}
 			if r.link != "" {
 				b = append(b,
-					button{"Open the song link", "", func() tea.Cmd { return ex.rowAction("o", r) }},
-					button{"Copy the song link", "", func() tea.Cmd { return ex.rowAction("c", r) }})
+					button{label: "Open the song link", key: "", do: func() tea.Cmd { return ex.rowAction("o", r) }},
+					button{label: "Copy the song link", key: "", do: func() tea.Cmd { return ex.rowAction("c", r) }})
 			}
 			return b
 		case "jobs":
 			j := ex.jobOf(l)
-			b = append(b, button{"Files", "", func() tea.Cmd { return ex.drill(l, r) }})
+			b = append(b, button{label: "Files", key: "", do: func() tea.Cmd { return ex.drill(l, r) }})
 			b = append(b, jobButtons(j, l)...)
 			if j != nil {
 				cmd := jobCommand(j.Command)
-				b = append(b, button{"Copy the batch command", "c", func() tea.Cmd { return p.h.copy(cmd, "the batch command: "+cmd) }})
+				b = append(b, button{label: "Copy the batch command", key: "c", do: func() tea.Cmd { return p.h.copy(cmd, "the batch command: "+cmd) }})
 			}
 			return b
 		}
@@ -384,26 +402,34 @@ func (p *explorerPane) actionsFor() []button {
 			if it, ok := r.data.(JobItem); ok && it.State == "failed" {
 				// A failed file is retried with the job's other failed
 				// files.
-				b = append(b, button{"Retry this file", "", func() tea.Cmd { return ex.resumeJob(l, true) }})
+				b = append(b, button{label: "Retry this file", key: "", do: func() tea.Cmd { return ex.resumeJob(l, true) }})
 			}
 		}
 		if r.link != "" {
 			b = append(b,
-				button{"Open the song link", "o", func() tea.Cmd { return ex.rowAction("o", r) }},
-				button{"Copy the song link", "c", func() tea.Cmd { return ex.rowAction("c", r) }})
+				button{label: "Open the song link", key: "o", do: func() tea.Cmd { return ex.rowAction("o", r) }},
+				button{label: "Copy the song link", key: "c", do: func() tea.Cmd { return ex.rowAction("c", r) }})
 		}
 		if r.copies["i"] != "" {
-			b = append(b, button{"Copy ISRC", "i", func() tea.Cmd { return ex.rowAction("i", r) }})
+			b = append(b, button{label: "Copy ISRC", key: "i", do: func() tea.Cmd { return ex.rowAction("i", r) }})
 		}
 		if r.copies["u"] != "" {
-			b = append(b, button{"Copy UPC", "u", func() tea.Cmd { return ex.rowAction("u", r) }})
+			b = append(b, button{label: "Copy UPC", key: "", do: func() tea.Cmd { return ex.rowAction("u", r) }})
 		}
 		return b
 	}
 	var b []button
 	switch l.kind {
+	case "matches":
+		// The selected match's own link.
+		if r != nil && r.link != "" {
+			b = append(b,
+				button{label: "Open the song link", key: "o", do: func() tea.Cmd { return ex.rowAction("o", r) }},
+				button{label: "Copy the song link", key: "c", do: func() tea.Cmd { return ex.rowAction("c", r) }})
+		}
+		return b
 	case "streams":
-		b = append(b, button{"Add a stream", "a", func() tea.Cmd { return p.onAdd() }})
+		b = append(b, button{label: "Add a stream", key: "a", token: true, do: func() tea.Cmd { return p.onAdd() }})
 	case "items":
 		b = append(b, jobButtons(ex.jobOf(l), l)...)
 	}
@@ -536,10 +562,14 @@ func (p *explorerPane) askRemove() tea.Cmd {
 		cancel:   fmt.Sprintf("Cancelled. Stream %d unchanged.", id),
 		yes: func() tea.Cmd {
 			// Back on the list, on the row after the one removed.
+			msg := fmt.Sprintf("Removed stream %d", id)
 			if l := ex.top(); l != nil {
 				l.detail = false
+				if len(l.rows) == 1 {
+					msg += ". No streams left"
+				}
 			}
-			return ex.streamAction(func(ctx context.Context) error { return ex.d.RemoveStream(ctx, id) }, fmt.Sprintf("Removed stream %d", id))
+			return ex.streamAction(func(ctx context.Context) error { return ex.d.RemoveStream(ctx, id) }, msg)
 		},
 	})
 }
@@ -641,7 +671,7 @@ func (s *historySection) selectTab(i int) tea.Cmd {
 func (s *historySection) actions() []button {
 	if s.resume {
 		if s.panel.running {
-			return []button{{"Stop", "s", func() tea.Cmd { s.panel.stop(); return s.h.setFlash("Stopping…") }}}
+			return []button{{label: "Stop", key: "s", do: func() tea.Cmd { s.panel.stop(); return s.h.setFlash("Stopping…") }}}
 		}
 		if s.bs.detail {
 			return s.h.batchButtons(s.bs)
@@ -653,9 +683,9 @@ func (s *historySection) actions() []button {
 			failed = true
 		}
 		if failed {
-			b = append(b, button{"Retry failed files again", "", func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
+			b = append(b, button{label: "Retry failed files again", key: "", do: func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
 		}
-		return append(b, button{"Back to the job", "", func() tea.Cmd { s.resume = false; return nil }})
+		return append(b, button{label: "Back to the job", key: "", do: func() tea.Cmd { s.resume = false; return nil }})
 	}
 	return s.pane.actions()
 }
@@ -684,19 +714,59 @@ func (s *historySection) init() tea.Cmd {
 	return cmd
 }
 
+// startResume works out what resuming would send (its dry run), then
+// asks; nothing is sent before yes.
 func (s *historySection) startResume(id string, retry bool) tea.Cmd {
 	s.runArgs = []string{"jobs", "resume", id}
 	if retry {
 		s.runArgs = append(s.runArgs, "--retry-failed")
 	}
-	s.resume, s.retry = true, retry
-	s.bs = &batchState{jobID: id, selectable: true, inJobs: true}
-	return s.panel.start(runReq{args: s.runArgs, format: "jsonl", stream: true, spends: true})
+	s.retry = retry
+	return s.panel.start(runReq{args: append(slices.Clone(s.runArgs), "--dry-run"), format: "table", tag: "resume-plan"})
+}
+
+// askResume asks before resuming, with the plan.
+func (s *historySection) askResume(plan string) tea.Cmd {
+	id, retry := s.runArgs[2], s.retry
+	label := map[bool]string{true: "Retry failed files", false: "Resume"}[retry]
+	question := "Resume job " + id + "?"
+	if retry {
+		question = "Retry the failed files of job " + id + "?"
+	}
+	var notes []string
+	for _, l := range strings.Split(strings.TrimSpace(plan), "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.Contains(l, "Nothing was sent") && !strings.Contains(l, "--dry-run") {
+			notes = append(notes, l)
+		}
+	}
+	args := s.runArgs
+	return s.h.askFirst(&confirmState{
+		owner:    "recognitions",
+		question: question,
+		notes:    notes,
+		action:   label,
+		command:  displayCommand(args),
+		cancel:   "Cancelled. Nothing was sent.",
+		onCancel: func() { s.h.focusButton(label) },
+		yes: func() tea.Cmd {
+			s.resume = true
+			s.bs = &batchState{jobID: id, selectable: true, inJobs: true}
+			return s.panel.start(runReq{args: args, format: "jsonl", stream: true, spends: true, agreed: true})
+		},
+	})
 }
 
 func (s *historySection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.panel.handle(msg); mine {
-		if l, ok := msg.(runLineMsg); ok && l.pending == nil {
+		if done && s.panel.run != nil && s.panel.run.req.tag == "resume-plan" {
+			res := s.panel.res
+			s.panel.res = nil
+			if res.err != nil {
+				return s.h.setFlash(capFirst(res.err.Message))
+			}
+			return s.askResume(res.stdout + "\n" + res.stderr)
+		}
+		if l, ok := msg.(runLineMsg); ok && l.pending == nil && s.bs != nil {
 			s.bs.add(l.line)
 		}
 		if done && s.panel.res.err != nil && s.panel.res.err.Code == "declined" {
@@ -834,6 +904,8 @@ type streamsSection struct {
 	// recRunning is whether the recorder runs, from its last status
 	// ("" when not known).
 	recRunning string
+	// exportRun runs the export once the file check is in.
+	exportRun func() tea.Cmd
 }
 
 func newStreamsSection(h *home) section {
@@ -912,7 +984,7 @@ func (s *streamsSection) openPage(p int) tea.Cmd {
 			return s.getCallback()
 		}
 	case 2:
-		return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
+		return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}})
 	}
 	return nil
 }
@@ -1000,16 +1072,27 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			if !s.recPanel.res.ok() {
 				msg = "Could not " + s.recPanel.args[2] + " the recorder"
 			}
-			return tea.Batch(s.h.setFlash(msg), s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"}))
+			return tea.Batch(s.h.setFlash(msg), s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}}))
 		case "status":
 			s.recRunning = ""
 			if s.recPanel.res.ok() {
 				s.recRunning = "no"
-				if run, _ := recorderFacts(s.recPanel.res.stdout); strings.HasPrefix(run, "yes") {
+				if r := recorderInfo(s.recPanel.res.stdout); r.Running {
 					s.recRunning = "yes"
 				}
 			}
 		}
+		return nil
+	}
+	switch m := msg.(type) {
+	case exportCheckMsg:
+		return s.exportChecked(m)
+	case exportWrittenMsg:
+		if m.err != nil {
+			s.exportTo = ""
+			return s.h.setFlash("Could not write the export: " + m.err.Error())
+		}
+		s.exportTo = m.path
 		return nil
 	}
 	if mine, done := s.dataPanel.handle(msg); mine {
@@ -1076,18 +1159,10 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 				run := func() tea.Cmd {
 					return s.dataPanel.start(runReq{args: args, format: s.dataForm.value("format"), tag: "export"})
 				}
-				if path := s.exportPath(); fileExists(path) {
-					return s.h.askFirst(&confirmState{
-						owner:    "streams",
-						question: "Replace " + filepath.Base(path) + "?",
-						action:   "Replace " + filepath.Base(path),
-						notes:    []string{"The file exists in " + shortPath(absPath(filepath.Dir(path)), 60) + "; the export is written over it."},
-						command:  s.command(),
-						cancel:   "Cancelled. Nothing was written.",
-						yes:      run,
-					})
-				}
-				return run()
+				s.exportRun = run
+				path := s.exportPath()
+				// Whether the file is there is checked in the background.
+				return func() tea.Msg { return exportCheckMsg{path: path, exists: fileExists(path)} }
 			}
 			return s.dataPanel.start(runReq{args: args, format: "table"})
 		}
@@ -1139,6 +1214,12 @@ func (s *streamsSection) askReplace(old string) tea.Cmd {
 		notes:    []string{"Now: " + old, "New: " + url, "Or press n and choose another ID for a new stream."},
 		command:  displayCommand(args),
 		cancel:   "Cancelled. Stream " + id + " unchanged; choose another ID.",
+		onCancel: func() {
+			// Back in the ID field, to type another one.
+			s.add.focusName("id")
+			s.add.resume()
+			s.add.get("id").input.CursorEnd()
+		},
 		yes: func() tea.Cmd {
 			return s.addPanel.start(runReq{args: args, tag: "replace"})
 		},
@@ -1223,22 +1304,20 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// recorderFacts reads whether the recorder runs and where it saves from
-// audd streams recorder status.
-func recorderFacts(out string) (running, store string) {
-	for _, l := range strings.Split(out, "\n") {
-		k, v, ok := strings.Cut(l, ":")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(k) {
-		case "Running":
-			running = strings.TrimSpace(v)
-		case "Store":
-			store = strings.TrimSpace(v)
-		}
-	}
-	return running, store
+// recorderStatus is the JSON of audd streams recorder status.
+type recorderStatus struct {
+	Running   bool   `json:"running"`
+	PID       int    `json:"pid"`
+	Store     string `json:"store"`
+	Plays     int    `json:"plays"`
+	LastError string `json:"last_error"`
+}
+
+// recorderInfo reads audd streams recorder status (JSON).
+func recorderInfo(out string) recorderStatus {
+	var r recorderStatus
+	_ = json.Unmarshal([]byte(strings.TrimSpace(out)), &r)
+	return r
 }
 
 // dataPrimary is what Run does: "show plays", "run the report",
@@ -1312,17 +1391,51 @@ func (s *streamsSection) dataArgs() []string {
 
 // writeExport saves the export's output to the file named in the form
 // and says where.
+// writeExport writes the export in the background (exportWrittenMsg).
 func (s *streamsSection) writeExport() tea.Cmd {
-	path := s.exportPath()
-	if err := os.WriteFile(path, []byte(s.dataPanel.res.stdout), 0o644); err != nil {
-		s.exportTo = ""
-		return s.h.setFlash("Could not write the export: " + err.Error())
+	path, data := s.exportPath(), []byte(s.dataPanel.res.stdout)
+	return func() tea.Msg {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return exportWrittenMsg{err: err}
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+		return exportWrittenMsg{path: path}
 	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
+}
+
+// exportCheckMsg: whether the export's file is there already;
+// exportWrittenMsg: the export was written (or not).
+type (
+	exportCheckMsg struct {
+		path   string
+		exists bool
 	}
-	s.exportTo = path
-	return nil
+	exportWrittenMsg struct {
+		path string
+		err  error
+	}
+)
+
+// exportChecked asks before writing over a file, else exports.
+func (s *streamsSection) exportChecked(m exportCheckMsg) tea.Cmd {
+	run := s.exportRun
+	if run == nil || m.path != s.exportPath() {
+		return nil
+	}
+	if !m.exists {
+		return run()
+	}
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Replace " + filepath.Base(m.path) + "?",
+		action:   "Replace " + filepath.Base(m.path),
+		notes:    []string{"The file exists in " + shortPath(absPath(filepath.Dir(m.path)), 60) + "; the export is written over it."},
+		command:  s.command(),
+		cancel:   "Cancelled. Nothing was written.",
+		yes:      run,
+	})
 }
 
 // exportPath is where the export goes: the file name in the export
@@ -1424,19 +1537,25 @@ func (s *streamsSection) view(w, h int) string {
 		case s.recPanel.res != nil && s.recPanel.res.err != nil:
 			state = errorText(st, s.recPanel.res.err, w)
 		case s.recPanel.res != nil:
-			run, store := recorderFacts(s.recPanel.res.stdout)
-			if strings.HasPrefix(run, "yes") {
-				state = "The recorder is running"
-				if i := strings.Index(run, "pid "); i >= 0 {
-					state += " (process " + strings.TrimRight(run[i+4:], ")") + ")"
+			r := recorderInfo(s.recPanel.res.stdout)
+			if r.Running {
+				state = st.Bold.Render("Running")
+				if r.PID > 0 {
+					state += fmt.Sprintf(" (process %d)", r.PID)
 				}
 				state += ". Press enter to stop it."
 			} else {
-				state = "The recorder is stopped. Press enter to start it."
+				state = st.Bold.Render("Stopped") + ". Press enter to start it."
 			}
 			state = output.Wrap(state, w)
-			if store != "" {
-				state += "\n" + st.Dim.Render(output.Wrap("Results are saved in "+store, w))
+			if r.Plays > 0 {
+				state += "\n" + st.Dim.Render(output.Wrap(output.Plural(r.Plays, "play")+" recorded", w))
+			}
+			if r.Store != "" {
+				state += "\n" + st.Dim.Render(output.Wrap("Results are saved in "+r.Store, w))
+			}
+			if r.LastError != "" {
+				state += "\n" + st.Warn.Render(output.Wrap("Last error: "+r.LastError, w))
 			}
 		}
 		return bar + st.Bold.Render("Background recorder") + "\n" + intro + "\n\n" + state
@@ -1480,14 +1599,15 @@ func (s *streamsSection) actions() []button {
 		}
 		return s.pane.actions()
 	case 2:
-		refresh := button{"Refresh", "r", func() tea.Cmd {
-			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}, format: "table"})
+		refresh := button{label: "Refresh", key: "r", do: func() tea.Cmd {
+			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}})
 		}}
+
 		switch s.recRunning {
 		case "yes":
-			return []button{{"Stop", "", s.askStopRecorder}, refresh}
+			return []button{{label: "Stop", key: "", do: s.askStopRecorder}, refresh}
 		case "no":
-			return []button{{"Start", "", func() tea.Cmd {
+			return []button{{label: "Start", key: "", token: true, do: func() tea.Cmd {
 				return s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})
 			}}, refresh}
 		}
@@ -1496,14 +1616,14 @@ func (s *streamsSection) actions() []button {
 		if s.exportTo != "" && s.dataPanel.res != nil && !s.dataPanel.running {
 			path := s.exportTo
 			return []button{
-				{"Open folder", "o", func() tea.Cmd {
+				{label: "Open folder", key: "o", do: func() tea.Cmd {
 					dir := filepath.Dir(path)
 					if err := openURL(dir); err != nil {
 						return s.h.setFlash("Could not open the folder: " + err.Error())
 					}
 					return s.h.setFlash("Opened " + shortPath(dir, 60))
 				}},
-				{"Copy path", "c", func() tea.Cmd { return s.h.copy(path, "the path "+shortPath(path, 50)) }},
+				{label: "Copy path", key: "c", do: func() tea.Cmd { return s.h.copy(path, "the path "+shortPath(path, 50)) }},
 			}
 		}
 	}
@@ -1546,7 +1666,10 @@ func (s *streamsSection) keys() []keyHelp {
 	switch s.page {
 	case 0:
 		if s.adding {
-			return append(s.add.rowKeys("add"), keyHelp{"esc", "cancel"})
+			if s.add.capturing() {
+				return append(s.add.rowKeys("add"), keyHelp{"esc", "done"})
+			}
+			return append(s.add.rowKeys("add"), keyHelp{"esc", "close the form"})
 		}
 		return s.pane.keys()
 	case 1:
@@ -1817,4 +1940,23 @@ func validSince(v string) string {
 		return ""
 	}
 	return v + " is not a time span: use 24h, 7d, 30d, a date like 2026-10-01, or all"
+}
+
+// left: leaving Streams ends the undo of a stream's URL.
+func (s *streamsSection) left() { s.pane.undo = nil }
+
+// enterPresses: with no streams, enter adds one.
+func (s *nowPlayingSection) enterPresses() bool {
+	return s.err != nil && output.AsError(s.err).Code == "no_streams"
+}
+
+// addStream opens Streams with its Add a stream form.
+func (h *home) addStream() tea.Cmd {
+	cmd := h.jump("streams")
+	if s, ok := h.subs["streams"].(*streamsSection); ok {
+		s.page = 0
+		s.openAdd()
+		h.focus = focusContent
+	}
+	return cmd
 }

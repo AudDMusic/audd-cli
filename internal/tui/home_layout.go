@@ -296,7 +296,12 @@ func (h *home) commandLine() string {
 		return truncate(h.st.Dim.Render("$ "+c), h.w)
 	}
 	if c == "" {
-		return truncate(h.st.Dim.Render("ctrl+k runs any audd command"), h.w)
+		// Part of the first-run tip: once that is dismissed, it stays
+		// gone.
+		if h.tip {
+			return truncate(h.st.Dim.Render("ctrl+k runs any audd command"), h.w)
+		}
+		return ""
 	}
 	right := h.st.Dim.Render("y copy")
 	left := "$ " + c

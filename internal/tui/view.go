@@ -215,7 +215,27 @@ func agoAt(d time.Duration, now time.Time) string {
 	if t.YearDay() == n.YearDay() && t.Year() == n.Year() {
 		return "at " + t.Format("15:04")
 	}
-	return "on " + t.Format("Jan 02 15:04")
+	return "on " + t.Format("Jan 2 15:04")
+}
+
+// clockDay is a time of day, with the date when it is not today:
+// "17:32", "Oct 9 17:32".
+func clockDay(t, now time.Time) string {
+	t, n := t.In(localZone), now.In(localZone)
+	if t.YearDay() == n.YearDay() && t.Year() == n.Year() {
+		return t.Format("15:04")
+	}
+	return t.Format("Jan 2 15:04")
+}
+
+// playWhen is when a play was heard, labeled the same everywhere:
+// "ended 17:35" when the result came at the song's end, else
+// "started 17:32" (dated when not today).
+func playWhen(p Play, now time.Time) string {
+	if end, ok := p.Ended(); ok {
+		return "ended " + clockDay(end, now)
+	}
+	return "started " + clockDay(p.At, now)
 }
 
 // localZone is the zone clock times are shown in (tests use UTC).

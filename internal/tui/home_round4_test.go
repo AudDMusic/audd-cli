@@ -3,6 +3,7 @@ package tui
 import (
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -93,23 +94,38 @@ func TestSettingSavesWithUndo(t *testing.T) {
 	f.waitFor(t, "config unset format")
 }
 
-// A spending question starts on its action; the plan was just shown.
-func TestSpendingDialogStartsOnAction(t *testing.T) {
+// A spending question starts on Cancel: a double enter sends nothing;
+// y confirms.
+func TestSpendingDialogStartsOnCancel(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("recognize song.mp3 --dry-run", "Plan: 2 requests.\n", "", 0)
+	var sent atomic.Int32
 	f.on("recognize song.mp3 --format", func(args []string, io RunIO) int {
-		io.Ask("Recognize 2 files, using 2 requests?")
-		return 0
+		if io.Ask("Recognize 2 files, using 2 requests?") {
+			sent.Add(1)
+			return 0
+		}
+		io.Stderr.Write([]byte(`{"error":{"code":"declined","message":"cancelled"}}` + "\n"))
+		return 6
 	})
 	h := sized(newTestHome(t, f, homeOpts{start: "recognize"}), 100, 30)
 	drain(h, h.activate(), 0)
 	press(h, typeText("song.mp3")...)
 	press(h, key("enter"))
 	pump(h, func() bool { return h.ask != nil })
-	if h.ask == nil || h.ask.cur != 1 || !strings.Contains(h.View(), "[>Recognize 2 files<]") || strings.Contains(h.View(), "Confirm\n") {
-		t.Fatalf("the spending dialog:\n%s", h.View())
+	v := h.View()
+	if h.ask == nil || h.ask.cur != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Recognize 2 files ]") || !strings.Contains(footerText(v), "y confirms") {
+		t.Fatalf("the spending dialog:\n%s", v)
 	}
-	press(h, key("esc"))
+	press(h, key("enter"))
+	pump(h, func() bool { return h.ask == nil && recognizeOf(h).phase == "form" })
+	if sent.Load() != 0 {
+		t.Fatal("a double enter spent requests")
+	}
+	press(h, key("enter"))
+	pump(h, func() bool { return h.ask != nil })
+	press(h, key("y"))
+	pump(h, func() bool { return sent.Load() == 1 })
 }
 
 // Signed out, Recognize offers ways to get a token instead of running.
@@ -121,10 +137,10 @@ func TestRecognizeWithoutToken(t *testing.T) {
 	press(h, typeText("song.mp3")...)
 	press(h, key("enter"))
 	v := h.View()
-	if h.confirm == nil || len(f.commands()) != 0 || !strings.Contains(v, "[>Use the test token<]") || !strings.Contains(v, "[ Sign in ]") {
+	if h.confirm == nil || len(f.commands()) != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Use the test token ]") || !strings.Contains(v, "[ Sign in ]") {
 		t.Fatalf("no token:\n%s", v)
 	}
-	press(h, key("enter"))
+	press(h, key("right"), key("enter"))
 	f.waitFor(t, "recognize song.mp3 --dry-run")
 	if !h.testToken || !strings.Contains(lastArgs(f), "--token test") {
 		t.Fatalf("the test token: %s", lastArgs(f))
@@ -132,15 +148,15 @@ func TestRecognizeWithoutToken(t *testing.T) {
 }
 
 // Recognize opens typing in Input: every printable key goes in, digits
-// and [ ] : too; esc stops typing, and then digits jump. There is no
-// "selected but not typing" step in between.
+// and [ ] : too; esc stops typing and stays on the form (the value
+// stays), and then digits jump; a second esc goes back.
 func TestRecognizeOpensSelected(t *testing.T) {
 	h := navHome(t, homeOpts{})
 	press(h, key("1"))
 	s := recognizeOf(h)
 	foot := footerText(h.View())
 	if h.activeID() != "recognize" || !s.form.capturing() || s.form.current().name != "input" ||
-		!strings.Contains(foot, "type a path or URL") || !strings.Contains(foot, "esc then 1-7 for sections") {
+		!strings.Contains(foot, "type a path or URL") || !strings.Contains(foot, "esc done") {
 		t.Fatalf("opens typing in Input:\n%s", h.View())
 	}
 	press(h, typeText("take [2] 3:1.mp3")...)
@@ -153,12 +169,21 @@ func TestRecognizeOpensSelected(t *testing.T) {
 	}
 	press(h, typeText("a.mp3")...)
 	press(h, key("esc"))
-	if s.form.value("input") != "a.mp3" || h.focus == focusContent && s.form.capturing() {
-		t.Fatalf("esc stops typing and keeps the value: %q", s.form.value("input"))
+	if s.form.value("input") != "a.mp3" || h.focus != focusContent || s.form.capturing() || s.form.current().name != "input" {
+		t.Fatalf("esc stops typing, on the form, value kept: %q focus %v", s.form.value("input"), h.focus)
 	}
-	if strings.Contains(h.View(), "type to fill it in") || strings.Contains(h.View(), "enter to type") {
-		t.Fatalf("an in-between state:\n%s", h.View())
+	if foot := footerText(h.View()); !strings.Contains(foot, "enter type in File, URL, or folder") {
+		t.Fatalf("footer after esc: %q", foot)
 	}
+	press(h, key("enter"))
+	if !s.form.capturing() {
+		t.Fatal("enter types in the field again")
+	}
+	press(h, key("esc"), key("esc"))
+	if h.focus != focusSidebar {
+		t.Fatal("the second esc goes back")
+	}
+	press(h, key("right"), key("esc"))
 	press(h, key("3"))
 	if h.activeID() != "streams" {
 		t.Fatal("after esc a digit jumps")
@@ -183,7 +208,7 @@ func TestOtherPagesOpenNotTyping(t *testing.T) {
 // The Recorder's enter presses its button, which keeps the keys.
 func TestRecorderEnter(t *testing.T) {
 	f := &fakeRun{}
-	f.reply("streams recorder status", "Running:        no\n", "", 0)
+	f.reply("streams recorder status", `{"schema_version":1,"running":false,"store":"/data/streams-default.db"}`, "", 0)
 	f.reply("streams recorder start", "Started.\n", "", 0)
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 100, 30)
 	drain(h, h.activate(), 0)

@@ -269,6 +269,8 @@ type palette struct {
 	panel *cmdPanel
 	tree  *jsonTree
 	argv  []string
+	// bs: enterprise matches, a list to move through.
+	bs *batchState
 }
 
 func newPalette(h *home) *palette { return &palette{h: h, phase: "list", panel: newPanel(h)} }
@@ -473,8 +475,12 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		}
 		if done {
 			p.phase = "result"
-			p.tree = nil
+			p.tree, p.bs = nil, nil
 			if p.panel.res.err == nil {
+				if ms := enterpriseMatches(parseDoc(p.panel.res.stdout)); len(ms) > 0 && p.recognition() != nil {
+					p.bs = &batchState{selectable: true, results: ms, title: output.Plural(len(ms), "match")}
+					return nil
+				}
 				if _, ok := p.rendered(p.panel.res.stdout, 80); !ok && strings.HasPrefix(strings.TrimSpace(p.panel.res.stdout), "{") {
 					p.tree = newJSONTree(p.panel.res.stdout)
 				}
@@ -525,6 +531,25 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return p.panel.key(k, ht)
+	}
+	if p.bs != nil {
+		switch k.String() {
+		case "up", "down":
+			if !p.bs.detail {
+				p.bs.move(map[string]int{"up": -1, "down": 1}[k.String()])
+			}
+			return nil
+		case "enter", "right":
+			p.bs.detail = p.bs.selected() != nil
+			return nil
+		case "o", "c":
+			for _, b := range p.h.batchButtons(&batchState{detail: true, results: []map[string]any{p.bs.selected()}}) {
+				if b.key == k.String() {
+					return b.do()
+				}
+			}
+			return p.h.setFlash("No link for this match")
+		}
 	}
 	if p.tree != nil && p.tree.key(k.String(), ht) {
 		return nil
@@ -678,6 +703,9 @@ func (p *palette) view(w, h int) string {
 		return b.String()
 	}
 	head := st.Dim.Render(truncate("$ "+displayCommand(p.argv), w)) + "\n\n"
+	if p.bs != nil && !p.panel.running {
+		return head + p.h.batchPage(p.bs, w, h-2)
+	}
 	if p.tree != nil && !p.panel.running {
 		return head + p.tree.view(w, h-2, st)
 	}
@@ -693,12 +721,18 @@ func (p *palette) keys() []keyHelp {
 		}
 		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, esc}
 	case "form":
-		return p.cf.form.rowKeys("run")
+		return append(p.cf.form.rowKeys("run"), keyHelp{"esc", "back to the list"})
 	}
 	if p.panel.running {
 		return []keyHelp{{"↑/↓", "scroll"}, {"s", "stop"}}
 	}
 	k := []keyHelp{{"↑/↓", "move"}, {"r", "run again"}, {"e", "edit"}}
+	if p.bs != nil {
+		k = []keyHelp{{"↑/↓", "move"}, {"enter", "details"}, {"o", "open the song link"}, {"c", "copy the song link"}, {"r", "run again"}}
+		if p.bs.detail {
+			k = []keyHelp{{"o", "open the song link"}, {"c", "copy the song link"}, {"esc", "back to the list"}}
+		}
+	}
 	if p.tree != nil {
 		k = append([]keyHelp{{"enter", "fold"}}, k...)
 	}
@@ -746,6 +780,10 @@ func (p *palette) capturing() bool {
 func (p *palette) back() bool {
 	switch p.phase {
 	case "result":
+		if p.bs != nil && p.bs.detail {
+			p.bs.detail = false
+			return true
+		}
 		if p.panel.back() {
 			return true
 		}
@@ -755,13 +793,16 @@ func (p *palette) back() bool {
 		p.phase = "form"
 		return true
 	case "form":
-		if !p.cf.form.leaveField() {
-			p.phase = "list"
-		}
+		// Back to the whole list (what was typed stays in the form):
+		// one more esc closes the palette.
+		p.phase = "list"
+		p.picker.filter.SetValue("")
+		p.picker.cursor = 0
 		return true
 	}
 	if p.picker.filter.Value() != "" {
 		p.picker.filter.SetValue("")
+		p.picker.cursor = 0
 		return true
 	}
 	return false

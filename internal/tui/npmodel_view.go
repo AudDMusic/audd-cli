@@ -287,12 +287,16 @@ func (m *npModel) playLines(plays []Play, max, w int, full bool) string {
 		return ""
 	}
 	var lines []string
-	for i, p := range plays {
-		if i >= max {
-			break
-		}
-		t := p.At.In(localZone).Format("15:04")
-		line := m.st.Dim.Render(t) + "  " + songLine(p.ResultView)
+	if len(plays) > max {
+		plays = plays[:max]
+	}
+	whenW := 0
+	for _, p := range plays {
+		whenW = mathMax(whenW, len([]rune(playWhen(p, m.now()))))
+	}
+	for _, p := range plays {
+		t := padRight(playWhen(p, m.now()), whenW+2)
+		line := m.st.Dim.Render(t) + songLine(p.ResultView)
 		if full {
 			if meta := metaLine(p.ResultView); meta != "" {
 				line += m.st.Dim.Render("  " + meta)
@@ -493,4 +497,11 @@ func plural(n int, what string) string {
 		return fmt.Sprintf("%d %s", n, what)
 	}
 	return fmt.Sprintf("%d %ss", n, what)
+}
+
+func mathMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -249,7 +249,7 @@ func newExplorerData(a *app.App) (tui.ExplorerData, error) {
 		}
 		out := make([]tui.JobRow, 0, len(list))
 		for _, j := range list {
-			out = append(out, tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Status: j.Status})
+			out = append(out, tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Pending: j.Pending, Inputs: j.Inputs, Status: j.Status})
 		}
 		return out, nil
 	}

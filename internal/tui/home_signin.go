@@ -75,10 +75,12 @@ func (s *signinSection) choiceList() []struct{ title, help, step string } {
 // token ("" when it does).
 func suspiciousToken(v string) string {
 	switch {
-	case strings.EqualFold(v, "your-api-token"), strings.EqualFold(v, "your-token"), strings.Contains(v, "<"):
-		return "This looks like the example text, not a token."
-	case strings.ContainsAny(v, " \t") || len(v) < 16:
-		return "This does not look like an API token (tokens are one word of letters and digits)."
+	case strings.EqualFold(v, "your-api-token"):
+		return "This is the example text from the docs, not your token."
+	case strings.ContainsAny(v, " \t"):
+		return "This has spaces; an API token is one word."
+	case len(v) < 10:
+		return "This is shorter than an API token."
 	}
 	return ""
 }

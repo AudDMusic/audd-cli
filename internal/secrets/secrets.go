@@ -326,3 +326,20 @@ func (m *Memory) Delete(profile, key string) error {
 	delete(m.m, user(profile, key))
 	return nil
 }
+
+// Where says where s keeps secrets, in words: "the system credential
+// store", or the credentials file when the store uses it.
+func Where(s Store) string {
+	switch v := s.(type) {
+	case *fallback:
+		if v.useKeyring() {
+			return "the system credential store"
+		}
+		return v.file.path
+	case *File:
+		return v.path
+	case *Memory:
+		return "memory (for this session only)"
+	}
+	return "the credential store"
+}

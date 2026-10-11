@@ -9,11 +9,15 @@ import (
 	"testing"
 )
 
+// testDir is the test's package folder: the working directory when the
+// test binary starts, before any test changes it.
+var testDir, _ = os.Getwd()
+
 // Golden compares got with testdata/<name>.golden next to the test.
 // Run tests with AUDD_UPDATE_GOLDEN=1 to rewrite the files.
 func Golden(t testing.TB, name string, got []byte) {
 	t.Helper()
-	path := filepath.Join("testdata", name+".golden")
+	path := filepath.Join(testDir, "testdata", name+".golden")
 	if os.Getenv("AUDD_UPDATE_GOLDEN") != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

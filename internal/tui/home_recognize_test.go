@@ -178,14 +178,16 @@ func TestFileBrowserPicks(t *testing.T) {
 	os.Mkdir(filepath.Join(dir, "sub"), 0o755)
 	os.WriteFile(filepath.Join(dir, "sub", "x.mp3"), nil, 0o644)
 	os.WriteFile(filepath.Join(dir, "notes.txt"), nil, 0o644)
-	b := newFileBrowser(dir)
+	b, cmd := newFileBrowser(dir)
+	b.apply(cmd().(fsListMsg))
 	if len(b.entries) != 2 || b.entries[1].name != "sub" {
 		t.Fatalf("entries: %+v", b.entries)
 	}
 	b.key("down", 10)
-	b.key("enter", 10)
+	_, _, cmd = b.key("enter", 10)
+	b.apply(cmd().(fsListMsg))
 	b.key("down", 10)
-	p, done := b.key("enter", 10)
+	p, done, _ := b.key("enter", 10)
 	if !done || !strings.HasSuffix(p, filepath.Join("sub", "x.mp3")) {
 		t.Fatalf("picked %q %v", p, done)
 	}

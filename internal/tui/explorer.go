@@ -465,8 +465,8 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 			return usageMsg{u: u, err: err}
 		}
 	}
-	if l == nil {
-		return nil
+	if l == nil || l.kind == "matches" {
+		return nil // made from its parent's row, nothing to load
 	}
 	kind, arg, embedded := l.kind, l.arg, m.embedded
 	return func() tea.Msg {
@@ -518,7 +518,7 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 			}
 			id, _ := strconv.Atoi(arg)
 			plays, err := d.Feed.Plays(ctx, id, historyLimit)
-			msg.rows, msg.err = playRows(plays), err
+			msg.rows, msg.err = playRows(plays, now()), err
 		}
 		return msg
 	}
@@ -542,6 +542,8 @@ func (m *explorer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case artMsg:
 		m.arts.handle(msg)
 		return m, nil
+	case exportDoneMsg:
+		return m, m.setFlash(msg.text)
 	case rowsMsg:
 		if l := m.find(msg.tab, msg.kind, msg.arg); l != nil {
 			if msg.err != nil {

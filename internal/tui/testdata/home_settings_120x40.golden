@@ -11,7 +11,7 @@ AudD  ·  profile default
                  │   Start the recorder automatically  on  (default)
                  │     streams.background_recorder · start the background stream recorder automatically
                  │   API token                         0123…cdef  (saved token)
-                 │     token · API token, kept in the system credential store
+                 │     token · API token, kept in memory (for this session only)
                  │ 
                  │ Settings apply to profile default and are saved in config-dir/config.toml. Environment variables
                  │ (env) win over the file.

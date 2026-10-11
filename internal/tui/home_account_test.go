@@ -43,7 +43,7 @@ func TestAccountBillingLink(t *testing.T) {
 		t.Fatalf("link:\n%s\nopened %v", v, opened)
 	}
 	h = newTestHome(t, f, homeOpts{start: "account", loggedIn: true})
-	drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "$900/mo", key("down"), key("down"), key("enter"), "checkout.stripe.example", key("enter"), "Opened the payment page")
+	drive(t, h, 120, 40, "Paid until", key("]"), key("]"), "$900/mo", key("down"), key("down"), key("enter"), "checkout.stripe.example", key("enter"), "Opened in your browser")
 	if len(opened) != 1 || opened[0] != "https://checkout.stripe.example/c/pay_123" {
 		t.Fatalf("enter opens the link: %v", opened)
 	}

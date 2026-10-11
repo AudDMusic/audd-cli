@@ -278,14 +278,16 @@ func TestExplorerExport(t *testing.T) {
 	m := explorerModel(t, "recent", &fakeStreamsAPI{})
 	m.Update(m.load(tabRecent, m.top())())
 	m.key(key("e"))
-	m.key(key("c"))
+	_, cmd := m.key(key("c"))
+	runAll(cmd)
 	m.key(key("e"))
-	m.key(key("j"))
+	_, cmd = m.key(key("j"))
+	runAll(cmd)
 	csvB, err := os.ReadFile(filepath.Join(dir, "audd-recent-20261008-120000.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(csvB), "When,Song,Album,Source\nOct 08 11:00,Imagine Dragons — Warriors,Warriors,warriors.mp3\n") {
+	if !strings.HasPrefix(string(csvB), "When,Song,Album,Source\nOct 8 11:00,Imagine Dragons — Warriors,Warriors,warriors.mp3\n") {
 		t.Fatalf("csv:\n%s", csvB)
 	}
 	jsonB, err := os.ReadFile(filepath.Join(dir, "audd-recent-20261008-120000.json"))
@@ -379,7 +381,8 @@ func TestExplorerUsageCSVExport(t *testing.T) {
 	m := explorerModel(t, "usage", &fakeStreamsAPI{})
 	m.Update(m.load(tabUsage, nil)())
 	m.key(key("e"))
-	m.key(key("c"))
+	_, cmd := m.key(key("c"))
+	runAll(cmd)
 	b, err := os.ReadFile(filepath.Join(dir, "audd-usage-20261008-120000.csv"))
 	if err != nil {
 		t.Fatal(err)
@@ -425,5 +428,18 @@ func TestExplorerResumeUsesTheCommandContext(t *testing.T) {
 	cancel()
 	if got == nil || got.Err() == nil {
 		t.Fatal("the resumed job does not see Ctrl-C")
+	}
+}
+
+// runAll runs a command and the commands it batches (an export writes
+// its file in one), dropping the messages.
+func runAll(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if b, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range b {
+			runAll(c)
+		}
 	}
 }

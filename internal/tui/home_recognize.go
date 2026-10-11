@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -44,12 +45,110 @@ type recognizeSection struct {
 	dscroll scrollView // the details of a single result
 	runArgs []string
 	m       micState
+	cnt     fileCount
+	// afterCount runs ("run" or "plan") once the count is in.
+	afterCount string
+	// rootOK is a whole disk the user agreed to scan.
+	rootOK string
+}
+
+// fileCount is the count of the files of the input, made in the
+// background a moment after the last key.
+type fileCount struct {
+	of     string // the input it is for
+	c      media.Count
+	done   bool
+	seq    int
+	cancel context.CancelFunc
+}
+
+// countDueMsg: the input stayed the same for a moment; countMsg: the
+// count is in.
+type countDueMsg struct{ seq int }
+type countMsg struct {
+	seq int
+	c   media.Count
+}
+
+// countDelay is how long the input must stay the same before counting.
+var countDelay = 250 * time.Millisecond
+
+// watchInput starts counting again when the input changed: after
+// countDelay, cancelling a count still running.
+func (s *recognizeSection) watchInput(now bool) tea.Cmd {
+	in := s.form.value("input")
+	if in == s.cnt.of && (s.cnt.done || s.cnt.cancel != nil || !now) {
+		return nil
+	}
+	if s.cnt.cancel != nil {
+		s.cnt.cancel()
+		s.cnt.cancel = nil
+	}
+	s.cnt.of, s.cnt.done, s.cnt.c = in, false, media.Count{}
+	s.cnt.seq++
+	if in == "" || strings.Contains(in, "://") || in == "-" {
+		s.cnt.done = true
+		return nil
+	}
+	seq := s.cnt.seq
+	if now {
+		return s.countNow(seq)
+	}
+	return tea.Tick(countDelay, func(time.Time) tea.Msg { return countDueMsg{seq} })
+}
+
+// countNow counts in the background, stopping at max(1000, Max files+1)
+// files or after 200ms.
+func (s *recognizeSection) countNow(seq int) tea.Cmd {
+	ctx, cancel := context.WithCancel(s.h.ctx)
+	s.cnt.cancel = cancel
+	in := s.cnt.of
+	limit := 1000
+	if m, err := strconv.Atoi(s.form.value("max-files")); err == nil {
+		limit = max(limit, m+1)
+	}
+	return func() tea.Msg {
+		c := media.CountInput(ctx, in, limit, 200*time.Millisecond)
+		return countMsg{seq: seq, c: c}
+	}
+}
+
+// inputNote says what the input holds, once counted.
+func (s *recognizeSection) inputNote() string {
+	in := s.form.value("input")
+	switch {
+	case in == "" || strings.Contains(in, "://"):
+		return ""
+	case !s.counted():
+		return "Counting files…"
+	case s.cnt.c.Err != nil:
+		return ""
+	case s.cnt.c.Root:
+		return in + " is a whole disk: audd asks before looking through it."
+	case s.cnt.c.Batch:
+		return "Found " + s.countWords() + " to recognize."
+	}
+	return ""
+}
+
+// counted reports whether the count is in for the current input.
+func (s *recognizeSection) counted() bool {
+	return s.cnt.done && s.cnt.of == s.form.value("input")
+}
+
+// countWords is the count as shown: "3 files", "1000+ files".
+func (s *recognizeSection) countWords() string {
+	n := s.cnt.c.Files
+	if s.cnt.c.More {
+		return fmt.Sprintf("%d+ files", n)
+	}
+	return output.Plural(n, "file")
 }
 
 func newRecognizeSection(h *home) section {
 	s := &recognizeSection{h: h, panel: newPanel(h), phase: "form"}
 	src := enumField("source", "Source", "←/→ switch between a file and the microphone", []string{sourceFile, sourceMic})
-	in := textField("input", "Input", "A file, URL, folder, or glob; enter recognizes it. ctrl+o picks a file.")
+	in := textField("input", "File, URL, or folder", "A file, a URL, a folder, or a glob such as *.mp3")
 	in.required = true
 	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
 	in.typeHint = "a path or URL"
@@ -95,7 +194,7 @@ func newRecognizeSection(h *home) section {
 	s.form.get("listen").quiet = true // the page says why, under the form
 	s.form.get("listen").disabled = func() string {
 		if t := s.m.tools; t != nil && t.FFmpeg == "" && t.Sox == "" {
-			return "Listening needs ffmpeg or sox: install one (see below), then come back"
+			return "Listening needs ffmpeg or sox: how to install it is under the form"
 		}
 		return ""
 	}
@@ -299,7 +398,7 @@ func (s *recognizeSection) keys() []keyHelp {
 	case s.phase == "result" && s.details:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "back to the result"}}
 	case s.phase == "result":
-		if res := s.panel.res; res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+		if res := s.panel.res; res != nil && res.err != nil && res.err.Code != "no_token" && strings.HasPrefix(res.err.Hint, "audd ") {
 			return []keyHelp{{"enter", "open " + res.err.Hint}, {"esc", "back to the form"}}
 		}
 		if s.rec.view != nil {
@@ -312,7 +411,7 @@ func (s *recognizeSection) keys() []keyHelp {
 	}
 	k := s.form.rowKeys(s.primary())
 	if c := s.form.current(); c != nil && c.name == "input" {
-		k = append(k, keyHelp{"esc", "then 1-7 for sections"}, keyHelp{"ctrl+o", "pick a file"})
+		k = append(k, keyHelp{"esc", "done"}, keyHelp{"ctrl+o", "pick a file"})
 	}
 	return k
 }
@@ -332,11 +431,15 @@ func (s *recognizeSection) primary() string {
 		}
 		return "show what is missing"
 	}
-	n := s.batchCount()
-	if n == 0 {
-		return "recognize"
+	switch {
+	case !s.counted():
+		return "recognize (counting files…)"
+	case s.cnt.c.Root:
+		return "recognize the whole disk"
+	case s.isBatch():
+		return "recognize " + s.countWords()
 	}
-	return "recognize " + output.Plural(n, "file")
+	return "recognize"
 }
 
 // actions are the result's buttons, and Stop while it runs.
@@ -346,7 +449,7 @@ func (s *recognizeSection) actions() []button {
 	}
 	switch s.phase {
 	case "running":
-		return []button{{"Stop", "s", func() tea.Cmd {
+		return []button{{label: "Stop", key: "s", do: func() tea.Cmd {
 			s.panel.stop()
 			return s.h.setFlash("Stopping…")
 		}}}
@@ -357,24 +460,25 @@ func (s *recognizeSection) actions() []button {
 	link := s.rec.link
 	var b []button
 	switch {
+	case s.panel.res != nil && s.panel.res.err != nil && s.panel.res.err.Code == "no_token":
+		return s.h.tokenButtons(func() tea.Cmd { s.phase = "form"; return s.startPlan(true) })
 	case s.panel.res != nil && s.panel.res.err != nil:
 		return nil
-	case s.bs != nil && !s.bs.detail:
-		return nil
 	case s.bs != nil:
+		// On the list too: the buttons act on the selected row.
 		link = batchLink(s.bs.selected())
 	case s.rec.view != nil && !s.details:
-		b = append(b, button{"Details", "", func() tea.Cmd { s.details, s.dscroll.off = true, 0; return nil }})
+		b = append(b, button{label: "Details", key: "", do: func() tea.Cmd { s.details, s.dscroll.off = true, 0; return nil }})
 	case s.mic() && s.rec.view == nil:
-		b = append(b, button{"Listen again", "", s.startListen})
+		b = append(b, button{label: "Listen again", key: "", do: s.startListen})
 	}
 	if link != "" {
 		b = append(b,
-			button{"Open the song link", "o", func() tea.Cmd { return s.openLink(link) }},
-			button{"Copy the song link", "c", func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
+			button{label: "Open the song link", key: "o", do: func() tea.Cmd { return s.openLink(link) }},
+			button{label: "Copy the song link", key: "c", do: func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
 	}
 	if s.mic() && s.rec.view != nil {
-		b = append(b, button{"Listen again", "", s.startListen})
+		b = append(b, button{label: "Listen again", key: "", do: s.startListen})
 	}
 	return b
 }
@@ -394,10 +498,7 @@ func (s *recognizeSection) downExits() bool {
 }
 
 func (s *recognizeSection) openLink(link string) tea.Cmd {
-	if err := openURL(link); err != nil {
-		return s.h.setFlash("Could not open the browser: " + err.Error())
-	}
-	return s.h.setFlash("Opened in your browser: " + link)
+	return s.h.openLink(link)
 }
 
 // validLimit accepts a whole number or the typed word none.
@@ -416,6 +517,14 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 	if f.value("input") == "" {
 		return "input", f.get("input").need
 	}
+	if s.counted() && s.cnt.c.Err != nil {
+		e := output.AsError(s.cnt.c.Err)
+		msg := capFirst(e.Message)
+		if e.Hint != "" {
+			msg += ": " + e.Hint
+		}
+		return "input", msg
+	}
 	if f.get("enterprise").on {
 		v := f.value("limit")
 		if v == "" && forRun {
@@ -431,73 +540,97 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 	if forRun && s.isBatch() && f.value("max-files") == "" {
 		return "max-files", f.get("max-files").need
 	}
-	if n := s.batchCount(); forRun && n > 0 {
-		// audd recognize refuses more files than Max files allows.
-		if m, err := strconv.Atoi(f.value("max-files")); err == nil && m < n {
-			return "max-files", fmt.Sprintf("The input has %s, more than Max files %d: set it to %d, or type none", output.Plural(n, "file"), m, n)
-		}
-	}
 	return "", ""
 }
 
-// isBatch reports whether the input is a batch (folder, glob), the way
-// audd recognize decides.
-func (s *recognizeSection) isBatch() bool { return s.batchCount() > 0 }
-
-// batchCount is how many files a batch input holds (0 when it is one
-// file or a URL).
-func (s *recognizeSection) batchCount() int {
-	in := s.form.value("input")
-	if in == "" || strings.Contains(in, "://") {
-		return 0
+// errorField is the form field an error of audd recognize is about.
+func errorField(text string) string {
+	t := strings.ToLower(text)
+	switch {
+	case strings.Contains(t, "--max-files"):
+		return "max-files"
+	case strings.Contains(t, "--limit"):
+		return "limit"
+	case strings.Contains(t, "--at"):
+		return "at"
+	case strings.Contains(t, "no such file"), strings.Contains(t, "no audio or video files"), strings.Contains(t, "cannot read folder"), strings.Contains(t, "check the path"), strings.Contains(t, "url"):
+		return "input"
 	}
-	inputs, batch, err := media.ExpandInputs([]string{in}, strings.NewReader(""))
-	for _, in := range inputs {
-		in.Cleanup()
-	}
-	if err != nil || !batch {
-		return 0
-	}
-	return len(inputs)
+	return ""
 }
+
+// tooMany is the file count when it is more than Max files allows
+// (audd recognize refuses that), else 0.
+func (s *recognizeSection) tooMany() int {
+	if !s.isBatch() {
+		return 0
+	}
+	m, err := strconv.Atoi(s.form.value("max-files"))
+	if err != nil || m >= s.cnt.c.Files && !s.cnt.c.More {
+		return 0
+	}
+	return s.cnt.c.Files
+}
+
+// isBatch reports whether the input is a batch (folder, glob), the way
+// audd recognize decides, once the count is in.
+func (s *recognizeSection) isBatch() bool { return s.counted() && s.cnt.c.Batch }
 
 // startPlan runs the dry run; with run set the recognition follows.
 // needToken asks how to get an API token, when there is none, before
 // anything runs; then goes on with next.
 func (s *recognizeSection) needToken(next func() tea.Cmd) tea.Cmd {
-	return s.h.askFirst(&confirmState{
-		owner:    "recognize",
-		question: "You need an API token",
-		notes:    []string{"AudD recognizes music with your API token. Try the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."},
-		choices:  []string{"Use the test token", "Paste a token…", "Sign in"},
-		cur:      1,
-		topic:    "API token?",
-		cancel:   "Cancelled. Nothing was sent.",
-		pick: func(i int) tea.Cmd {
-			switch i {
-			case 0:
-				cmd := s.h.signedIn(true)
-				return tea.Batch(cmd, s.h.setFlash("Using the test token: 10 requests a day"), next())
-			case 1:
-				cmd := s.h.jump("signin")
-				if si, ok := s.h.subs["signin"].(*signinSection); ok {
-					si.step = "paste"
-					si.paste.focusName("token")
-					si.paste.resume()
-				}
-				return cmd
-			}
-			cmd := s.h.jump("signin")
-			if si, ok := s.h.subs["signin"].(*signinSection); ok {
-				si.choice = 0
-				return tea.Batch(cmd, s.h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
-			}
-			return cmd
-		},
-	})
+	return s.h.askToken("recognize", "AudD recognizes music with your API token.", next)
 }
 
 func (s *recognizeSection) startPlan(run bool) tea.Cmd {
+	if !s.mic() && s.form.value("input") != "" && !s.counted() {
+		// The count says whether the input is there and is a batch: wait
+		// for it, then go on.
+		s.afterCount = map[bool]string{true: "run", false: "plan"}[run]
+		return tea.Batch(s.watchInput(true), s.h.setFlash("Counting files…"))
+	}
+	s.afterCount = ""
+	if !s.mic() {
+		if name, e := s.check(false); e != "" && name == "input" {
+			s.form.fail(name, e)
+			return nil
+		}
+	}
+	if in := s.form.value("input"); !s.mic() && s.cnt.c.Root && s.rootOK != in {
+		return s.h.askFirst(&confirmState{
+			owner:    "recognize",
+			question: "Recognize every file on the whole disk (" + in + ")?",
+			notes:    []string{"audd looks through every folder on the disk; that can take long and find many files. Max files still limits how many are sent."},
+			action:   "Scan the whole disk",
+			cancel:   "Cancelled. Nothing was sent.",
+			onCancel: func() { s.form.focusName("input"); s.form.resume() },
+			yes: func() tea.Cmd {
+				s.rootOK = in
+				return s.startPlan(run)
+			},
+		})
+	}
+	if n := s.tooMany(); n > 0 && run {
+		m := s.form.value("max-files")
+		want := strconv.Itoa(n)
+		if s.cnt.c.More {
+			want = "none"
+		}
+		return s.h.askFirst(&confirmState{
+			owner:    "recognize",
+			question: fmt.Sprintf("The input has %s, more than Max files %s", s.countWords(), m),
+			notes:    []string{"audd recognize stops before sending anything when a batch has more files than Max files. Set Max files to " + want + " to recognize all of them, or Cancel to change it yourself."},
+			action:   "Set Max files to " + want,
+			topic:    "More files than Max files",
+			cancel:   "Cancelled. Nothing was sent.",
+			onCancel: func() { s.form.focusName("max-files"); s.form.resume() },
+			yes: func() tea.Cmd {
+				s.form.get("max-files").setValue(want)
+				return s.startPlan(run)
+			},
+		})
+	}
 	if s.h.signedOut && run {
 		if name, e := s.check(true); e != "" {
 			s.form.fail(name, e)
@@ -532,6 +665,29 @@ func (s *recognizeSection) startRun() tea.Cmd {
 
 func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
+	case countDueMsg:
+		if m.seq == s.cnt.seq && !s.cnt.done && s.cnt.cancel == nil {
+			return s.countNow(m.seq)
+		}
+		return nil
+	case countMsg:
+		if m.seq != s.cnt.seq {
+			return nil
+		}
+		s.cnt.done, s.cnt.c, s.cnt.cancel = true, m.c, nil
+		s.sync()
+		switch s.afterCount {
+		case "run":
+			return s.startPlan(true)
+		case "plan":
+			return s.startPlan(false)
+		}
+		return nil
+	case fsListMsg:
+		if s.browser != nil {
+			s.browser.apply(m)
+		}
+		return nil
 	case listenSetupMsg:
 		s.setupDone(m)
 		return nil
@@ -557,14 +713,17 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 	ks := k.String()
 	if s.browser != nil {
 		_, ch := s.h.contentSize()
-		if p, done := s.browser.key(ks, ch); done {
+		p, done, cmd := s.browser.key(ks, ch)
+		if done {
 			s.browser = nil
 			if p != "" {
 				s.form.get("input").setValue(p)
 				s.form.focusName("input")
+				s.form.resume()
+				return s.watchInput(false)
 			}
 		}
-		return nil
+		return cmd
 	}
 	switch s.phase {
 	case "running":
@@ -573,8 +732,9 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		return s.resultKey(ks)
 	}
 	if ks == "ctrl+o" && !s.mic() {
-		s.browser = newFileBrowser(s.form.value("input"))
-		return nil
+		b, cmd := newFileBrowser(s.form.value("input"))
+		s.browser = b
+		return cmd
 	}
 	ent := s.form.get("enterprise").on
 	act, cmd := s.form.update(k)
@@ -596,7 +756,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 	case "listen":
 		return s.startListen()
 	}
-	return tea.Batch(cmd, s.findDevices())
+	return tea.Batch(cmd, s.findDevices(), s.watchInput(false))
 }
 
 // finished handles the end of the plan or of the recognition.
@@ -604,11 +764,17 @@ func (s *recognizeSection) finished() tea.Cmd {
 	res := *s.panel.res
 	if s.panel.run.req.tag == "plan" {
 		if res.err != nil {
-			s.form.err = res.err.Message
+			msg := capFirst(res.err.Message)
 			if res.err.Hint != "" {
-				s.form.err += "\nTry: " + res.err.Hint
+				msg += "\nTry: " + res.err.Hint
 			}
 			s.phase = "form"
+			if name := errorField(res.err.Message + " " + res.err.Hint); name != "" && s.form.get(name) != nil && !s.form.get(name).hidden {
+				// Back in the field the error is about, typing.
+				s.form.fail(name, msg)
+				return nil
+			}
+			s.form.err = msg
 			return nil
 		}
 		s.plan = strings.TrimSpace(res.stdout)
@@ -637,7 +803,7 @@ func (s *recognizeSection) finished() tea.Cmd {
 	}
 	doc := parseDoc(res.stdout)
 	s.rec = parseRecognition(doc)
-	if ms := enterpriseMatches(doc); len(ms) > 1 {
+	if ms := enterpriseMatches(doc); len(ms) > 0 {
 		// Several matches in one file: a list, like a batch.
 		s.bs = &batchState{selectable: true, results: ms, title: output.Plural(len(ms), "match") + " in " + fileName(s.form.value("input"))}
 		return nil
@@ -723,8 +889,16 @@ func (s *recognizeSection) view(w, h int) string {
 				b.WriteString("\n\n" + st.Dim.Render("Press enter to listen again."))
 			}
 		}
-		if len(res.notes) > 0 {
-			b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(strings.Join(res.notes, "\n"), w)))
+		// The notes of the run, without its plan (the plan was for
+		// before it ran).
+		var notes []string
+		for _, n := range res.notes {
+			if !strings.HasPrefix(n, "Plan:") {
+				notes = append(notes, n)
+			}
+		}
+		if len(notes) > 0 {
+			b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(strings.Join(notes, "\n"), w)))
 		}
 		return b.String()
 	}
@@ -736,6 +910,9 @@ func (s *recognizeSection) view(w, h int) string {
 	}
 	b.WriteString(st.Bold.Render("Recognize music in a file, URL, or folder") + "\n\n")
 	b.WriteString(s.form.view(w, st, s.h.color))
+	if note := s.inputNote(); note != "" {
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(note, w)))
+	}
 	if s.panel.running && s.panel.run != nil && s.panel.run.req.tag == "plan" {
 		b.WriteString("\n\n" + st.Dim.Render("Working out the plan…"))
 	} else if s.plan != "" && s.planFor == displayCommand(s.args(true)) {
@@ -780,7 +957,7 @@ func (s *recognizeSection) resultKey(ks string) tea.Cmd {
 		}
 		return nil
 	case "enter", "right":
-		if res := s.panel.res; ks == "enter" && res != nil && res.err != nil && strings.HasPrefix(res.err.Hint, "audd ") {
+		if res := s.panel.res; ks == "enter" && res != nil && res.err != nil && res.err.Code != "no_token" && strings.HasPrefix(res.err.Hint, "audd ") {
 			return s.h.openPaletteLine(res.err.Hint)
 		}
 		switch {

@@ -173,7 +173,7 @@ func TestDialogButtons(t *testing.T) {
 	}
 	press(h, key("d"))
 	v := h.View()
-	if h.confirm == nil || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Unset token ]") || !strings.Contains(crumbText(v), "Settings › Unset token?") {
+	if h.confirm == nil || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Unset token ]") || !strings.Contains(crumbText(v), "Settings › Unset token") {
 		t.Fatalf("the dialog:\n%s", v)
 	}
 	press(h, key("enter"))

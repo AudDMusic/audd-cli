@@ -12,6 +12,7 @@ import (
 
 	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
+	"github.com/AudDMusic/audd-cli/internal/secrets"
 )
 
 // settingRow is one setting as the Settings section shows it.
@@ -37,8 +38,8 @@ type settingsSection struct {
 	undo *settingUndo
 	// fresh: nothing typed in the editor yet.
 	fresh bool
-	// typedTok is the token last sent to be saved.
-	typedTok string
+	// typed is the value last sent to be saved (the token too).
+	typed string
 }
 
 func newSettingsSection(h *home) section { return &settingsSection{h: h, panel: newPanel(h)} }
@@ -65,6 +66,10 @@ func (s *settingsSection) load() {
 	keys = append(slices.DeleteFunc(keys, func(k string) bool { return k == "token" }), "token")
 	for _, k := range keys {
 		r := settingRow{key: k, desc: config.KeyDescriptions[k]}
+		if k == "token" && s.h.a.Secrets != nil {
+			// Where this computer actually keeps it.
+			r.desc = "API token, kept in " + secrets.Where(s.h.a.Secrets)
+		}
 		if k == "token" {
 			t, src, err := config.ResolveToken(s.h.flags.Token, name, s.h.a.Secrets)
 			switch {
@@ -219,13 +224,17 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.panel.handle(msg); mine {
 		if done {
 			s.load()
-			if !s.panel.res.ok() && s.panel.args[1] == "set" && s.panel.args[2] == "token" && s.typedTok != "" {
-				// The token was not saved: the form stays, with what
-				// was pasted, to try again.
+			if !s.panel.res.ok() && s.panel.args[1] == "set" && s.typed != "" {
+				// Not saved: the editor stays, with what was typed and
+				// why, to fix it.
 				s.startEdit()
 				if s.edit != nil {
-					s.edit.setValue(s.typedTok)
+					s.edit.setValue(s.typed)
 					s.fresh = false
+					if s.panel.args[2] != "token" {
+						s.edit.problem = capFirst(s.panel.res.err.Message)
+						s.panel.res = nil
+					}
 				}
 			}
 			if s.panel.res.ok() {
@@ -238,6 +247,9 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 					what = "Token saved for profile " + s.profile
 				case s.panel.args[1] == "set":
 					what = settingLabel(key) + " set to " + onOff(s.panel.args[3])
+					if w := settingWarning(key, s.panel.args[3]); w != "" {
+						what += " · " + w
+					}
 				}
 				if key == "token" {
 					// The saved token runs from now on, not a session one.
@@ -340,9 +352,9 @@ func (s *settingsSection) askSave(v string) tea.Cmd {
 			return s.panel.start(runReq{args: []string{"config", "unset", "format"}})
 		}
 		req := runReq{args: args}
+		s.typed = v
 		if r.key == "token" {
 			req.stdin = v
-			s.typedTok = v
 		}
 		return s.panel.start(req)
 	}
@@ -391,15 +403,16 @@ func (s *settingsSection) actions() []button {
 	var b []button
 	if r := s.selected(); r != nil {
 		if s.notEditable(*r) == "" {
-			b = append(b, button{"Edit", "e", s.edit1})
+			b = append(b, button{label: "Edit", key: "e", do: s.edit1})
 			if !s.isDefault(*r) {
-				b = append(b, button{"Unset", "d", s.askUnset})
+				b = append(b, button{label: "Unset", key: "d", do: s.askUnset})
 			}
 		}
 	}
-	b = append(b, button{"Reload", "r", func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
-	if s.undo != nil && s.undo.msg != "" && (s.h.flash == s.undo.msg || s.h.lastFlash == s.undo.msg) {
-		b = append(b, button{"Undo", "u", s.undoLast})
+	b = append(b, button{label: "Reload", key: "r", do: func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
+	if s.undo != nil && s.undo.msg != "" {
+		// Until the next change, or until you leave Settings.
+		b = append(b, button{label: "Undo", key: "u", do: s.undoLast})
 	}
 	return b
 }
@@ -442,6 +455,10 @@ func (s *settingsSection) view(w, h int) string {
 		desc := st.Dim.Render(r.key + " · " + r.desc)
 		if s.edit != nil && i == s.cur && s.edit.problem != "" {
 			desc = st.Warn.Render(s.edit.problem)
+		} else if s.edit != nil && i == s.cur {
+			if w := settingWarning(r.key, s.edit.value()); w != "" {
+				desc = st.Warn.Render(w)
+			}
 		}
 		row := truncate(line, w) + "\n" + truncate("    "+desc, w)
 		b.WriteString(s.h.mark(row, func() tea.Cmd {
@@ -542,6 +559,21 @@ var settingLabels = map[string]string{
 	"token":                       "API token",
 }
 
+// settingWarning is a caution about a value that works but may hurt.
+func settingWarning(key, v string) string {
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return ""
+	}
+	switch {
+	case key == "concurrency" && n > 32:
+		return "This may hit rate limits"
+	case key == "max_requests" && n > 100000:
+		return "That is a lot of requests for one command"
+	}
+	return ""
+}
+
 // onOff shows a true/false setting as on/off.
 func onOff(v string) string {
 	switch v {
@@ -559,3 +591,6 @@ func settingLabel(key string) string {
 	}
 	return key
 }
+
+// left: leaving Settings ends its undo.
+func (s *settingsSection) left() { s.undo = nil }

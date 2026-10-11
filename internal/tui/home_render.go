@@ -436,7 +436,7 @@ func (h *home) batchPage(bs *batchState, w, ht int) string {
 
 // batchButtons are the buttons of a batch result's details.
 func (h *home) batchButtons(bs *batchState) []button {
-	if bs == nil || !bs.detail {
+	if bs == nil {
 		return nil
 	}
 	link := batchLink(bs.selected())
@@ -444,12 +444,9 @@ func (h *home) batchButtons(bs *batchState) []button {
 		return nil
 	}
 	return []button{
-		{"Open the song link", "o", func() tea.Cmd {
-			if err := openURL(link); err != nil {
-				return h.setFlash("Could not open the browser: " + err.Error())
-			}
-			return h.setFlash("Opened in your browser: " + link)
+		{label: "Open the song link", key: "o", do: func() tea.Cmd {
+			return h.openLink(link)
 		}},
-		{"Copy the song link", "c", func() tea.Cmd { return h.copy(link, "the link "+link) }},
+		{label: "Copy the song link", key: "c", do: func() tea.Cmd { return h.copy(link, "the link "+link) }},
 	}
 }

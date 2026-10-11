@@ -28,6 +28,8 @@ type JobRow struct {
 	Total   int       `json:"total"`
 	Done    int       `json:"done"`
 	Failed  int       `json:"failed"`
+	Pending int       `json:"pending"` // not sent yet: what Resume sends
+	Inputs  string    `json:"inputs"`  // what was recognized, in short: "music", "a.mp3 and 2 more"
 	Status  string    `json:"status"`
 }
 

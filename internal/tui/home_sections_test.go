@@ -27,8 +27,8 @@ func TestNowPlayingSection(t *testing.T) {
 	// No streams on the account.
 	h := newTestHome(t, &fakeRun{}, homeOpts{start: "now-playing"})
 	NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
-	v := runHome(t, h, 100, 30, "no streams", "")
-	if !strings.Contains(v, "Try: audd streams add") || !strings.Contains(v, "press 3") {
+	v := runHome(t, h, 100, 30, "No streams yet", "")
+	if strings.Contains(v, "Error") || !strings.Contains(v, "[ Add a stream ]") {
 		t.Fatalf("no streams:\n%s", v)
 	}
 }
@@ -52,8 +52,9 @@ func TestHistoryResumesJob(t *testing.T) {
 	f.reply("jobs resume k3x9 --retry-failed",
 		`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"matched","result":{"artist":"Portishead","title":"Roads"}}`+"\n"+
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
+	f.reply("jobs resume k3x9 --retry-failed --dry-run", "Plan: 1 file, at most 1 request.\nNothing was sent (--dry-run).\n", "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("right"), key("enter"), "Job k3x9: 3 recognized")
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("y"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -62,7 +63,7 @@ func TestHistoryResumesJob(t *testing.T) {
 func TestStreamsSectionPages(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("streams callback get", `{"schema_version":1,"url":"https://audd.tech/empty/"}`, "", 0)
-	f.reply("streams recorder status", "Running:        yes (pid 4242)\nStore:          /data/streams-default.db\n", "", 0)
+	f.reply("streams recorder status", `{"schema_version":1,"running":true,"pid":4242,"store":"/data/streams-default.db","plays":12}`, "", 0)
 	f.reply("streams history", "TIME   STREAM  SONG\n12:00  1       Imagine Dragons — Warriors\n", "", 0)
 	snap(t, "streams_list", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si")
 	// ↓ from the tab bar goes into the list: its first row has the keys.
@@ -162,7 +163,7 @@ func TestExplorerPaneError(t *testing.T) {
 		return ExplorerData{}, output.Errf(3, "no_token", "audd login", "no API token is set")
 	}
 	drain(h, h.activate(), 0)
-	if v := h.View(); !strings.Contains(v, "Error: No API token is set") {
+	if v := h.View(); !strings.Contains(v, "No API token yet") || strings.Contains(v, "Error") || !strings.Contains(v, "[ Use the test token ]") {
 		t.Fatalf("%s", v)
 	}
 	_ = context.Background
@@ -181,19 +182,19 @@ func TestErrorSnapshots(t *testing.T) {
 		r.form.get("input").setValue("song.mp3")
 		r.form.focusName("recognize")
 		return h
-	}, "Recognize music", key("enter"), "Try: audd login")
+	}, "Recognize music", key("enter"), "No API token yet")
 	snap(t, "error_nowplaying", func() *home {
 		h := newTestHome(t, f, homeOpts{start: "now-playing"})
 		NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
 		return h
-	}, "no streams")
+	}, "No streams yet")
 }
 
 func TestErrorHintOpensCommand(t *testing.T) {
 	useSigninMethod(t, "device")
 	f := &fakeRun{}
 	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
-	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"no_token","message":"no API token is set","hint":"audd login"}}`+"\n", 3)
+	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"login_required","message":"this needs you to sign in","hint":"audd login"}}`+"\n", 3)
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
 	r := recognizeOf(h)
 	r.form.get("input").setValue("song.mp3")

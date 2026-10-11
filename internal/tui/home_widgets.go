@@ -377,10 +377,19 @@ func (f *form) resume() {
 // there was a field to leave.
 func (f *form) leaveField() bool {
 	c := f.current()
-	if c == nil || !c.isText() || !c.lockable {
-		// A field of a new form: esc leaves the form (or the page), and
-		// the value stays.
+	if c == nil || !c.isText() {
 		return false
+	}
+	if !c.lockable {
+		// A field of a new form: esc stops typing and keeps the value;
+		// the cursor stays on the form (enter types again, the next
+		// esc leaves the page).
+		if c.locked {
+			return false
+		}
+		c.locked = true
+		c.input.Blur()
+		return true
 	}
 	if c.locked && c.input.Value() == c.orig {
 		return false
@@ -417,6 +426,14 @@ func (f *form) fail(name, problem string) {
 		if !x.lockable {
 			x.locked = false
 		}
+		if x.isText() {
+			// Typing in it again, at the end of the text, to fix it.
+			f.focus()
+			x.input.CursorEnd()
+		}
+	}
+	if f.h != nil {
+		f.h.focus, f.h.btnActive = focusContent, false
 	}
 }
 
@@ -530,6 +547,9 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 			return "", c.input.Focus()
 		}
 		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
+			if !c.lockable {
+				return "", f.h.setFlash("Press enter to type in " + c.label)
+			}
 			return "", f.h.setFlash("Press enter or e to edit " + c.label)
 		}
 		return "", nil
@@ -584,6 +604,8 @@ func (f *form) rowKeys(primary string) []keyHelp {
 		}
 	case c.locked && c.lockable:
 		k = append(k, keyHelp{"enter/e", "edit"})
+	case c.locked:
+		k = append(k, keyHelp{"enter", "type in " + c.label})
 	case c.lockable:
 		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel"})
 	case f.enterNext && f.laterField():
@@ -1147,7 +1169,7 @@ func (p *picker) view(w, h int, st output.Styles, color, focused bool) string {
 			case color:
 				line = st.Bold.Render(padRight(truncate(m[i].title, titleW-1), titleW)) + m[i].desc
 			case focused:
-				line = "> " + line
+				line = "› " + line
 			default:
 				line = "· " + line
 			}

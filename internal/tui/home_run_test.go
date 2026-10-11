@@ -63,7 +63,7 @@ func TestRunErrorAndHint(t *testing.T) {
 	s := withTestSection(h)
 	drain(h, wrap("recognize", s.p.start(runReq{args: []string{"account"}})), 0)
 	v := h.View()
-	if !strings.Contains(v, "Error: This needs you to sign in") || !strings.Contains(v, "Try: audd login") || !strings.Contains(v, "Press enter to open it") {
+	if !strings.Contains(v, "Error: This needs you to sign in") || !strings.Contains(v, "Try: audd login") || !strings.Contains(v, "Press enter to open audd login in Commands.") {
 		t.Fatalf("error view:\n%s", v)
 	}
 	if s.p.res.err.Code != "login_required" {

@@ -401,6 +401,9 @@ func (h *home) backOne() tea.Cmd {
 
 // noop says that a key does nothing where it was pressed.
 func (h *home) noop(s string) tea.Cmd {
+	if s == "u" || s == "ctrl+z" {
+		return h.setFlash("Nothing to undo")
+	}
 	return h.setFlash(keyName(s) + " does nothing here · ? shows the keys")
 }
 
@@ -568,18 +571,19 @@ func (h *home) crumbs() ([]crumb, int) {
 		for i := range out {
 			out[i].click = nil
 		}
-		topic := "Confirm?"
+		topic := "Confirm"
 		switch {
 		case c != nil && c.topic != "":
 			topic = c.topic
 		case c != nil && c.action != "":
-			topic = c.action + "?"
+			topic = c.action
 		case ask != nil:
-			topic = ask.action() + "?"
+			topic = ask.action()
 		}
-		return append(out, crumb{text: topic}), len(out)
+		// A path, not a question: no "?".
+		return append(out, crumb{text: strings.TrimSuffix(topic, "?")}), len(out)
 	case h.quitAsk:
-		return []crumb{{text: "Quit?"}}, 0
+		return []crumb{{text: "Quit"}}, 0
 	case h.keysO:
 		return []crumb{{text: "Keys"}}, 0
 	case h.paletteO:
@@ -648,7 +652,33 @@ func (h *home) crumbLine(w int) string {
 		}
 		out = append(out, h.mark(label, c.click))
 	}
-	return truncate(strings.Join(out, sep), w)
+	line := strings.Join(out, sep)
+	if ansi.StringWidth(line) > w && len(parts) > 2 {
+		// Too long: the middle levels give way, the first and the last
+		// stay readable.
+		plain := make([]string, len(parts))
+		for i, c := range parts {
+			plain[i] = c.text
+		}
+		for len(plain) > 2 && ansi.StringWidth(strings.Join(plain, " › ")) > w {
+			if plain[1] == "…" && len(plain) > 3 {
+				plain = append(plain[:1], plain[2:]...)
+				plain[1] = "…"
+				continue
+			}
+			if plain[1] == "…" {
+				break
+			}
+			plain[1] = "…"
+		}
+		line = h.st.Dim.Render(strings.Join(plain[:len(plain)-1], " › ") + " › ")
+		last := plain[len(plain)-1]
+		if room := w - ansi.StringWidth(line); room < len([]rune(last)) {
+			last = truncMiddle(last, max(5, room))
+		}
+		line += last
+	}
+	return truncate(line, w)
 }
 
 // tabBar is the active section's tabs. The current tab is highlighted;
@@ -703,7 +733,7 @@ func (h *home) footer() []keyHelp {
 	case h.confirm != nil && h.confirm.choices != nil:
 		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"esc", "cancel"}}
 	case h.prompt():
-		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"y", "confirm"}, {"n/esc", "cancel"}}
+		return []keyHelp{{"y", "confirms"}, {"enter", "presses the selected button"}, {"←/→", "choose"}, {"n/esc", "cancel"}}
 	case h.keysO:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
@@ -770,7 +800,7 @@ func composeKeys(keys []keyHelp, left, typing bool) []keyHelp {
 	move, open, back, acts := sortKeys(keys)
 	b := keyHelp{"esc", "back"}
 	if typing {
-		b.help = "leave the field"
+		b.help = "done"
 	}
 	if len(back) > 0 {
 		b = back[0]
@@ -847,9 +877,10 @@ func (c *confirmState) buttons() []string {
 	return []string{"Cancel", action}
 }
 
-// askFirst opens a dialog. Destructive and account-wide questions start
-// on Cancel; a choice of what to do (choices) starts on the first one.
+// askFirst opens a dialog. Every dialog starts on Cancel: a double enter
+// never changes or spends anything.
 func (h *home) askFirst(c *confirmState) tea.Cmd {
+	c.cur = 0
 	h.confirm = c
 	return nil
 }
@@ -896,15 +927,16 @@ func (h *home) confirmKey(s string) tea.Cmd {
 		h.confirm = nil
 		return h.quit()
 	case "?":
-		return h.setFlash("←/→ or tab choose · enter presses · y confirms · n or esc cancels")
+		return h.setFlash("y confirms · enter presses the selected button · ←/→ choose · n or esc cancels")
 	}
-	return h.setFlash(s + " does nothing here · ←/→ choose, enter presses, esc cancels")
+	return h.setFlash(keyName(s) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
 
 // dialogButtons draws a dialog's buttons, the focused one highlighted;
 // a click presses one.
-func (h *home) dialogButtons(labels []string, cur int, press func(i int) tea.Cmd) string {
-	var parts []string
+func (h *home) dialogButtons(labels []string, cur int, press func(i int) tea.Cmd, w int) string {
+	var lines []string
+	line, lineW := "  ", 2
 	for i, l := range labels {
 		label := "[ " + l + " ]"
 		if i == cur {
@@ -913,9 +945,20 @@ func (h *home) dialogButtons(labels []string, cur int, press func(i int) tea.Cmd
 				label = h.st.Bold.Reverse(true).Render(" " + l + " ")
 			}
 		}
-		parts = append(parts, h.mark(label, func() tea.Cmd { return press(i) }))
+		// Buttons that do not fit go on the next row, never cut.
+		lw := len([]rune(l)) + 4
+		if lineW > 2 && lineW+2+lw > w {
+			lines = append(lines, line)
+			line, lineW = "  ", 2
+		}
+		if lineW > 2 {
+			line += "  "
+			lineW += 2
+		}
+		line += h.mark(label, func() tea.Cmd { return press(i) })
+		lineW += lw
 	}
-	return "  " + strings.Join(parts, "  ")
+	return strings.Join(append(lines, line), "\n")
 }
 
 func (h *home) confirmView(w int) string {
@@ -930,7 +973,7 @@ func (h *home) confirmView(w int) string {
 	if len(c.notes) > 0 {
 		b.WriteString("\n")
 	}
-	b.WriteString(h.dialogButtons(c.buttons(), c.cur, h.pressConfirm))
+	b.WriteString(h.dialogButtons(c.buttons(), c.cur, h.pressConfirm, w))
 	return b.String()
 }
 

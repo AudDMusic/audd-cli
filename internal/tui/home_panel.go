@@ -145,10 +145,7 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 		u := pendingURL(p.pending)
 		switch s {
 		case "o":
-			if err := openURL(u); err != nil {
-				return p.h.setFlash("Could not open the browser: " + err.Error())
-			}
-			return p.h.setFlash("Opened in your browser: " + u)
+			return p.h.openLink(u)
 		case "c":
 			return p.h.copy(u, "the sign-in address")
 		case "p":
@@ -220,12 +217,20 @@ func errorText(st output.Styles, e *runError, w int) string {
 		// Answering no is not an error; the status line says so.
 		return ""
 	}
+	// Normal states are not errors: they say what to do, and the page
+	// has the buttons for it.
+	switch e.Code {
+	case "no_token":
+		return "No API token yet.\n" + styleLines(st.Dim, output.Wrap(noTokenChoices, w))
+	case "no_streams":
+		return "No streams yet.\n" + styleLines(st.Dim, output.Wrap("Add one with the Add a stream button below.", w))
+	}
 	var b strings.Builder
 	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+capFirst(e.Message), w)))
 	if e.Hint != "" {
 		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
 		if strings.HasPrefix(e.Hint, "audd ") {
-			b.WriteString("\n" + st.Dim.Render("Press enter to open it."))
+			b.WriteString("\n" + st.Dim.Render(output.Wrap("Press enter to open "+e.Hint+" in Commands.", w)))
 		}
 	}
 	return b.String()

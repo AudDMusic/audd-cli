@@ -325,10 +325,7 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 	if s.payLink != "" {
 		switch ks {
 		case "enter", "o":
-			if err := openURL(s.payLink); err != nil {
-				return s.h.setFlash("Could not open the browser: " + err.Error())
-			}
-			return s.h.setFlash("Opened the payment page in your browser")
+			return s.h.openLink(s.payLink)
 		case "c":
 			return s.h.copy(s.payLink, "the payment link")
 		case "backspace":
@@ -371,7 +368,7 @@ func (s *accountSection) startPay(args []string) tea.Cmd {
 	// What the link is for, named on its page.
 	name := ""
 	if i := s.planCur; i >= 0 && i < len(s.plans) {
-		name = str(s.plans[i]["name"])
+		name = planName(s.plans[i])
 	}
 	switch args[1] {
 	case "subscribe":
@@ -637,7 +634,7 @@ func (s *accountSection) billingView(w, h int) string {
 	}
 	cur := s.currentPlan()
 	for i, p := range s.plans {
-		line := fmt.Sprintf("%-10s %s/mo  %s requests", str(p["name"]),
+		line := fmt.Sprintf("%-10s %s/mo  %s requests", planName(p),
 			shortMoney(num(p["monthly_price_cents"])), shortCount(int(num(p["included_requests"]))))
 		act := "Subscribe"
 		if i == cur {
@@ -727,13 +724,13 @@ func (s *accountSection) actions() []button {
 		return nil
 	}
 	refresh := func(fn func() tea.Cmd) button {
-		return button{"Refresh", "r", func() tea.Cmd { return tea.Batch(fn(), s.h.setFlash("Refreshed")) }}
+		return button{label: "Refresh", key: "r", do: func() tea.Cmd { return tea.Batch(fn(), s.h.setFlash("Refreshed")) }}
 	}
 	switch s.page {
 	case 0:
 		return []button{refresh(func() tea.Cmd { return s.openPage(0) })}
 	case 1:
-		return append([]button{{"Billing", "", func() tea.Cmd { return s.h.selectTab(2) }}}, s.usage.actions()...)
+		return append([]button{{label: "Billing", key: "", do: func() tea.Cmd { return s.h.selectTab(2) }}}, s.usage.actions()...)
 	case 2:
 		switch {
 		case s.pay.running || s.buying:
@@ -741,21 +738,18 @@ func (s *accountSection) actions() []button {
 		case s.payLink != "":
 			link := s.payLink
 			return []button{
-				{"Open in browser", "o", func() tea.Cmd {
-					if err := openURL(link); err != nil {
-						return s.h.setFlash("Could not open the browser: " + err.Error())
-					}
-					return s.h.setFlash("Opened the payment page in your browser")
+				{label: "Open in browser", key: "o", do: func() tea.Cmd {
+					return s.h.openLink(link)
 				}},
-				{"Copy link", "c", func() tea.Cmd { return s.h.copy(link, "the payment link") }},
-				{"Close", "", func() tea.Cmd { s.payLink, s.pay.res = "", nil; return nil }},
+				{label: "Copy link", key: "c", do: func() tea.Cmd { return s.h.copy(link, "the payment link") }},
+				{label: "Close", key: "", do: func() tea.Cmd { s.payLink, s.pay.res = "", nil; return nil }},
 			}
 		case s.showHist:
-			return []button{{"Plans", "", func() tea.Cmd { s.showHist = false; return nil }}}
+			return []button{{label: "Plans", key: "", do: func() tea.Cmd { s.showHist = false; return nil }}}
 		}
 		return []button{
-			{"Buy requests", "", func() tea.Cmd { s.buying = true; s.buyIn.focusName("requests"); return nil }},
-			{"Payments", "", func() tea.Cmd {
+			{label: "Buy requests", key: "", do: func() tea.Cmd { s.buying = true; s.buyIn.focusName("requests"); return nil }},
+			{label: "Payments", key: "", do: func() tea.Cmd {
 				s.showHist = true
 				if s.history.res == nil {
 					return s.history.start(runReq{args: []string{"billing", "history"}, format: "table"})
@@ -768,18 +762,18 @@ func (s *accountSection) actions() []button {
 		if s.tokPasting || s.token.pending != nil {
 			return nil
 		}
-		show := button{"Show", "", func() tea.Cmd { return s.showToken(true) }}
+		show := button{label: "Show", key: "", token: true, do: func() tea.Cmd { return s.showToken(true) }}
 		if s.revealed {
-			show = button{"Hide", "", func() tea.Cmd { return s.showToken(false) }}
+			show = button{label: "Hide", key: "", token: true, do: func() tea.Cmd { return s.showToken(false) }}
 		}
 		return []button{show,
-			{"Copy", "c", func() tea.Cmd {
+			{label: "Copy", key: "c", token: true, do: func() tea.Cmd {
 				return s.token.start(runReq{args: []string{"token", "show", "--reveal"}, tag: "copy"})
 			}},
-			{"New token…", "", func() tea.Cmd {
+			{label: "New token…", key: "", token: true, do: func() tea.Cmd {
 				return s.token.start(runReq{args: []string{"token", "rotate"}, typed: "rotate", tag: "rotate"})
 			}},
-			{"Paste a different token…", "", func() tea.Cmd {
+			{label: "Paste a different token…", key: "", do: func() tea.Cmd {
 				s.tokPasting = true
 				s.tokForm.focusName("token")
 				s.tokForm.resume()
@@ -788,7 +782,7 @@ func (s *accountSection) actions() []button {
 		}
 	case 4:
 		if s.canSignOut() {
-			return []button{{"Sign out", "", s.askSignOut}}
+			return []button{{label: "Sign out", key: "", do: s.askSignOut}}
 		}
 	}
 	return nil
@@ -947,4 +941,13 @@ func fmtIntString(v string) string {
 		return fmtInt(n)
 	}
 	return v
+}
+
+// planName is a plan's name, or its key in words when it has none
+// ("indie_plan_outside" → "Indie plan outside").
+func planName(p map[string]any) string {
+	if n := str(p["name"]); n != "" {
+		return n
+	}
+	return plainName(str(p["plan"]))
 }

@@ -17,7 +17,7 @@ AudD  ·  profile default
                  │   shows the command each action runs; y copies it.
                  │ • ctrl+k runs any command from a form. ? lists the keys of
                  │   the screen; the Keys tab lists them all.
- [ Commands ]    │ ↓ 471 more lines below
+ [ Commands ]    │ ↓ 480 more lines below
  [ Keys ] q quit │ 3%
 
 ←/→ tabs  ↓ open  esc back  ? keys

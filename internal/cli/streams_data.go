@@ -231,7 +231,7 @@ func printHistory(a *app.App, from time.Time, plays []streamstore.Play, gaps []s
 			return
 		}
 		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(tw, "TIME\tSTREAM\tARTIST — TITLE\tLENGTH")
+		fmt.Fprintln(tw, "STARTED\tSTREAM\tARTIST — TITLE\tLENGTH")
 		// Gaps are oldest first and plays newest first: show each gap
 		// between the plays around it.
 		pending := append([]streamstore.Gap(nil), gaps...)

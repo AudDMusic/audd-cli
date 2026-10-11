@@ -304,7 +304,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		s.wait("Recognize music")
 		s.typeText(filepath.Join(e.dir, "nope.mp3"))
 		s.press(kEnter)
-		s.wait("no such file or folder")
+		s.wait("o such file or folder")
 		s.wait("check the path")
 	})
 	t.Run("too many files", func(t *testing.T) {
@@ -321,7 +321,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		s.typeText("2")
 		s.press(kEnter)
 		s.wait("more than Max files 2")
-		s.wait("set it to 3")
+		s.wait("Set Max files to 3")
 		if n := e.api.Count(testutil.EndpointRecognize); n != 0 {
 			t.Fatalf("%d requests", n)
 		}

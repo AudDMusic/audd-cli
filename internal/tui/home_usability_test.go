@@ -66,7 +66,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press  y confirm  n/esc cancel") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL?") || !strings.Contains(v, "[ Change the callback URL ]") {
+	if foot := footerText(v); !strings.HasPrefix(foot, "y confirms  enter presses the selected button") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL") || !strings.Contains(v, "[ Change the callback URL ]") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -110,7 +110,7 @@ func TestTypingInAField(t *testing.T) {
 		t.Fatalf("3 was a jump: %s %q", h.activeID(), s.form.value("input"))
 	}
 	foot := footerText(h.View())
-	if !strings.Contains(foot, "esc then 1-7 for sections") || !strings.Contains(foot, "ctrl+u clear") || strings.Contains(foot, "? keys") {
+	if !strings.Contains(foot, "esc done") || !strings.Contains(foot, "ctrl+u clear") || strings.Contains(foot, "? keys") {
 		t.Fatalf("footer while typing: %q", foot)
 	}
 	press(h, key("ctrl+u"))

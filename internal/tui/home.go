@@ -497,6 +497,34 @@ func (h *home) setFlash(s string) tea.Cmd {
 	return nil
 }
 
+// noBrowser is said when a link could not be opened: it is copied instead.
+const noBrowser = "Couldn't open a browser here. The link is copied — paste it into a browser."
+
+// openLink opens a link in the browser; when that fails, it copies the
+// link and says so.
+func (h *home) openLink(link string) tea.Cmd {
+	if err := openURL(link); err != nil {
+		h.osc = oscCopy(link)
+		return tea.Batch(h.setFlash(noBrowser),
+			tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} }))
+	}
+	return h.setFlash("Opened in your browser: " + link)
+}
+
+// leaver is a section that forgets something when you leave it (its
+// undo).
+type leaver interface{ left() }
+
+// leftSection tells the section id that it was left, when it was.
+func (h *home) leftSection(id string) {
+	if id == h.activeID() {
+		return
+	}
+	if l, ok := h.subs[id].(leaver); ok {
+		l.left()
+	}
+}
+
 // copy puts s on the clipboard with the next frame.
 func (h *home) copy(s, what string) tea.Cmd {
 	h.osc = oscCopy(s)
@@ -541,12 +569,18 @@ func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subMsg:
 		return h, h.route(msg)
 	case tea.KeyMsg:
-		return h, h.key(msg)
+		before := h.activeID()
+		cmd := h.key(msg)
+		h.leftSection(before)
+		return h, cmd
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonLeft) {
 			h.flash = ""
 		}
-		return h, h.mouse(msg)
+		before := h.activeID()
+		cmd := h.mouse(msg)
+		h.leftSection(before)
+		return h, cmd
 	}
 	return h, nil
 }
@@ -748,4 +782,68 @@ func leftExits(s section) bool {
 		return le.leftExits()
 	}
 	return !s.capturing()
+}
+
+// noTokenChoices is the one wording of the ways to get a token.
+const noTokenChoices = "Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."
+
+// askToken asks how to get an API token (why says what needs it); with
+// the test token it goes on with next.
+func (h *home) askToken(owner, why string, next func() tea.Cmd) tea.Cmd {
+	return h.askFirst(&confirmState{
+		owner:    owner,
+		question: "You need an API token",
+		notes:    []string{why + " " + noTokenChoices},
+		choices:  []string{"Use the test token", "Paste a token…", "Sign in"},
+		topic:    "API token?",
+		cancel:   "Cancelled. Nothing was sent.",
+		pick: func(i int) tea.Cmd {
+			switch i {
+			case 0:
+				cmd := h.signedIn(true)
+				return tea.Batch(cmd, h.setFlash("Using the test token: 10 requests a day"), next())
+			case 1:
+				cmd := h.jump("signin")
+				if si, ok := h.subs["signin"].(*signinSection); ok {
+					si.step = "paste"
+					si.paste.focusName("token")
+					si.paste.resume()
+				}
+				return cmd
+			}
+			cmd := h.jump("signin")
+			if si, ok := h.subs["signin"].(*signinSection); ok {
+				si.choice = 0
+				return tea.Batch(cmd, h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
+			}
+			return cmd
+		},
+	})
+}
+
+// tokenButtons are the ways to get an API token, as buttons; next runs
+// once the test token is in use.
+func (h *home) tokenButtons(next func() tea.Cmd) []button {
+	return []button{
+		{label: "Use the test token", do: func() tea.Cmd {
+			return tea.Batch(h.signedIn(true), h.setFlash("Using the test token: 10 requests a day"), next())
+		}},
+		{label: "Paste a token…", do: func() tea.Cmd {
+			cmd := h.jump("signin")
+			if si, ok := h.subs["signin"].(*signinSection); ok {
+				si.step = "paste"
+				si.paste.focusName("token")
+				si.paste.resume()
+			}
+			return cmd
+		}},
+		{label: "Sign in", do: func() tea.Cmd {
+			cmd := h.jump("signin")
+			if si, ok := h.subs["signin"].(*signinSection); ok {
+				si.choice = 0
+				return tea.Batch(cmd, h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
+			}
+			return cmd
+		}},
+	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,14 +35,13 @@ func selectedButton(h *home) string {
 // buttons.
 func TestJobPage(t *testing.T) {
 	f := &fakeRun{}
-	asked := 0
+	var asked atomic.Int32
 	f.on("jobs resume k3x9", func(args []string, io RunIO) int {
-		asked++
-		io.Stderr.Write([]byte("Plan: 1 file, at most 1 request.\n"))
-		if asked == 1 && !io.Ask("Retry 1 failed file?") {
-			io.Stderr.Write([]byte(`{"error":{"code":"declined","message":"cancelled"}}` + "\n"))
-			return 6
+		if strings.Contains(strings.Join(args, " "), "--dry-run") {
+			io.Stdout.Write([]byte("Plan: 1 file, at most 1 request.\nNothing was sent (--dry-run).\n"))
+			return 0
 		}
+		asked.Add(1)
 		io.Stdout.Write([]byte(`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"failed","error":{"code":"network","message":"timeout"}}` + "\n" +
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":2,"no_match":0,"failed":1,"requests_spent_this_run":1}` + "\n"))
 		return 0
@@ -60,20 +60,29 @@ func TestJobPage(t *testing.T) {
 	if c := crumbText(h.View()); !strings.HasSuffix(strings.TrimSpace(c), "Job k3x9") {
 		t.Fatalf("esc from Files: %q", c)
 	}
-	// Retry, then cancel at the question.
-	press(h, key("tab"), key("right"), key("right"))
+	// Only failed files left: no Resume, Retry failed files instead.
+	press(h, key("tab"))
+	if v := h.View(); strings.Contains(v, "[ Resume ]") || !strings.Contains(v, "Retry failed files") {
+		t.Fatalf("buttons:\n%s", v)
+	}
+	press(h, key("right"))
 	if b := selectedButton(h); b != "Retry failed files" {
 		t.Fatalf("on %q", b)
 	}
+	// It asks with its cost, on Cancel; a double enter sends nothing.
 	press(h, key("enter"))
-	pump(h, func() bool { return h.ask != nil })
-	press(h, key("n"))
-	pump(h, func() bool { return h.ask == nil && selectedButton(h) == "Retry failed files" })
-	if !strings.Contains(statusText(h.View()), "Cancelled") {
-		t.Fatalf("cancelled:\n%s", h.View())
+	pump(h, func() bool { return h.confirm != nil })
+	if v := h.View(); !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "at most 1 request") || strings.Contains(v, "Running") {
+		t.Fatalf("the question:\n%s", v)
+	}
+	press(h, key("enter"))
+	if asked.Load() != 0 || selectedButton(h) != "Retry failed files" || !strings.Contains(statusText(h.View()), "Cancelled") {
+		t.Fatalf("cancelled: sent %d, on %q\n%s", asked.Load(), selectedButton(h), h.View())
 	}
 	// Retry and finish: the next steps are buttons, not a Try line.
 	press(h, key("enter"))
+	pump(h, func() bool { return h.confirm != nil })
+	press(h, key("y"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Back to the job ]") })
 	v := h.View()
 	if !strings.Contains(v, "[ Retry failed files again ]") || strings.Contains(v, "Try: audd jobs resume") {
@@ -130,9 +139,10 @@ func TestPaletteReopensEmpty(t *testing.T) {
 // the profile. A new token clears the last recognition.
 func TestTokenSaveMessages(t *testing.T) {
 	f := &fakeRun{}
-	fail := true
+	var fail atomic.Bool
+	fail.Store(true)
 	f.on("config set token", func(args []string, io RunIO) int {
-		if fail {
+		if fail.Load() {
 			io.Stderr.Write([]byte(`{"error":{"code":"keyring","message":"the system credential store is locked"}}` + "\n"))
 			return 1
 		}
@@ -154,7 +164,7 @@ func TestTokenSaveMessages(t *testing.T) {
 	if v := strings.Join(strings.Fields(strings.ReplaceAll(contentText(h.View()), "│", " ")), " "); !strings.Contains(v, "Saving the token failed: the system credential store is locked. Try again, or set AUDD_API_TOKEN.") || s.edit == nil {
 		t.Fatalf("failed save, the form stays:\n%s", h.View())
 	}
-	fail = false
+	fail.Store(false)
 	press(h, key("enter"))
 	if h.confirm != nil {
 		press(h, key("right"), key("enter"))

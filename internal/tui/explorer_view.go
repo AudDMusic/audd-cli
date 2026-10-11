@@ -275,6 +275,9 @@ func (m *explorer) levelView(l *level, h int) string {
 		case l.kind == "jobs":
 			return m.st.Dim.Render("No jobs yet. Batch runs (folders, globs, enterprise) appear here.")
 		case l.kind == "streams":
+			if m.embedded {
+				return "No streams yet.\n" + m.st.Dim.Render("Add one with the Add a stream button below (or a).")
+			}
 			return m.st.Dim.Render("No streams yet. Press a to add one, or run: audd streams add <url> --id 1")
 		}
 		return m.st.Dim.Render("Nothing here yet.")
@@ -349,7 +352,7 @@ func (m *explorer) levelView(l *level, h int) string {
 			case m.blur:
 				line = "· " + truncate(line, m.w-2)
 			default:
-				line = "> " + truncate(line, m.w-2)
+				line = "› " + truncate(line, m.w-2)
 			}
 		} else if !m.color {
 			line = "  " + truncate(line, m.w-2)

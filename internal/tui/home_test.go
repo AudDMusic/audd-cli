@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -168,6 +169,15 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	t.Cleanup(func() { NewExplorerData, NewFeed = oldData, oldFeed })
 	testutil.Isolate(t)
 	t.Setenv("AUDD_NO_BACKGROUND_RECORDER", "1")
+	// The files the tests type in Recognize are there, as they would be.
+	work := t.TempDir()
+	for _, name := range []string{"song.mp3", "a.mp3", "b.mp3", "mix.mp3", "x.mp3", "song3.mp3"} {
+		os.WriteFile(filepath.Join(work, name), []byte("audio"), 0o644)
+	}
+	t.Chdir(work)
+	oldDelay := countDelay
+	countDelay = time.Millisecond
+	t.Cleanup(func() { countDelay = oldDelay })
 
 	var out, errb bytes.Buffer
 	a := npApp(&out, &errb, output.PrinterOptions{Format: output.FormatTable, StdoutTTY: true, StdinTTY: true, NoColor: true})

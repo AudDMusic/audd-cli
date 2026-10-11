@@ -129,7 +129,7 @@ var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the hint says what); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"esc", "leave the field you type in; again: back"}, {"ctrl+o", "in Input: pick a file or folder"}, {"→ or enter", "result: details"}}},
+	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the hint says what); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"esc", "done typing (the value stays); again: back"}, {"ctrl+o", "in File, URL, or folder: pick a file or folder"}, {"→ or enter", "result: details"}}},
 	{"Now playing", []keyHelp{{"←/→/↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in, or back to all streams"}, {"tab", "the buttons: History, Open link, Copy link, Refresh"}}},
 	{"Streams", []keyHelp{{"→ or enter", "a stream's page: History, Edit URL, Remove"}, {"/", "filter"}, {"tab", "the page's buttons: Add a stream, Refresh, Export"}, {"enter", "Recorder: Start or Stop"}}},
 	{"Recognitions", []keyHelp{{"→ or enter", "details; a job's page: Files, Resume, Retry failed files, Copy the batch command"}, {"/", "filter"}, {"tab", "the page's buttons"}}},
@@ -144,7 +144,7 @@ var sectionKeyDocs = []struct {
 // everywhere.
 var letterKeys = []keyHelp{
 	{"a", "add"}, {"c", "copy what the button names (a link, a path, a command, the token)"}, {"d", "remove or unset, after asking"},
-	{"e", "edit"}, {"i, u", "copy the ISRC, the UPC"}, {"o", "open in the browser"}, {"r", "refresh"}, {"s", "stop"},
+	{"e", "edit"}, {"i", "copy the ISRC"}, {"u or ctrl+z", "undo the last change"}, {"o", "open in the browser"}, {"r", "refresh"}, {"s", "stop"},
 	{"x", "export"}, {"y", "copy the command at the bottom"}, {"/", "filter or search"},
 }
 
@@ -359,10 +359,7 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 // openLink opens the selected link.
 func (s *helpSection) openLink() tea.Cmd {
 	u := helpLinks[s.linkCur].url
-	if err := openURL(u); err != nil {
-		return s.h.setFlash("Could not open it: " + err.Error())
-	}
-	return s.h.setFlash("Opened in your browser: " + u)
+	return s.h.openLink(u)
 }
 
 // stepDone reports whether a getting-started step is done: a token is
@@ -649,7 +646,7 @@ func (s *helpSection) keysText(w int) string {
 	var b strings.Builder
 	b.WriteString(st.Bold.Render("Moving around") + "\n")
 	b.WriteString(indent(output.Wrap(tipText, max(10, w-2)), "  ") + "\n")
-	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. When a text field is selected, you are typing in it: letters, digits, and symbols go in, ←/→ move the cursor (← at its start goes back), ctrl+u clears it, and esc stops typing. Recognize opens typing in Input; other pages open with no text field selected, so 1-7 jump to a section. A saved value, such as the callback URL, is changed only after enter or e, and esc puts the old value back. Enter in a form's last text field runs it (in Add a stream, enter in ID adds it; the box below is optional). What a page can do is on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between them, enter presses one. A letter on a button, such as (o), presses it from anywhere on the page. A key works only where it is listed; any other key says it does nothing. Settings of audd save right away (u undoes the last change). Spending more than one request, removing, signing out, or replacing the token asks in a dialog: enter presses the focused button (the action after a plan, Cancel otherwise), y confirms, n or esc cancels; in a dialog y confirms instead of copying the command.", max(10, w-2)), "  ") + "\n\n")
+	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. When a text field is selected, you are typing in it: letters, digits, and symbols go in, ←/→ move the cursor (← at its start goes back), ctrl+u clears it, and esc stops typing but keeps the value and the form (enter types again; then 1-7 jump to a section). Recognize opens typing in its File, URL, or folder field; other pages open with no text field selected. After an error the cursor is back in the field it is about. A saved value, such as the callback URL, is changed only after enter or e, and esc puts the old value back. Enter in a form's last text field runs it (in Add a stream, enter in ID adds it; the box below is optional). What a page can do is on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between them, enter presses one. A letter on a button, such as (o), presses it from anywhere on the page. A key works only where it is listed; any other key says it does nothing. Settings of audd and a stream's URL save right away; u or ctrl+z undoes the last change until you make another or leave the section. Spending requests, removing, signing out, or replacing the token asks in a dialog: every dialog opens on Cancel, so enter presses Cancel until you move; y confirms, n or esc cancels. In a dialog y confirms; everywhere else y copies the command at the bottom.", max(10, w-2)), "  ") + "\n\n")
 	b.WriteString(keyLines(moveKeys, w) + "\n")
 	b.WriteString("\n" + st.Bold.Render("Everywhere") + "\n")
 	b.WriteString(keyLines(globalKeys, w) + "\n")
@@ -692,8 +689,8 @@ func (s *helpSection) actions() []button {
 		return nil
 	}
 	return []button{
-		{"Open in browser", "o", s.openLink},
-		{"Copy", "c", func() tea.Cmd {
+		{label: "Open in browser", key: "o", do: s.openLink},
+		{label: "Copy", key: "c", do: func() tea.Cmd {
 			u := strings.TrimPrefix(helpLinks[s.linkCur].url, "mailto:")
 			return s.h.copy(u, u)
 		}},
