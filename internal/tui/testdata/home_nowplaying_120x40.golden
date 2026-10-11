@@ -1,18 +1,20 @@
 AudD  ·  profile default
-                 │ Now playing                                                                             stream 1 of 3
- 1 Recognize     │ 
-*2 Now playing   > ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
- 3 Streams       │ ┃ Stream 1                                       ┃│ Stream 2                                       │
- 4 History       │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
- 5 Account       │ ┃ Warriors                                       ┃│ Feeling Good                                   │
- 6 Settings      │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
- 7 Help          │ ┃ Warriors (album) · Label · 2019                ┃│ Feeling Good (album) · Label · 2019            │
+                 │ Now playing
+ 1 Recognize     │ What's playing on your streams
+*2 Now playing   >                                                                                        1 of 3 streams
+ 3 Streams       │ 
+ 4 Recognitions  │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
+ 5 Account       │ ┃ Stream 1                                       ┃│ Stream 2                                       │
+ 6 Settings      │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
+ 7 Help          │ ┃ Warriors                                       ┃│ Feeling Good                                   │
+                 │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
+                 │ ┃ Warriors (album) · Label · 2019                ┃│ Feeling Good (album) · Label · 2019            │
                  │ ┃ played 2:50                                    ┃│ played 3:50                                    │
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛╰────────────────────────────────────────────────╯
                  │ ╭────────────────────────────────────────────────╮
                  │ │ Stream 3                                       │
                  │ │ Can't connect to the stream (650)              │
-                 │ │ Last heard: Portishead — Roads · 3 h ago       │
+                 │ │ Last heard: Portishead — Roads · at 09:00      │
                  │ │                                                │
                  │ │                                                │
                  │ │                                                │
@@ -31,10 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
-←/esc back  ←/→/↑/↓ select  enter zoom  o open  c copy link  h history
+ [ Commands ]    │ 
+ [ Keys ] esc ←  │ [ History ]  [ Open the song link (o) ]  [ Copy the song link (c) ]  [ Refresh (r) ]
+
+←/→ previous, next stream  ↑/↓ rows  enter open  esc back  tab buttons  ? keys
 $ audd now-playing                                                                                                y copy

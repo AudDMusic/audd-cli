@@ -82,7 +82,7 @@ func Line(jobID string, it Item) ResultLine {
 		l.Result = json.RawMessage("null")
 	}
 	if it.State == StateFailed {
-		l.Error = &LineError{Code: it.ErrCode, APICode: it.APICode, Message: it.Err, Retryable: it.SafeRetry}
+		l.Error = &LineError{Code: it.ErrCode, APICode: it.APICode, Message: it.Err, Retryable: it.SafeRetry || RetryHelps(it.ErrCode)}
 	}
 	return l
 }

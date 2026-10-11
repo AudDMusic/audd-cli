@@ -33,12 +33,12 @@ func fakeExplorerData(api *fakeStreamsAPI) ExplorerData {
 		{Source: "/music/mix.mp3", At: testNow.Add(-3 * time.Hour), Result: json.RawMessage(`[{"offset":"00:00","songs":[{"artist":"Daft Punk","title":"One More Time","timecode":"00:05"}]},{"offset":"00:12","songs":[{"artist":"Daft Punk","title":"Aerodynamic","timecode":"00:01"}]}]`)},
 	}
 	jobs := []JobRow{
-		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, Status: "partial"},
+		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, CommandLine: []string{"recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, RetryableFailed: 1, Status: "partial"},
 	}
 	items := []JobItem{
 		{Index: 0, Input: "/music/a.mp3", State: "done", Result: json.RawMessage(`{"artist":"Massive Attack","title":"Teardrop","song_link":"https://lis.tn/Teardrop"}`)},
 		{Index: 1, Input: "/music/mix.mp3", State: "done", Result: json.RawMessage(`[{"artist":"Daft Punk","title":"One More Time","start_seconds":0,"end_seconds":36},{"artist":"Daft Punk","title":"Aerodynamic","start_seconds":36,"end_seconds":72}]`)},
-		{Index: 2, Input: "/music/c.mp3", State: "failed", Err: "the connection was reset after upload"},
+		{Index: 2, Input: "/music/c.mp3", State: "failed", Err: "the connection was reset after upload", ErrCode: "network"},
 	}
 	return ExplorerData{
 		Recent:   func(ctx context.Context, limit int) ([]RecentItem, error) { return recent, nil },
@@ -154,7 +154,7 @@ func TestExplorerJobsTab(t *testing.T) {
 	m := explorerModel(t, "jobs", &fakeStreamsAPI{})
 	view := runModelUntil(t, m, "k3x9", "Teardrop", key("enter"))
 	testutil.Golden(t, "explorer_job_items", []byte(view))
-	if !strings.Contains(view, "2 matches") || !strings.Contains(view, "Error: the connection was reset") {
+	if !strings.Contains(view, "2 matches") || !strings.Contains(view, "Error: The connection was reset") {
 		t.Fatalf("items:\n%s", view)
 	}
 
@@ -192,7 +192,7 @@ func TestExplorerStreamsTab(t *testing.T) {
 	m := explorerModel(t, "streams", api)
 	view := runModel(t, m, "Feeling Good")
 	testutil.Golden(t, "explorer_streams", []byte(view))
-	if !strings.Contains(view, "Can't connect (650)") {
+	if !strings.Contains(view, "No connection") {
 		t.Fatalf("health column:\n%s", view)
 	}
 
@@ -278,14 +278,16 @@ func TestExplorerExport(t *testing.T) {
 	m := explorerModel(t, "recent", &fakeStreamsAPI{})
 	m.Update(m.load(tabRecent, m.top())())
 	m.key(key("e"))
-	m.key(key("c"))
+	_, cmd := m.key(key("c"))
+	runAll(cmd)
 	m.key(key("e"))
-	m.key(key("j"))
+	_, cmd = m.key(key("j"))
+	runAll(cmd)
 	csvB, err := os.ReadFile(filepath.Join(dir, "audd-recent-20261008-120000.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(csvB), "When,Song,Album,Source\nOct 08 11:00,Imagine Dragons — Warriors,Warriors,warriors.mp3\n") {
+	if !strings.HasPrefix(string(csvB), "When,Song,Album,Source\nOct 8 11:00,Imagine Dragons — Warriors,Warriors,warriors.mp3\n") {
 		t.Fatalf("csv:\n%s", csvB)
 	}
 	jsonB, err := os.ReadFile(filepath.Join(dir, "audd-recent-20261008-120000.json"))
@@ -379,7 +381,8 @@ func TestExplorerUsageCSVExport(t *testing.T) {
 	m := explorerModel(t, "usage", &fakeStreamsAPI{})
 	m.Update(m.load(tabUsage, nil)())
 	m.key(key("e"))
-	m.key(key("c"))
+	_, cmd := m.key(key("c"))
+	runAll(cmd)
 	b, err := os.ReadFile(filepath.Join(dir, "audd-usage-20261008-120000.csv"))
 	if err != nil {
 		t.Fatal(err)
@@ -425,5 +428,18 @@ func TestExplorerResumeUsesTheCommandContext(t *testing.T) {
 	cancel()
 	if got == nil || got.Err() == nil {
 		t.Fatal("the resumed job does not see Ctrl-C")
+	}
+}
+
+// runAll runs a command and the commands it batches (an export writes
+// its file in one), dropping the messages.
+func runAll(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if b, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range b {
+			runAll(c)
+		}
 	}
 }

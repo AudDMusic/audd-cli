@@ -124,6 +124,9 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 		case "esc":
 			p.pasting = false
 			return nil
+		case "ctrl+u":
+			p.pasteIn.SetValue("")
+			return nil
 		case "enter":
 			p.pasting = false
 			v := strings.TrimSpace(p.pasteIn.Value())
@@ -142,10 +145,7 @@ func (p *cmdPanel) key(k tea.KeyMsg, h int) tea.Cmd {
 		u := pendingURL(p.pending)
 		switch s {
 		case "o":
-			if err := openURL(u); err != nil {
-				return p.h.setFlash("Could not open the browser: " + err.Error())
-			}
-			return p.h.setFlash("Opened " + u)
+			return p.h.openLink(u)
 		case "c":
 			return p.h.copy(u, "the sign-in address")
 		case "p":
@@ -170,7 +170,7 @@ func (p *cmdPanel) text(w int) string {
 	if p.running && p.pending != nil {
 		t := pendingText(st, p.pending, w)
 		if p.pasting {
-			t += "\n\n" + p.pasteIn.View()
+			t += "\n\n" + inputView(p.pasteIn, p.h.color)
 		}
 		return t
 	}
@@ -213,13 +213,22 @@ func (p *cmdPanel) resultText(res runResult, w int) string {
 
 // errorText is an error as the command line shows it, for a pane.
 func errorText(st output.Styles, e *runError, w int) string {
+	if e.Code == "declined" {
+		// Answering no is not an error; the status line says so.
+		return ""
+	}
+	// Normal states are not errors: they say what to do, and the page
+	// has the buttons for it.
+	switch e.Code {
+	case "no_token":
+		return "No API token yet.\n" + styleLines(st.Dim, output.Wrap(noTokenChoices, w))
+	case "no_streams":
+		return "No streams yet.\n" + styleLines(st.Dim, output.Wrap("Add one with the Add a stream button below.", w))
+	}
 	var b strings.Builder
-	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+e.Message, w)))
-	if e.Hint != "" {
-		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
-		if strings.HasPrefix(e.Hint, "audd ") {
-			b.WriteString("\n" + st.Dim.Render("Press enter to open it."))
-		}
+	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+capFirst(e.Message), w)))
+	if h := humanHint(e.Hint); h != "" {
+		b.WriteString("\n" + output.Wrap(h, w))
 	}
 	return b.String()
 }
@@ -261,3 +270,85 @@ func pendingURL(doc map[string]any) string {
 }
 
 func spaced(code string) string { return strings.Join(strings.Split(code, ""), " ") }
+
+// capFirst starts a message with a capital letter.
+func capFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	return strings.ToUpper(string(r[0])) + string(r[1:])
+}
+
+// hintKind sorts a command's hint into what the page can do about it:
+// "signin" (sign in), "token" (set an API token), or "" (say it).
+func hintKind(hint string) string {
+	h := strings.ToLower(hint)
+	switch {
+	case strings.Contains(h, "audd login"), strings.Contains(h, "sign in"):
+		return "signin"
+	case strings.Contains(h, "--token"), strings.Contains(h, "audd_api_token"), strings.Contains(h, "config set token"), strings.Contains(h, "api token"):
+		return "token"
+	}
+	return ""
+}
+
+// humanHint says a command's hint in the page's words: what to do, not
+// the command line (a command with no button here is named as one to
+// run in a terminal).
+func humanHint(hint string) string {
+	switch hintKind(hint) {
+	case "signin":
+		return "Sign in first: Account › Sign in."
+	case "token":
+		return "Set an API token first: Account › API token, or sign in."
+	}
+	switch {
+	case hint == "":
+		return ""
+	case strings.Contains(hint, "jobs resume") || strings.Contains(hint, "jobs show"):
+		return "" // the page's buttons do it (Retry, the job's files)
+	case strings.HasPrefix(hint, "audd "):
+		// A command this app has a page for: the page.
+		for cmd, page := range hintPages {
+			if strings.HasPrefix(hint, cmd) {
+				return "See " + page + "."
+			}
+		}
+		return "In a terminal: " + hint
+	}
+	return capFirst(strings.TrimSuffix(hint, ".")) + "."
+}
+
+// hintButtons are the buttons for an error's hint (see hintKind).
+func (h *home) hintButtons(e *runError, next func() tea.Cmd, test bool) []button {
+	if e == nil {
+		return nil
+	}
+	if e.Code == "no_token" {
+		return h.tokenWays(test, next)
+	}
+	switch hintKind(e.Hint) {
+	case "signin":
+		ways := h.tokenWays(false, next)
+		return ways[len(ways)-1:]
+	case "token":
+		return h.tokenWays(test, next)
+	}
+	return nil
+}
+
+// hintPages are the pages that do what a hint's command does.
+var hintPages = map[string]string{
+	"audd jobs list":        "Recognitions › Jobs",
+	"audd streams list":     "Streams",
+	"audd streams history":  "Streams › History & reports",
+	"audd streams report":   "Streams › History & reports",
+	"audd usage":            "Account › Usage",
+	"audd billing":          "Account › Billing",
+	"audd streams add":      "Streams › Add a stream",
+	"audd streams callback": "Streams › Callback",
+	"audd streams recorder": "Streams › Recorder",
+	"audd config":           "Settings",
+	"audd token":            "Account › API token",
+}

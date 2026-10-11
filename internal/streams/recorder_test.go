@@ -517,8 +517,10 @@ func TestRecorderOutageLongerThanRecentWindowIsAGap(t *testing.T) {
 func TestRecorderOutageFilledByBackfillIsNoGap(t *testing.T) {
 	// The reconnect backfill reaches back past the outage (to 10:40 UTC).
 	gaps := outage(t, "2026-10-08 13:40:00")
-	if len(gaps) != 1 || !gaps[0].To.Equal(time.Date(2026, 10, 8, 10, 30, 0, 0, time.UTC)) {
-		t.Fatalf("only the time before the first backfill is a gap: %+v", gaps)
+	// The time before the first backfill is before recording started: not
+	// a gap either.
+	if len(gaps) != 0 {
+		t.Fatalf("no gaps: %+v", gaps)
 	}
 }
 
@@ -634,6 +636,10 @@ func TestRecorderForSomeStreamsLeavesTheOthersAsGaps(t *testing.T) {
 	}
 	if last, _ := h.store.LastHeartbeat(1); !last.IsZero() {
 		t.Fatalf("stream 1 was not recorded, yet has a heartbeat at %v", last)
+	}
+	// Stream 2 was recorded from since on: stream 1 was missed all along.
+	if err := h.store.Cover(since, time.Now(), 2); err != nil {
+		t.Fatal(err)
 	}
 	gaps, _ := h.store.Gaps(since, 1)
 	if len(gaps) != 1 || g0(gaps).To.Before(time.Now().Add(-time.Minute)) {

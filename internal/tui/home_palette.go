@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/AudDMusic/audd-cli/internal/agent"
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
 
@@ -141,12 +144,24 @@ func newCmdForm(info cmdInfo) (*cmdForm, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s --%s: no form field for flag type %s", c.CommandPath(), fl.Name, fl.Value.Type())
 		}
-		help := fl.Usage
+		// A plain label; the flag itself is in the help, and on the
+		// command line at the bottom.
+		help := capFirst(fl.Usage) + " (--" + fl.Name + ")"
+		label := plainName(fl.Name)
+		if l, ok := flagLabels[info.path+" --"+fl.Name]; ok {
+			label = l
+		}
 		var f *field
 		if choices := flagChoices(c, fl.Name); kind == fText && len(choices) > 0 {
-			f = enumField("flag:"+fl.Name, "--"+fl.Name, help, choices)
+			f = enumField("flag:"+fl.Name, label, help, choices)
 		} else {
-			f = &field{kind: kind, name: "flag:" + fl.Name, label: "--" + fl.Name, help: help, input: newInput()}
+			f = &field{kind: kind, name: "flag:" + fl.Name, label: label, help: help, input: newInput()}
+		}
+		if key := configKeys[fl.Name]; key != "" && kind != fBool {
+			// The value in effect when the flag is left out.
+			if v, _ := config.SettingSource(&config.Profile{}, key, os.Getenv); v != "" {
+				f.placeholder = "default: " + v
+			}
 		}
 		if r, ok := fl.Annotations[cobra.BashCompOneRequiredFlag]; ok && len(r) > 0 && r[0] == "true" {
 			f.required = true
@@ -163,6 +178,9 @@ func newCmdForm(info cmdInfo) (*cmdForm, error) {
 			// A required flag has no usable default: the user types it.
 			f.def = ""
 		case kind == fList && (f.def == "[]" || f.def == ""):
+			f.def = ""
+		case f.placeholder != "" && (fl.DefValue == "0" || fl.DefValue == ""):
+			// Left empty: the setting's value applies (the placeholder).
 			f.def = ""
 		default:
 			f.setValue(fl.DefValue)
@@ -231,7 +249,7 @@ func interactiveTarget(path string) string {
 	case "now-playing", "streams watch":
 		return "now-playing"
 	case "browse", "jobs browse":
-		return "history"
+		return "recognitions"
 	case "login", "auth login":
 		return "signin"
 	case "listen":
@@ -248,12 +266,30 @@ type palette struct {
 	picker *picker
 	phase  string // "list", "form", "result"
 	cf     *cmdForm
-	panel  *cmdPanel
-	tree   *jsonTree
-	argv   []string
+	// forms keeps each command's form, so leaving a form and coming
+	// back keeps what was typed.
+	forms map[string]*cmdForm
+	panel *cmdPanel
+	tree  *jsonTree
+	argv  []string
+	// bs: enterprise matches, a list to move through.
+	bs *batchState
 }
 
 func newPalette(h *home) *palette { return &palette{h: h, phase: "list", panel: newPanel(h)} }
+
+// paletteOrder is the order of the palette's list, by top-level command.
+var paletteOrder = []string{"recognize", "listen", "streams", "now-playing", "usage", "jobs", "browse", "catalog", "login", "account", "billing", "token", "auth", "config", "cache", "version", "update", "api", "docs", "commands", "agent-setup", "mcp", "ui", "completion"}
+
+func paletteRank(path string) int {
+	top, _, _ := strings.Cut(path, " ")
+	for i, c := range paletteOrder {
+		if c == top {
+			return i
+		}
+	}
+	return len(paletteOrder) - 2 // unknown: before ui and completion
+}
 
 func (p *palette) title() string { return "Commands" }
 
@@ -267,9 +303,13 @@ func (p *palette) load() {
 	items := make([]pickItem, 0, len(p.cmds))
 	for _, c := range p.cmds {
 		if c.cmd.Runnable() {
-			items = append(items, pickItem{title: c.path, desc: c.cmd.Short, value: c.path})
+			more := c.cmd.Long + " " + strings.Join(c.cmd.Aliases, " ")
+			c.cmd.Flags().VisitAll(func(fl *pflag.Flag) { more += " --" + fl.Name + " " + fl.Usage })
+			items = append(items, pickItem{title: c.path, desc: c.cmd.Short, value: c.path, more: more})
 		}
 	}
+	// Most used first; scripting and setup commands last.
+	sort.SliceStable(items, func(i, j int) bool { return paletteRank(items[i].value) < paletteRank(items[j].value) })
 	p.picker = newPicker(items)
 	p.picker.h = p.h
 	p.picker.click = func(i int) tea.Cmd {
@@ -337,6 +377,12 @@ func (p *palette) openForm(path string) tea.Cmd {
 		p.picker.filter.SetValue(path)
 		return nil
 	}
+	if cf := p.forms[path]; cf != nil {
+		p.cf = cf
+		p.phase = "form"
+		cf.form.focus()
+		return nil
+	}
 	cf, err := newCmdForm(info)
 	if err != nil {
 		p.phase = "list"
@@ -344,9 +390,13 @@ func (p *palette) openForm(path string) tea.Cmd {
 	}
 	p.cf = cf
 	cf.form.h = p.h
+	cf.form.inPalette = true
+	if p.forms == nil {
+		p.forms = map[string]*cmdForm{}
+	}
+	p.forms[path] = cf
 	p.phase = "form"
-	cf.form.cursor = 0
-	cf.form.focus()
+	cf.form.focusStart()
 	return nil
 }
 
@@ -423,10 +473,19 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		return p.picker.filter.Focus()
 	}
 	if mine, done := p.panel.handle(msg); mine {
+		if done && p.panel.res.err != nil && p.panel.res.err.Code == "declined" {
+			// Cancelled at the confirmation: back to the form, as it was.
+			p.phase = "form"
+			return p.h.setFlash("Cancelled. Nothing was sent.")
+		}
 		if done {
 			p.phase = "result"
-			p.tree = nil
+			p.tree, p.bs = nil, nil
 			if p.panel.res.err == nil {
+				if ms := enterpriseMatches(parseDoc(p.panel.res.stdout)); len(ms) > 0 && p.recognition() != nil {
+					p.bs = &batchState{selectable: true, results: ms, title: output.Plural(len(ms), "match")}
+					return nil
+				}
 				if _, ok := p.rendered(p.panel.res.stdout, 80); !ok && strings.HasPrefix(strings.TrimSpace(p.panel.res.stdout), "{") {
 					p.tree = newJSONTree(p.panel.res.stdout)
 				}
@@ -444,6 +503,9 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 	_, ht := p.h.contentSize()
 	switch p.phase {
 	case "list":
+		if k.String() == "enter" && p.picker.selected() == nil {
+			return p.h.setFlash("No command matches; keep typing or esc")
+		}
 		picked, cmd := p.picker.update(k)
 		if picked {
 			return p.openForm(p.picker.selected().value)
@@ -452,6 +514,17 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 	case "form":
 		act, cmd := p.cf.form.update(k)
 		if act == "run" {
+			if c, ok := destructive[p.cf.info.path]; ok {
+				return p.h.askFirst(&confirmState{
+					owner:    "palette",
+					question: c[0],
+					action:   c[2],
+					notes:    []string{c[1]},
+					command:  displayCommand(p.cf.argv()),
+					cancel:   "Cancelled. Nothing was sent.",
+					yes:      p.run,
+				})
+			}
 			return p.run()
 		}
 		return cmd
@@ -464,6 +537,25 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		}
 		return p.panel.key(k, ht)
 	}
+	if p.bs != nil {
+		switch k.String() {
+		case "up", "down":
+			if !p.bs.detail {
+				p.bs.move(map[string]int{"up": -1, "down": 1}[k.String()])
+			}
+			return nil
+		case "enter", "right":
+			p.bs.detail = p.bs.selected() != nil
+			return nil
+		case "o", "c":
+			for _, b := range p.h.batchButtons(&batchState{detail: true, results: []map[string]any{p.bs.selected()}}) {
+				if b.key == k.String() {
+					return b.do()
+				}
+			}
+			return p.h.setFlash("No link for this match")
+		}
+	}
 	if p.tree != nil && p.tree.key(k.String(), ht) {
 		return nil
 	}
@@ -475,6 +567,16 @@ func (p *palette) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return p.panel.key(k, ht)
+}
+
+// destructive are the commands the palette asks about first, with what
+// they do; commands that ask on their own (spending, rotating the
+// token) ask through their own confirmation.
+var destructive = map[string][3]string{
+	"cache clear":          {"Clear the cache?", "Every cached result is deleted; recognizing the same files again uses requests.", "Clear the cache"},
+	"streams callback set": {"Change the callback URL?", "AudD sends every result of every stream on your account to the new address.", "Change the callback URL"},
+	"auth logout":          {"Sign out?", "The saved sign-in and API token of this profile are removed from this computer.", "Sign out"},
+	"config unset":         {"Unset the setting?", "It goes back to its default.", "Unset"},
 }
 
 func (p *palette) run() tea.Cmd {
@@ -490,7 +592,13 @@ func (p *palette) run() tea.Cmd {
 		return s
 	}
 	p.panel.live = p.live
-	return p.panel.start(runReq{args: p.argv, stream: true, spends: true})
+	format := ""
+	if tableCommand(p.cf.info.path) {
+		// Shown as the command shows it on a terminal: sentences and
+		// tables, not raw fields.
+		format = "table"
+	}
+	return p.panel.start(runReq{args: p.argv, stream: true, spends: true, format: format})
 }
 
 // live shows a run's output as it arrives.
@@ -586,16 +694,23 @@ func (p *palette) view(w, h int) string {
 	p.load()
 	switch p.phase {
 	case "list":
-		return st.Bold.Render("Run a command") + "\n" + p.picker.view(w, h-1, st, p.h.color)
+		return st.Bold.Render("Run a command") + "\n" + p.picker.view(w, h-1, st, p.h.color, p.h.hasKeys(true))
 	case "form":
 		var b strings.Builder
 		c := p.cf.info.cmd
 		b.WriteString(st.Bold.Render("audd "+p.cf.info.path) + "  " + st.Dim.Render(c.Short) + "\n\n")
 		b.WriteString(p.cf.form.view(w, st, p.h.color))
-		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("* required. The command runs as shown at the bottom; it asks here before anything that needs a confirmation.", w)))
+		note := "The command runs as shown at the bottom; it asks here before anything that needs a confirmation."
+		if p.cf.form.hasRequired() {
+			note = "* required. " + note
+		}
+		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap(note, w)))
 		return b.String()
 	}
 	head := st.Dim.Render(truncate("$ "+displayCommand(p.argv), w)) + "\n\n"
+	if p.bs != nil && !p.panel.running {
+		return head + p.h.batchPage(p.bs, w, h-2)
+	}
 	if p.tree != nil && !p.panel.running {
 		return head + p.tree.view(w, h-2, st)
 	}
@@ -605,18 +720,40 @@ func (p *palette) view(w, h int) string {
 func (p *palette) keys() []keyHelp {
 	switch p.phase {
 	case "list":
-		return []keyHelp{{"type", "filter"}, {"↑/↓", "choose"}, {"enter", "open"}, {"esc", "close"}}
+		esc := keyHelp{"esc", "close"}
+		if p.picker != nil && p.picker.filter.Value() != "" {
+			esc = keyHelp{"esc", "clear the filter"}
+		}
+		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"enter", "open"}, esc}
 	case "form":
-		return []keyHelp{{"↑/↓", "field"}, {"space", "toggle"}, {"enter", "next / run"}, {"esc", "back"}}
+		return append(p.cf.form.rowKeys("run"), keyHelp{"esc", "back to the list"})
 	}
 	if p.panel.running {
-		return []keyHelp{{"s", "stop"}}
+		return []keyHelp{{"↑/↓", "scroll"}, {"s", "stop"}}
 	}
-	k := []keyHelp{{"r", "run again"}, {"e", "edit"}, {"esc", "back"}}
+	k := []keyHelp{{"↑/↓", "move"}, {"r", "run again"}, {"e", "edit"}}
+	if p.bs != nil {
+		k = []keyHelp{{"↑/↓", "move"}, {"enter", "details"}, {"o", "open the song link"}, {"c", "copy the song link"}, {"r", "run again"}}
+		if p.bs.detail {
+			k = []keyHelp{{"o", "open the song link"}, {"c", "copy the song link"}, {"esc", "back to the list"}}
+		}
+	}
 	if p.tree != nil {
 		k = append([]keyHelp{{"enter", "fold"}}, k...)
 	}
 	return k
+}
+
+// crumbs: the command, then its result.
+func (p *palette) crumbs() []string {
+	if p.cf == nil || p.phase == "list" {
+		return nil
+	}
+	out := []string{"audd " + p.cf.info.path}
+	if p.phase == "result" {
+		out = append(out, "Result")
+	}
+	return out
 }
 
 func (p *palette) command() string {
@@ -648,6 +785,10 @@ func (p *palette) capturing() bool {
 func (p *palette) back() bool {
 	switch p.phase {
 	case "result":
+		if p.bs != nil && p.bs.detail {
+			p.bs.detail = false
+			return true
+		}
 		if p.panel.back() {
 			return true
 		}
@@ -657,11 +798,16 @@ func (p *palette) back() bool {
 		p.phase = "form"
 		return true
 	case "form":
+		// Back to the whole list (what was typed stays in the form):
+		// one more esc closes the palette.
 		p.phase = "list"
+		p.picker.filter.SetValue("")
+		p.picker.cursor = 0
 		return true
 	}
 	if p.picker.filter.Value() != "" {
 		p.picker.filter.SetValue("")
+		p.picker.cursor = 0
 		return true
 	}
 	return false
@@ -698,4 +844,41 @@ func splitCommandLine(s string) []string {
 		out = append(out, cur.String())
 	}
 	return out
+}
+
+// tableCommand reports whether a command's own terminal output reads
+// better than its JSON (account, usage, billing, cache, config, lists).
+func tableCommand(path string) bool {
+	for _, p := range []string{"usage", "account", "billing", "cache", "config", "auth status", "token show", "jobs list", "jobs show", "streams list", "streams history", "streams report", "streams recorder", "streams callback get", "version", "doctor"} {
+		if path == p || strings.HasPrefix(path, p+" ") {
+			return true
+		}
+	}
+	return false
+}
+
+// configKeys are the flags a setting gives a default to.
+var configKeys = map[string]string{"concurrency": "concurrency", "max-requests": "max_requests", "format": "format"}
+
+// plainName is a flag or argument name as a label: "max-files" is "Max
+// files", "id" is "ID".
+func plainName(name string) string {
+	words := strings.FieldsFunc(name, func(r rune) bool { return r == '-' || r == '_' || r == '|' || r == '.' })
+	for i, w := range words {
+		switch w {
+		case "id", "url", "isrc", "upc", "api":
+			words[i] = strings.ToUpper(w)
+		}
+	}
+	if len(words) == 0 {
+		return name
+	}
+	words[0] = capFirst(words[0])
+	return strings.Join(words, " ")
+}
+
+// flagLabels name flags whose names alone say little, in plain words.
+var flagLabels = map[string]string{
+	"usage --check":         "Exit with an error if few remain",
+	"usage --min-remaining": "Fewest requests to remain",
 }

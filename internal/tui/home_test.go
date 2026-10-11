@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -149,6 +150,7 @@ type homeOpts struct {
 	signedOut bool // no API token
 	loggedIn  bool // signed in to the account
 	start     string
+	tip       bool // show the first-run tip (hidden in other tests)
 }
 
 // newTestHome is interactive mode over fakes: f answers the runs.
@@ -167,11 +169,21 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	t.Cleanup(func() { NewExplorerData, NewFeed = oldData, oldFeed })
 	testutil.Isolate(t)
 	t.Setenv("AUDD_NO_BACKGROUND_RECORDER", "1")
+	// The files the tests type in Recognize are there, as they would be.
+	work := t.TempDir()
+	for _, name := range []string{"song.mp3", "a.mp3", "b.mp3", "mix.mp3", "x.mp3", "song3.mp3"} {
+		os.WriteFile(filepath.Join(work, name), []byte("audio"), 0o644)
+	}
+	t.Chdir(work)
+	oldDelay := countDelay
+	countDelay = time.Millisecond
+	t.Cleanup(func() { countDelay = oldDelay })
 
 	var out, errb bytes.Buffer
 	a := npApp(&out, &errb, output.PrinterOptions{Format: output.FormatTable, StdoutTTY: true, StdinTTY: true, NoColor: true})
 	a.Cfg = config.Defaults(filepath.Join(t.TempDir(), "config.toml"))
 	a.Profile = a.Cfg.Profile("default")
+	a.Profile.UITipSeen = !o.tip
 	mem := secrets.NewMemory()
 	if !o.signedOut {
 		mem.Set("default", "api_token", "0123456789abcdef0123456789abcdef")
@@ -199,6 +211,9 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	if isListen(o.start) {
 		h.useMic()
 	}
+	// Runs still going (a recorder status read) end before the fakes are
+	// put back.
+	t.Cleanup(func() { h.waitRuns(5 * time.Second) })
 	return h
 }
 
@@ -321,7 +336,14 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 	select {
 	case msg = <-done:
 	case <-time.After(time.Second):
-		return // a tick or a long wait
+		// A tick or a long wait: what it returns later can be read with
+		// pump.
+		go func() {
+			if m := <-done; m != nil {
+				late <- lateMsg{h, m}
+			}
+		}()
+		return
 	}
 	switch m := msg.(type) {
 	case nil:
@@ -333,6 +355,37 @@ func drain(h *home, cmd tea.Cmd, depth int) {
 	default:
 		_, next := h.Update(m)
 		drain(h, next, depth+1)
+	}
+}
+
+// late are messages of commands drain stopped waiting for.
+var late = make(chan lateMsg, 1000)
+
+type lateMsg struct {
+	h   *home
+	msg tea.Msg
+}
+
+// pump applies h's late messages until until reports true (or a few
+// seconds pass).
+func pump(h *home, until func() bool) {
+	deadline := time.After(5 * time.Second)
+	for !until() {
+		select {
+		case m := <-late:
+			if m.h != h {
+				late <- m
+				time.Sleep(time.Millisecond)
+				continue
+			}
+			if _, isTick := m.msg.(clearHomeFlashMsg); isTick {
+				continue
+			}
+			_, next := h.Update(m.msg)
+			drain(h, next, 1)
+		case <-deadline:
+			return
+		}
 	}
 }
 
@@ -369,8 +422,12 @@ func TestHomeShellNavigation(t *testing.T) {
 		t.Fatalf("? shows the keys:\n%s", h.View())
 	}
 	press(h, key("x"))
+	if !h.keysO || !strings.Contains(h.View(), "x does nothing here") {
+		t.Fatal("the keys are a page: other keys say they do nothing")
+	}
+	press(h, key("esc"))
 	if h.keysO {
-		t.Fatal("any key closes the keys")
+		t.Fatal("esc closes the keys")
 	}
 	_, cmd := h.Update(key("q"))
 	if cmd == nil {
@@ -411,14 +468,18 @@ func ctrlK() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlK} }
 func TestLeftReturnsToSidebar(t *testing.T) {
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{}), 120, 40)
 	press(h, key("esc"))
-	for _, id := range []string{"recognize", "now-playing", "history", "streams", "account", "settings", "help"} {
+	for _, id := range []string{"recognize", "now-playing", "recognitions", "streams", "account", "settings", "help"} {
 		h.show(id, false)
 		h.focus = focusSidebar
 		press(h, key("right"))
-		if h.focus != focusContent {
+		if h.focus == focusSidebar {
 			t.Fatalf("%s: right opens the section", id)
 		}
 		press(h, key("left"))
+		if id == "recognize" {
+			// The cursor is in Input: left first leaves the field.
+			press(h, key("left"))
+		}
 		if h.focus != focusSidebar {
 			t.Fatalf("%s: left right after right goes back to the sidebar", id)
 		}
@@ -430,8 +491,8 @@ func TestLeftReturnsToSidebar(t *testing.T) {
 	if h.focus != focusContent {
 		t.Fatal("left inside typed text stays in the field")
 	}
-	press(h, key("left"), key("left"))
+	press(h, key("left"), key("left"), key("left"))
 	if h.focus != focusSidebar {
-		t.Fatal("left at the start of the field goes back to the sidebar")
+		t.Fatal("left at the start of the field leaves it, then goes back to the sidebar")
 	}
 }

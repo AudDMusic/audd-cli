@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"github.com/AudDMusic/audd-cli/internal/jobs"
 	"time"
 
 	"github.com/AudDMusic/audd-go"
@@ -28,16 +29,29 @@ type JobRow struct {
 	Total   int       `json:"total"`
 	Done    int       `json:"done"`
 	Failed  int       `json:"failed"`
-	Status  string    `json:"status"`
+	Pending int       `json:"pending"` // not sent yet: what Resume sends
+	Inputs  string    `json:"inputs"`  // what was recognized, in short: "music", "a.mp3 and 2 more"
+	// CommandLine is the command as typed (empty for older jobs).
+	CommandLine []string `json:"command_line,omitempty"`
+	// RetryableFailed counts the failures a retry can fix (network,
+	// server, rate limit, quota); FailReason is why one of the others
+	// failed (bad audio, an unsupported file).
+	RetryableFailed int    `json:"retryable_failed"`
+	FailReason      string `json:"fail_reason,omitempty"`
+	// Failures names each failed file and why ("c.mp3: the connection
+	// was reset"), with whether a retry can fix it.
+	Failures []JobFailure `json:"failures,omitempty"`
+	Status   string       `json:"status"`
 }
 
 // JobItem is one input of a batch job.
 type JobItem struct {
-	Index  int             `json:"index"`
-	Input  string          `json:"input"`
-	State  string          `json:"state"` // pending, done, failed
-	Result json.RawMessage `json:"result,omitempty"`
-	Err    string          `json:"error,omitempty"`
+	Index   int             `json:"index"`
+	Input   string          `json:"input"`
+	State   string          `json:"state"` // pending, done, failed
+	Result  json.RawMessage `json:"result,omitempty"`
+	Err     string          `json:"error,omitempty"`
+	ErrCode string          `json:"error_code,omitempty"`
 }
 
 // ExplorerData supplies the explorer's tabs. A nil source shows a short
@@ -96,4 +110,24 @@ func DefaultExplorerData(a *app.App) (ExplorerData, error) {
 	}
 	d.Feed = f
 	return d, nil
+}
+
+// RetryHelps reports whether retrying a file that failed with this error
+// code can work (see jobs.RetryHelps).
+func RetryHelps(code string) bool { return jobs.RetryHelps(code) }
+
+// JobFailure is a failed file of a job.
+type JobFailure struct {
+	File, Reason string
+	CanRetry     bool
+}
+
+// BatchCommand is the job's command to show and copy: as it was typed,
+// or, for a job that only has the expanded list of files, the command
+// that continues it.
+func (j JobRow) BatchCommand() string {
+	if len(j.CommandLine) > 0 {
+		return displayCommand(j.CommandLine)
+	}
+	return "audd jobs resume " + j.ID
 }

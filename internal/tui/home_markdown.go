@@ -156,7 +156,7 @@ func renderMarkdown(md string, w int, st output.Styles) ([]string, []mdHeading) 
 			first, indent = "• ", "  "
 			text = text[2:]
 		}
-		lines := strings.Split(output.Wrap(inlineMD(text, st), max(10, w-len(indent))), "\n")
+		lines := hardWrap(strings.Split(output.Wrap(inlineMD(text, st), max(10, w-len(indent))), "\n"), max(10, w-len(indent)))
 		for i, l := range lines {
 			if i == 0 {
 				out = append(out, first+l)
@@ -174,7 +174,9 @@ func renderMarkdown(md string, w int, st output.Styles) ([]string, []mdHeading) 
 			continue
 		}
 		if inCode {
-			out = append(out, st.Dim.Render("  "+line))
+			for _, l := range hardWrap([]string{"  " + line}, w) {
+				out = append(out, st.Dim.Render(l))
+			}
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
@@ -218,4 +220,18 @@ func renderMarkdown(md string, w int, st output.Styles) ([]string, []mdHeading) 
 	}
 	flush()
 	return out, heads
+}
+
+// hardWrap breaks lines still wider than w (a long URL) instead of
+// cutting them.
+func hardWrap(lines []string, w int) []string {
+	var out []string
+	for _, l := range lines {
+		if ansi.StringWidth(l) <= w {
+			out = append(out, l)
+			continue
+		}
+		out = append(out, strings.Split(ansi.Hardwrap(l, w, true), "\n")...)
+	}
+	return out
 }

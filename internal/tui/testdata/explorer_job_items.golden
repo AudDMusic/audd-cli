@@ -1,8 +1,9 @@
  1 Recent  [2 Jobs]  3 Streams   4 Usage                                                 audd browse
+$ audd recognize ./music --max-files 10
   #      State     Input                           Result
-> 1      done      a.mp3                           Massive Attack — Teardrop
+› 1      done      a.mp3                           Massive Attack — Teardrop
   2      done      mix.mp3                         2 matches
-  3      failed    c.mp3                           Error: the connection was reset after upload
+  3      failed    c.mp3                           Error: The connection was reset after upload
 
 
 
@@ -25,6 +26,5 @@
 
 
 
-
-Job k3x9 · 3
+Job k3x9 · 3 files
 ↑/↓ move  enter open  / filter  o open  c copy  r resume  R retry failed  e export  tab next  ? hel…

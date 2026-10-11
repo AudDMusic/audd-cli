@@ -78,8 +78,8 @@ remain, for cron jobs and CI. Needs audd login.`,
 		},
 	}
 	cmd.Flags().IntVar(&days, "days", 30, "days of per-day history to show")
-	cmd.Flags().BoolVar(&check, "check", false, "exit with code 8 when fewer than --min-remaining requests remain (needs --min-remaining)")
-	cmd.Flags().IntVar(&minRemaining, "min-remaining", 0, "with --check, the fewest remaining requests that pass")
+	cmd.Flags().BoolVar(&check, "check", false, "exit with an error (code 8) when fewer than --min-remaining requests remain")
+	cmd.Flags().IntVar(&minRemaining, "min-remaining", 0, "with --check: exit with an error when fewer than this many requests remain")
 	return cmd
 }
 

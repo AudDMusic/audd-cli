@@ -7,6 +7,9 @@ import (
 )
 
 func (m *npModel) setFlash(s string) tea.Cmd {
+	if m.flashTo != nil {
+		return m.flashTo(s)
+	}
 	m.flash = s
 	m.flashN++
 	id := m.flashN
@@ -40,12 +43,21 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.help = true
 	case "right", "l", "tab":
-		if len(m.stations) > 0 {
+		switch {
+		case len(m.stations) == 0:
+		case !m.embedded:
 			m.sel = (m.sel + 1) % len(m.stations)
+		case m.sel+1 < len(m.stations):
+			// Embedded: the next stream, in every view; no wrapping.
+			m.sel++
 		}
 	case "left", "shift+tab":
-		if len(m.stations) > 0 {
+		switch {
+		case len(m.stations) == 0:
+		case !m.embedded:
 			m.sel = (m.sel + len(m.stations) - 1) % len(m.stations)
+		case m.sel > 0:
+			m.sel--
 		}
 	case "down", "j":
 		if !m.single() {
@@ -80,9 +92,11 @@ func (m *npModel) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		if s := m.current(); s != nil && len(s.Plays) > 0 && s.Plays[0].SongLink != "" {
 			if err := openURL(s.Plays[0].SongLink); err != nil {
-				return m, m.setFlash("Could not open the browser: " + err.Error())
+				m.osc = oscCopy(s.Plays[0].SongLink)
+				return m, tea.Batch(m.setFlash(noBrowser),
+					tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearCopyMsg{} }))
 			}
-			return m, m.setFlash("Opened " + s.Plays[0].SongLink)
+			return m, m.setFlash("Opened in your browser: " + s.Plays[0].SongLink)
 		}
 		return m, m.setFlash("No link to open")
 	case "c":

@@ -78,7 +78,7 @@ func TestPaletteForm(t *testing.T) {
 	press(h, typeText("recognize")...)
 	press(h, key("enter"))
 	v := h.View()
-	for _, s := range []string{"file|url|dir|glob|-*", "--enterprise", "$ audd recognize '<file|url|dir|glob|->'"} {
+	for _, s := range []string{"file|url|dir|glob|-*", "Enterprise", "Concurrency", "default: 4", "$ audd recognize '<file|url|dir|glob|->'"} {
 		if !strings.Contains(v, s) {
 			t.Fatalf("form lacks %q:\n%s", s, v)
 		}
@@ -117,7 +117,7 @@ func TestPaletteRunsWithConfirmation(t *testing.T) {
 	})
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
 	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("streams remove"), key("enter"), "Stop monitoring a stream",
-		typeText("3"), key("enter"), "Stop monitoring stream 3?", key("y"), "removed")
+		typeText("3"), key("enter"), "Stop monitoring stream 3?", key("right"), key("enter"), "removed")
 	if !strings.Contains(v, "radio_id: 3") || !strings.Contains(v, "$ audd streams remove 3") {
 		t.Fatalf("result:\n%s", v)
 	}
@@ -128,7 +128,7 @@ func TestPaletteRecognitionAndInteractive(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("recognize song.mp3", warriorsDoc, "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
-	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("recognize"), key("enter"), "scan the whole file",
+	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("recognize"), key("enter"), "scan more of the file",
 		typeText("song.mp3"), keys("up"), key("enter"), "USUM71409990")
 	if !strings.Contains(v, "Imagine Dragons") {
 		t.Fatalf("card:\n%s", v)
@@ -178,7 +178,7 @@ func TestHelpPages(t *testing.T) {
 		for range i {
 			steps = append(steps, key("]"))
 		}
-		steps = append(steps, []string{"Getting started", "AUDD CLI", "streams add", "Everywhere", "Exit codes", "Report a problem"}[i])
+		steps = append(steps, []string{"Getting started", "Using interactive mode", "streams add", "Moving around", "Exit codes", "Report a problem"}[i])
 		snap(t, "help_"+name, func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "help"}) }, steps...)
 	}
 }
@@ -186,7 +186,7 @@ func TestHelpPages(t *testing.T) {
 func TestHelpGuideSearch(t *testing.T) {
 	useFakeTree(t)
 	h := newTestHome(t, &fakeRun{}, homeOpts{start: "help"})
-	v := drive(t, h, 120, 40, "Getting started", key("]"), "AUDD CLI", key("/"), typeText("exit codes"), key("enter"), `"exit codes"`)
+	v := drive(t, h, 120, 40, "Getting started", key("]"), "Using interactive mode", key("down"), key("/"), typeText("exit codes"), key("enter"), `"exit codes"`)
 	s := h.subs["help"].(*helpSection)
 	if s.matchN <= 0 || !strings.Contains(strings.ToLower(s.guide[s.scroll.off]), "exit codes") {
 		t.Fatalf("search did not scroll to a match (line %d):\n%s", s.scroll.off, v)
@@ -197,7 +197,8 @@ func TestHelpGettingStartedJumps(t *testing.T) {
 	useFakeTree(t)
 	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "help"}), 120, 40)
 	drain(h, h.activate(), 0)
-	press(h, key("down"), key("enter"))
+	// Help opens on its tab bar: ↓ goes into the steps, ↓ again moves.
+	press(h, key("down"), key("down"), key("enter"))
 	if h.activeID() != "recognize" || h.command() != "audd recognize https://audd.tech/example.mp3" {
 		t.Fatalf("step 2: %s %s", h.activeID(), h.command())
 	}

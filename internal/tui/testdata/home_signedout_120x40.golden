@@ -1,12 +1,13 @@
 AudD  ·  profile default  ·  signed out
-                 > Welcome to AudD
- 1 Recognize     │ 
- 2 Now playing   │ audd recognizes music in files, URLs, and from the microphone, monitors streams, and manages your
- 3 Streams       │ account. To start, choose how audd gets your API token:
- 4 History       │ 
- 5 Account       │ › Sign in
- 6 Settings      │     Sign in to your AudD account in the browser (or with a code on another device). audd saves your
- 7 Help          │     API token.
+                 > Sign in
+ 1 Recognize     │ Welcome to AudD
+ 2 Now playing   │ 
+ 3 Streams       │ Recognize music in files, URLs, and from the microphone, and monitor streams. Choose how audd gets
+ 4 Recognitions  │ your API token:
+ 5 Account       │ 
+ 6 Settings      │ › Sign in
+ 7 Help          │     Sign in to your AudD account in the browser (or with a code on another device). audd saves your
+                 │     API token.
                  │ 
                  │   Paste an API token
                  │     Use the API token from your dashboard at https://dashboard.audd.io.
@@ -14,7 +15,7 @@ AudD  ·  profile default  ·  signed out
                  │   Try with the test token
                  │     The public test token: 10 requests a day, standard endpoint only. Nothing is saved.
                  │ 
-                 │ You can also look around first: the sections on the left work once a token is set.
+                 │ You can look around first; recognizing needs a token.
                  │ 
                  │ 
                  │ 
@@ -32,9 +33,8 @@ AudD  ·  profile default  ·  signed out
                  │ 
                  │ 
                  │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
-←/esc back  ↑/↓ choose  enter go
+ [ Commands ]    │ 
+ [ Keys ] esc ←  │ 
+
+↑/↓ choose  enter go  ←/esc back  ? keys
 $ audd login --browser                                                                                            y copy

@@ -197,7 +197,17 @@ func expandOne(a string) (inputs []Input, multi bool, err error) {
 
 func walkDir(root string) ([]Input, error) {
 	var out []Input
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err := walkMedia(root, func(in Input) error { out = append(out, in); return nil })
+	if err != nil {
+		return nil, usageErr("", "cannot read folder %s: %v", root, err)
+	}
+	return out, nil
+}
+
+// walkMedia calls visit for each media file under root; an error from
+// visit stops the walk and is returned.
+func walkMedia(root string, visit func(Input) error) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if p == root {
 				return err
@@ -211,14 +221,10 @@ func walkDir(root string) ([]Input, error) {
 			return nil
 		}
 		if d.Type().IsRegular() && IsMediaFile(p) {
-			out = append(out, Input{Path: p})
+			return visit(Input{Path: p})
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, usageErr("", "cannot read folder %s: %v", root, err)
-	}
-	return out, nil
 }
 
 func hasMeta(s string) bool { return strings.ContainsAny(s, "*?[") }
@@ -226,6 +232,17 @@ func hasMeta(s string) bool { return strings.ContainsAny(s, "*?[") }
 // glob matches pattern against files, with "**" matching any number of
 // directories. Directories that match are expanded recursively.
 func glob(pattern string) ([]Input, error) {
+	var out []Input
+	if err := globMedia(pattern, func(in Input) error { out = append(out, in); return nil }); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(out, func(a, b int) bool { return out[a].Path < out[b].Path })
+	return out, nil
+}
+
+// globMedia calls visit for each media file pattern matches; an error
+// from visit stops the walk and is returned.
+func globMedia(pattern string, visit func(Input) error) error {
 	slashed := filepath.ToSlash(pattern)
 	segs := strings.Split(slashed, "/")
 	// The static prefix (segments without glob characters) is where the walk starts.
@@ -242,7 +259,7 @@ func glob(pattern string) ([]Input, error) {
 	}
 	rest := segs[i:]
 	if _, err := path.Match(strings.Join(rest, "/"), ""); err != nil {
-		return nil, usageErr("", "bad pattern %q: %v", pattern, err)
+		return usageErr("", "bad pattern %q: %v", pattern, err)
 	}
 	root := filepath.FromSlash(base)
 	allowHidden := false
@@ -251,7 +268,7 @@ func glob(pattern string) ([]Input, error) {
 			allowHidden = true
 		}
 	}
-	var out []Input
+	var stop error
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || p == root {
 			return nil
@@ -269,12 +286,17 @@ func glob(pattern string) ([]Input, error) {
 		}
 		if matchSegs(rest, parts) {
 			if d.IsDir() {
-				files, _ := walkDir(p)
-				out = append(out, files...)
+				if err := walkMedia(p, visit); err != nil && isStop(err) {
+					stop = err
+					return err
+				}
 				return filepath.SkipDir
 			}
 			if d.Type().IsRegular() && IsMediaFile(p) {
-				out = append(out, Input{Path: p})
+				if err := visit(Input{Path: p}); err != nil {
+					stop = err
+					return err
+				}
 			}
 			return nil
 		}
@@ -283,8 +305,7 @@ func glob(pattern string) ([]Input, error) {
 		}
 		return nil
 	})
-	sort.SliceStable(out, func(a, b int) bool { return out[a].Path < out[b].Path })
-	return out, nil
+	return stop
 }
 
 // matchSegs matches path segments against pattern segments ("**" = any depth).

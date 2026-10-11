@@ -31,9 +31,11 @@ Each file's result is saved as soon as it arrives, so Ctrl-C, a crash, or a
 dropped connection never loses finished work, and resuming never sends a
 finished file again.
 
-Files whose request may have reached AudD before the failure, and files
-that would fail the same way again, are not sent again automatically; resume
-with --retry-failed to send them.`,
+Files whose request may have reached AudD before the failure are not sent
+again automatically: resume with --retry-failed to send the failures a retry
+can fix (connection, server, rate limit, quota). Files that would fail the
+same way again (audio that cannot be decoded, an unsupported format) are
+sent again only with --retry-all-failed.`,
 		GroupID: GroupLocal,
 		Example: `  audd jobs list
   audd jobs show k7m2xq
@@ -175,7 +177,11 @@ func jobsShow(a *app.App, id string, failedOnly bool) error {
 		case job.Pending > 0:
 			fmt.Fprintf(w, "\nResume with: audd jobs resume %s\n", job.ID)
 		case job.Failed > 0:
-			fmt.Fprintf(w, "\nRetry the failed files with: audd jobs resume %s --retry-failed\n", job.ID)
+			can, _ := jobs.RetrySplit(items)
+			fmt.Fprintf(w, "\n%s.\n", jobs.RetryLine(items))
+			if can > 0 {
+				fmt.Fprintf(w, "Retry with: audd jobs resume %s --retry-failed\n", job.ID)
+			}
 		}
 	})
 }
@@ -210,7 +216,7 @@ job as audd jobs show does.`,
 }
 
 func newJobsResumeCmd(a *app.App) *cobra.Command {
-	var retryFailed, dryRun bool
+	var retryFailed, retryAll, dryRun bool
 	var concurrency int
 	cmd := &cobra.Command{
 		Use:   "resume <id>",
@@ -218,9 +224,11 @@ func newJobsResumeCmd(a *app.App) *cobra.Command {
 		Long: `Continue a job where it stopped. Finished files are not sent again.
 
 Files that failed before reaching AudD (a connection that never opened, a
-file that was missing) are retried automatically. Other failures, including
-files whose request may have reached AudD, are retried only with
---retry-failed.
+file that was missing) are retried automatically. --retry-failed also sends
+the failures a retry can fix (connection, server, rate limit, quota),
+including files whose request may have reached AudD. Files that would fail
+the same way again (audio that cannot be decoded, an unsupported format)
+are sent again only with --retry-all-failed.
 
 Results stream as each file finishes: with --format json or jsonl (the
 default when piped) the output is JSON lines: one "result" line per file and
@@ -235,14 +243,15 @@ a final "summary" line. For the whole job as one document, use audd jobs show.`,
 				return output.Errf(output.ExitUsage, "invalid_argument", "", "--concurrency must be 1 or more")
 			}
 			_, err := app.RunBatch(cmd.Context(), a, app.BatchOptions{
-				ResumeID: args[0], RetryFailed: retryFailed, DryRun: dryRun,
+				ResumeID: args[0], RetryFailed: retryFailed, RetryAllFailed: retryAll, DryRun: dryRun,
 				Concurrency: concurrency, Yes: a.Flags.Yes,
 			})
 			return err
 		},
 	}
 	f := cmd.Flags()
-	f.BoolVar(&retryFailed, "retry-failed", false, "also retry the other failed files, including files whose earlier request may have reached AudD")
+	f.BoolVar(&retryFailed, "retry-failed", false, "also retry the failures a retry can fix (connection, server, rate limit, quota), including files whose earlier request may have reached AudD")
+	f.BoolVar(&retryAll, "retry-all-failed", false, "retry every failed file, also those that fail the same way again (undecodable audio, an unsupported format)")
 	f.BoolVar(&dryRun, "dry-run", false, "show what resuming would send, and stop")
 	f.IntVar(&concurrency, "concurrency", 0, "parallel requests (default: the concurrency setting, else 4)")
 	return cmd

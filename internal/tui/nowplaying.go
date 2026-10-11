@@ -274,6 +274,10 @@ func lineData(s Station, p Play, now time.Time) NowPlayingLine {
 // bar is set when a progress bar can be drawn (the song plays and its length
 // is known), in which case head is just "Now playing".
 func playStatus(p Play, now time.Time) (head, detail string, bar bool) {
+	if end, ok := p.Ended(); ok && end.After(now) {
+		// Its end is still ahead: playing, not ended.
+		return "Now playing · " + clock(now.Sub(p.At)), "", false
+	}
 	switch p.State(now) {
 	case StatePlaying:
 		if p.TrackLength > 0 {
@@ -281,12 +285,12 @@ func playStatus(p Play, now time.Time) (head, detail string, bar bool) {
 		}
 		return "Now playing · " + clock(p.Elapsed(now)), "", false
 	case StateJustPlayed:
-		head = "Just played · ended " + ago(p.Ago(now))
+		head = "Just played · ended " + agoAt(p.Ago(now), now)
 	default:
 		if _, ok := p.Ended(); !ok {
-			return "Last recognized " + ago(p.Ago(now)), "", false
+			return "Last recognized " + agoAt(p.Ago(now), now), "", false
 		}
-		head = "Last played · ended " + ago(p.Ago(now))
+		head = "Last played · ended " + agoAt(p.Ago(now), now)
 	}
 	detail = "played " + clock(p.Played())
 	if p.TrackLength > 0 {

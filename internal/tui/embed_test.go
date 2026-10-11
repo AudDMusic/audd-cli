@@ -51,8 +51,9 @@ func TestEmbeddedExplorerOneTab(t *testing.T) {
 
 func TestEmbeddedExplorerTabsAndResume(t *testing.T) {
 	m := embeddedExplorer(t, tabRecent, tabJobs)
-	if v := m.View(); !strings.Contains(v, "Recent") || !strings.Contains(v, "Jobs") || strings.Contains(v, "Streams") {
-		t.Fatalf("tab bar of allowed tabs:\n%s", v)
+	// The screen around it draws the tab bar.
+	if v := m.View(); strings.Contains(v, "Jobs") || strings.Contains(v, "Streams") {
+		t.Fatalf("no tab bar of its own:\n%s", v)
 	}
 	m.key(key("tab"))
 	if m.tab != tabJobs {

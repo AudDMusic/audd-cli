@@ -30,10 +30,7 @@ func (m *explorer) View() string {
 	}
 	bodyH := m.h - 3
 	if m.embedded {
-		bodyH = m.h - 1 // the status line
-		if len(m.allowed) > 1 {
-			bodyH--
-		}
+		bodyH = m.h - 1 // the status line; the screen shows the tabs
 	}
 	var body string
 	switch {
@@ -45,11 +42,7 @@ func (m *explorer) View() string {
 		body = m.levelView(m.top(), bodyH)
 	}
 	if m.embedded {
-		page := fit(body, m.w, bodyH) + "\n" + m.statusLine()
-		if len(m.allowed) > 1 {
-			page = m.tabBar() + "\n" + page
-		}
-		return page
+		return fit(body, m.w, bodyH) + "\n" + m.statusLine()
 	}
 	page := m.tabBar() + "\n" + fit(body, m.w, bodyH) + "\n" + m.statusLine() + "\n" + m.keysLine()
 	page = m.arts.finishView(page, m.w)
@@ -117,7 +110,9 @@ func (m *explorer) clickRow(l *level, i int) func() tea.Cmd {
 func (m *explorer) statusLine() string {
 	switch {
 	case m.purpose != inputNone:
-		return truncate(m.input.Prompt+m.input.Value()+"█", m.w)
+		// The caret where it is, also mid-text.
+		m.input.Width = max(10, m.w-len([]rune(m.input.Prompt))-2)
+		return truncate(inputView(m.input, m.color), m.w)
 	case m.confirm != "":
 		return truncate(m.st.Warn.Render(m.confirm), m.w)
 	case m.exportAs:
@@ -125,9 +120,27 @@ func (m *explorer) statusLine() string {
 	case m.flash != "":
 		return truncate(m.st.Dim.Render(m.flash), m.w)
 	}
-	if l := m.top(); l != nil && m.tab != tabUsage && !m.help {
+	if l := m.top(); l != nil && m.tab != tabUsage && !m.help && !l.detail {
+		if r := l.selected(); r != nil && r.hint != "" && !l.detail {
+			// What to do about the selected row (a stream that is down).
+			return truncate(m.st.Warn.Render(r.hint), m.w)
+		}
 		n := len(l.visible())
-		s := fmt.Sprintf("%s · %d", l.title, n)
+		s := l.title + " · " + output.Plural(n, rowNoun(l.kind))
+		if l.kind == "plays" {
+			// Not all of them, when there may be more.
+			s = l.title + " · " + "the latest " + output.Plural(n, "play")
+			if l.more {
+				s += " · ↓ at the end loads older ones"
+			} else {
+				s = l.title + " · all " + output.Plural(n, "play")
+			}
+		}
+		if r := l.selected(); r != nil && l.kind == "streams" && m.w < 100 && !l.detail && len(r.cells) > 4 {
+			// The URL column is left out on narrow screens: the selected
+			// stream's URL is here.
+			s += " · " + truncMiddle(r.cells[4], max(8, m.w-len([]rune(s))-3))
+		}
 		if l.filter != "" {
 			s += fmt.Sprintf(" matching %q", l.filter)
 		}
@@ -143,34 +156,21 @@ func (m *explorer) keysLine() string {
 // keyList is the key hints for the current view. Embedded, it leaves out
 // what the surrounding screen handles (help, quit, a single tab).
 func (m *explorer) keyList() []string {
+	if m.embedded {
+		return m.embeddedKeys()
+	}
 	var keys []string
 	l := m.top()
-	tabs := !m.embedded || len(m.allowed) > 1
 	tail := func(k ...string) []string {
-		if tabs {
-			k = append(k, "tab next")
-		}
-		if !m.embedded {
-			k = append(k, "? help", "q quit")
-		}
-		return k
+		return append(k, "tab next", "? help", "q quit")
 	}
 	switch {
 	case m.help:
 		keys = []string{"any key: close help"}
 	case m.tab == tabUsage:
-		if tabs {
-			keys = append(keys, "tab next")
-		}
-		keys = append(keys, "r refresh", "e export")
-		if !m.embedded {
-			keys = append(keys, "? help", "q quit")
-		}
+		keys = append(keys, "tab next", "r refresh", "e export", "? help", "q quit")
 	case l != nil && l.detail:
-		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC"}
-		if !m.embedded {
-			keys = append(keys, "q quit")
-		}
+		keys = []string{"esc back", "↑/↓ scroll", "o open", "c copy link", "i ISRC", "u UPC", "q quit"}
 	default:
 		keys = []string{"↑/↓ move", "enter open", "/ filter", "o open", "c copy"}
 		switch l.kind {
@@ -182,6 +182,50 @@ func (m *explorer) keyList() []string {
 		keys = append(keys, tail("e export")...)
 	}
 	return keys
+}
+
+// embeddedKeys are the hints in interactive mode: moving around. What
+// can be done is on the page's buttons.
+func (m *explorer) embeddedKeys() []string {
+	l := m.top()
+	switch {
+	case m.purpose == inputSetURL:
+		return []string{"enter save", "esc cancel"}
+	case m.purpose == inputFilter:
+		return []string{"enter keep the filter", "esc clear it"}
+	case m.purpose != inputNone:
+		return []string{"enter done", "esc cancel"}
+	case m.tab == tabUsage || l == nil:
+		return nil
+	case l.detail:
+		return []string{"↑/↓ scroll"}
+	}
+	keys := []string{"↑/↓ move"}
+	if r := l.selected(); r != nil && r.detail != nil {
+		keys = append(keys, "→ open")
+	}
+	return append(keys, "/ filter")
+}
+
+// jobOf is the job a level is about: the selected one on the list, the
+// opened one in its files.
+func (m *explorer) jobOf(l *level) *JobRow {
+	if l.kind == "jobs" {
+		if r := l.selected(); r != nil {
+			if j, ok := r.data.(JobRow); ok {
+				return &j
+			}
+		}
+		return nil
+	}
+	for _, r := range m.tabs[tabJobs][0].rows {
+		if r.key == l.arg {
+			if j, ok := r.data.(JobRow); ok {
+				return &j
+			}
+		}
+	}
+	return nil
 }
 
 func (m *explorer) helpView() string {
@@ -217,7 +261,8 @@ func (m *explorer) levelView(l *level, h int) string {
 	}
 	if l.detail {
 		if r := l.selected(); r != nil && r.detail != nil {
-			lines := strings.Split(r.detail(m.detailStyles()), "\n")
+			// Long paths and URLs wrap instead of being cut.
+			lines := hardWrap(strings.Split(output.Wrap(r.detail(m.detailStyles()), m.w), "\n"), m.w)
 			if l.dscroll > len(lines)-1 {
 				l.dscroll = max(0, len(lines)-1)
 			}
@@ -226,8 +271,20 @@ func (m *explorer) levelView(l *level, h int) string {
 		}
 	}
 	if l.err != nil && len(l.rows) == 0 {
-		msg := "Could not load: " + output.AsError(l.err).Message
-		if hint := output.AsError(l.err).Hint; hint != "" {
+		e := output.AsError(l.err)
+		if m.embedded {
+			// In interactive mode: what to do, with the page's buttons.
+			if l.kind == "streams" && (e.Code == "no_token" || e.Code == "token_rejected" || hintKind(e.Hint) != "") {
+				return "Sign in or add a token to monitor streams.\n" + m.st.Dim.Render(output.Wrap(noTokenChoicesReal, max(20, m.w)))
+			}
+			msg := "Could not load: " + e.Message
+			if hint := humanHint(e.Hint); hint != "" {
+				msg += "\n" + hint
+			}
+			return m.st.Warn.Render(output.Wrap(msg, max(20, m.w)))
+		}
+		msg := "Could not load: " + e.Message
+		if hint := e.Hint; hint != "" {
 			msg += "\nTry: " + hint
 		}
 		return m.st.Warn.Render(msg)
@@ -245,13 +302,48 @@ func (m *explorer) levelView(l *level, h int) string {
 		case l.kind == "jobs":
 			return m.st.Dim.Render("No jobs yet. Batch runs (folders, globs, enterprise) appear here.")
 		case l.kind == "streams":
+			if m.embedded && m.signedOut != nil && m.signedOut() {
+				return "No API token yet.\n" + m.st.Dim.Render(output.Wrap(noTokenChoicesReal, max(20, m.w)))
+			}
+			if m.embedded {
+				return "No streams yet.\n" + m.st.Dim.Render("Add one with the Add a stream button below (or a).")
+			}
 			return m.st.Dim.Render("No streams yet. Press a to add one, or run: audd streams add <url> --id 1")
 		}
 		return m.st.Dim.Render("Nothing here yet.")
 	}
-	widths := colWidths(l.cols, m.w)
+	cols := l.cols
+	var pick []int // the cells shown, when not all
+	switch l.kind {
+	case "streams":
+		cols = streamColsFor(m.w)
+	case "recent":
+		if m.w < 100 {
+			// When, song, and source; the album is in the details.
+			cols = []column{recentCols[0], recentCols[1], {title: "Source", width: 14}}
+			pick = []int{0, 1, 3}
+		}
+	case "jobs":
+		if m.w < 100 {
+			// Job, status, done with the failures, and what it ran, which
+			// tells jobs apart.
+			cols = []column{jobCols[0], jobCols[1], {title: "Done", width: 13}, jobCols[5]}
+			pick = []int{0, 1, 6, 5}
+		}
+	}
+	var note string
+	if l.kind == "items" {
+		if j := m.jobOf(l); j != nil {
+			note = m.st.Dim.Render(truncate("$ "+j.BatchCommand(), m.w))
+			h--
+		}
+	}
+	widths := colWidths(cols, m.w)
 	var b strings.Builder
-	head := cellsLine(colTitles(l.cols), widths)
+	if note != "" {
+		b.WriteString(note + "\n")
+	}
+	head := cellsLine(colTitles(cols), widths)
 	if !m.color {
 		head = "  " + head
 	}
@@ -264,12 +356,33 @@ func (m *explorer) levelView(l *level, h int) string {
 		l.offset = l.cursor - listH + 1
 	}
 	for i := l.offset; i < len(rows) && i < l.offset+listH; i++ {
-		line := cellsLine(rows[i].cells, widths)
+		cells := rows[i].cells
+		if pick != nil {
+			var sel []string
+			for _, c := range pick {
+				if c < len(cells) {
+					sel = append(sel, cells[c])
+				}
+			}
+			cells = sel
+		}
+		for c, col := range cols {
+			if col.mid && c < len(cells) && c < len(widths) {
+				cells = append([]string(nil), cells...)
+				cells[c] = truncMiddle(cells[c], widths[c])
+			}
+		}
+		line := cellsLine(cells, widths)
 		if i == l.cursor {
-			if m.color {
+			switch {
+			case m.color && m.blur:
+				line = m.st.Bold.Render(line)
+			case m.color:
 				line = m.st.Bold.Reverse(true).Render(padRight(line, m.w))
-			} else {
-				line = "> " + truncate(line, m.w-2)
+			case m.blur:
+				line = "· " + truncate(line, m.w-2)
+			default:
+				line = "› " + truncate(line, m.w-2)
 			}
 		} else if !m.color {
 			line = "  " + truncate(line, m.w-2)
@@ -349,4 +462,46 @@ func padRight(s string, w int) string {
 		return s + strings.Repeat(" ", n)
 	}
 	return s
+}
+
+// truncMiddle shortens s to w cells keeping its start and its end
+// (https://radio.example…/stream.mp3).
+func truncMiddle(s string, w int) string {
+	r := []rune(s)
+	if len(r) <= w || w < 8 {
+		return truncate(s, w)
+	}
+	// Keep the scheme and host when there is room, then the end.
+	head := (w - 1) * 3 / 5
+	if i := strings.Index(s, "://"); i >= 0 {
+		host := i + 3 + strings.IndexByte(s[i+3:]+"/", '/')
+		head = max(head, min(len([]rune(s[:host])), w-1-8))
+	}
+	tail := w - 1 - head
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+}
+
+// rowNoun is what a list's rows are, for its count ("3 files").
+func rowNoun(kind string) string {
+	switch kind {
+	case "recent":
+		return "recognition"
+	case "jobs":
+		return "job"
+	case "items":
+		return "file"
+	case "streams":
+		return "stream"
+	case "plays":
+		return "play"
+	}
+	return "row"
+}
+
+// jobCommand is a job's command as typed.
+func jobCommand(args []string) string {
+	if len(args) > 0 && args[0] == "audd" {
+		args = args[1:]
+	}
+	return displayCommand(args)
 }

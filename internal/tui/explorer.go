@@ -229,6 +229,10 @@ type level struct {
 	dscroll int
 	loading bool
 	err     error
+	// limit is how many plays a "plays" level reads; more says there may
+	// be older ones (the last read was full): ↓ at the end reads more.
+	limit int
+	more  bool
 }
 
 func (l *level) visible() []row {
@@ -345,9 +349,22 @@ type explorer struct {
 	// shows only the allowed tabs, never quits, and leaves cover art,
 	// the clipboard, and help to the screen around it.
 	embedded bool
-	allowed  []tabID
+	// inputFresh: the input holds a value nothing was typed over yet
+	// (typing replaces it).
+	inputFresh bool
+	// signedOut, when set, says whether there is no API token (the empty
+	// streams list then says how to get one).
+	signedOut func() bool
+	allowed   []tabID
+	// blur: embedded, the list does not have the keys, so its selected
+	// row is marked but not highlighted.
+	blur bool
 	// mark, when set, makes tabs and rows clickable (interactive mode).
 	mark func(s string, fn func() tea.Cmd) string
+	// flashTo, when set, shows messages in the screen's status line.
+	flashTo func(s string) tea.Cmd
+	// onSetURL, when set, takes a stream's new URL (to ask first).
+	onSetURL func(id int, url string) tea.Cmd
 	// onResume, when set, resumes a job (r, R) instead of quitting.
 	onResume func(id string, retry bool) tea.Cmd
 }
@@ -458,9 +475,10 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 			return usageMsg{u: u, err: err}
 		}
 	}
-	if l == nil {
-		return nil
+	if l == nil || l.kind == "matches" {
+		return nil // made from its parent's row, nothing to load
 	}
+	limit := l.playLimit()
 	kind, arg, embedded := l.kind, l.arg, m.embedded
 	return func() tea.Msg {
 		msg := rowsMsg{tab: t, kind: kind, arg: arg}
@@ -510,8 +528,8 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 				break
 			}
 			id, _ := strconv.Atoi(arg)
-			plays, err := d.Feed.Plays(ctx, id, historyLimit)
-			msg.rows, msg.err = playRows(plays), err
+			plays, err := d.Feed.Plays(ctx, id, limit)
+			msg.rows, msg.err = playRows(plays, now()), err
 		}
 		return msg
 	}
@@ -535,12 +553,17 @@ func (m *explorer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case artMsg:
 		m.arts.handle(msg)
 		return m, nil
+	case exportDoneMsg:
+		return m, m.setFlash(msg.text)
 	case rowsMsg:
 		if l := m.find(msg.tab, msg.kind, msg.arg); l != nil {
 			if msg.err != nil {
 				l.loading, l.err = false, msg.err
 			} else {
 				l.setRows(msg.rows)
+				if l.kind == "plays" {
+					l.more = len(msg.rows) >= l.playLimit()
+				}
 			}
 		}
 		return m, nil
@@ -581,6 +604,9 @@ func (m *explorer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *explorer) setFlash(s string) tea.Cmd {
+	if m.flashTo != nil {
+		return m.flashTo(s)
+	}
 	m.flash = s
 	m.flashN++
 	id := m.flashN
@@ -608,4 +634,25 @@ func (m *explorer) switchTab(t tabID) tea.Cmd {
 		return m.load(t, m.top())
 	}
 	return nil
+}
+
+// playPage is how many more plays ↓ at the end reads.
+const playPage = 50
+
+// playLimit is how many plays the level reads now.
+func (l *level) playLimit() int {
+	if l.limit <= 0 {
+		return playPage
+	}
+	return l.limit
+}
+
+// loadMore reads the next page of older plays, when there may be more.
+func (m *explorer) loadMore(l *level) tea.Cmd {
+	if l.kind != "plays" || !l.more || l.loading {
+		return nil
+	}
+	l.limit = l.playLimit() + playPage
+	l.loading = true
+	return m.load(m.tab, l)
 }

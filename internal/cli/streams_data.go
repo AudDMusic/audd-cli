@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -96,14 +97,30 @@ func streamGaps(st *streamstore.Store, from time.Time, ids []int) (gaps []stream
 	return gaps, false, err
 }
 
-// gapNote says how much of a range was not recorded: "Some streams were not
-// recorded for 30d 0h of this range (1 gap)".
+// gapNote says which periods of a range were not recorded: "Some
+// periods weren't recorded: Oct 9 13:00 – 14:30, Oct 10 02:00 – 03:10".
 func gapNote(gaps []streamstore.Gap) string {
-	var total time.Duration
-	for _, g := range gaps {
-		total += g.To.Sub(g.From)
+	var parts []string
+	for i, g := range gaps {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("and %d more", len(gaps)-3))
+			break
+		}
+		parts = append(parts, gapRange(g))
 	}
-	return fmt.Sprintf("Some streams were not recorded for %s of this range (%s)", fmtDuration(total), output.Plural(len(gaps), "gap"))
+	return "Some periods weren't recorded: " + strings.Join(parts, ", ")
+}
+
+// gapRange is a gap in short: "Oct 9 13:00 – 14:30" (the date again when
+// it ends on another day).
+func gapRange(g streamstore.Gap) string {
+	from, to := g.From.Local(), g.To.Local()
+	end := to.Format("15:04")
+	if from.YearDay() != to.YearDay() || from.Year() != to.Year() {
+		end = to.Format("Jan 2 15:04")
+	}
+	// No break inside a range when a note wraps.
+	return strings.ReplaceAll(from.Format("Jan 2 15:04")+" – "+end, " ", "\u00a0")
 }
 
 func fmtLength(sec int) string {
@@ -126,7 +143,9 @@ func fmtDuration(d time.Duration) string {
 }
 
 func gapLine(g streamstore.Gap) string {
-	return fmt.Sprintf("not recorded %s – %s (%s)", g.From.Local().Format("2006-01-02 15:04"), g.To.Local().Format("2006-01-02 15:04"), fmtDuration(g.To.Sub(g.From)))
+	// Short, so both times fit at 80 columns: "not recorded Oct 9 13:00 –
+	// 14:30 (1h 30m)".
+	return fmt.Sprintf("not recorded %s (%s)", strings.ReplaceAll(gapRange(g), "\u00a0", " "), fmtDuration(g.To.Sub(g.From)))
 }
 
 type historyDoc struct {
@@ -231,19 +250,19 @@ func printHistory(a *app.App, from time.Time, plays []streamstore.Play, gaps []s
 			return
 		}
 		tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(tw, "TIME\tSTREAM\tARTIST — TITLE\tLENGTH")
+		fmt.Fprintln(tw, "STARTED\tSTREAM\tARTIST — TITLE\tLENGTH")
 		// Gaps are oldest first and plays newest first: show each gap
 		// between the plays around it.
 		pending := append([]streamstore.Gap(nil), gaps...)
 		for _, p := range plays {
 			for len(pending) > 0 && !pending[len(pending)-1].From.Before(p.Timestamp) {
-				fmt.Fprintf(tw, "-- %s --\n", gapLine(pending[len(pending)-1]))
+				fmt.Fprintf(tw, "--\t\t%s\t\n", gapLine(pending[len(pending)-1]))
 				pending = pending[:len(pending)-1]
 			}
 			fmt.Fprintf(tw, "%s\t%d\t%s — %s\t%s\n", p.Timestamp.Local().Format("2006-01-02 15:04"), p.RadioID, p.Artist, p.Title, fmtLength(p.PlayLength))
 		}
 		for i := len(pending) - 1; i >= 0; i-- {
-			fmt.Fprintf(tw, "-- %s --\n", gapLine(pending[i]))
+			fmt.Fprintf(tw, "--\t\t%s\t\n", gapLine(pending[i]))
 		}
 		tw.Flush()
 	})
@@ -324,6 +343,17 @@ When some streams were not recorded for part of the range, the report says so
 				if !doc.Complete {
 					a.Out.Info("Note: %s, so these totals miss plays from that time. See: audd streams history", gapNote(gaps))
 				}
+				if f == output.FormatCSV {
+					// The first column is named for the grouping ("artist"),
+					// not "key".
+					rows := make([]json.RawMessage, len(doc.Rows))
+					for i, r := range doc.Rows {
+						k, _ := json.Marshal(r.Key)
+						byName, _ := json.Marshal(by)
+						rows[i] = json.RawMessage(fmt.Sprintf(`{%s:%s,"plays":%d,"airtime_seconds":%d,"streams":%d}`, byName, k, r.Plays, r.AirtimeSeconds, r.Stations))
+					}
+					return a.Out.Result(rows, nil)
+				}
 				return a.Out.Result(doc.Rows, nil)
 			}
 			return a.Out.Result(doc, func(w io.Writer) {
@@ -335,7 +365,7 @@ When some streams were not recorded for part of the range, the report says so
 					}
 				} else {
 					tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-					fmt.Fprintf(tw, "%s\tPLAYS\tAIRTIME\tSTATIONS\n", strings.ToUpper(by))
+					fmt.Fprintf(tw, "%s\tPLAYS\tAIRTIME\tSTREAMS\n", strings.ToUpper(by))
 					for _, r := range doc.Rows {
 						airtime := "-"
 						if r.AirtimeSeconds > 0 {

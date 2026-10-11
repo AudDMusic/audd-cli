@@ -44,18 +44,14 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	l := m.top()
 	if m.embedded && (s == "left" || s == "right") {
-		// Embedded, left and right walk the tabs without wrapping, and
-		// left first closes details and drill-downs.
-		if s == "left" && l != nil && (l.detail || len(m.tabs[m.tab]) > 1) {
+		// Embedded, the tabs are the screen's tab bar: left goes back and
+		// right opens the selected row.
+		switch {
+		case s == "left":
 			s = "esc"
-		} else {
-			d := 1
-			if s == "left" {
-				d = -1
-			}
-			if next := m.nextTab(d); (d > 0) == (next > m.tab) && next != m.tab {
-				return m, m.switchTab(next)
-			}
+		case l != nil && !l.detail && m.tab != tabUsage:
+			s = "enter"
+		default:
 			return m, nil
 		}
 	}
@@ -113,6 +109,9 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		if l.cursor < n-1 {
 			l.cursor++
+		} else if cmd := m.loadMore(l); cmd != nil {
+			// At the end of the plays read so far: older ones.
+			return m, tea.Batch(cmd, m.setFlash("Loading older plays…"))
 		}
 	case "up", "k":
 		if l.cursor > 0 {
@@ -185,15 +184,48 @@ func (m *explorer) enter(l *level) tea.Cmd {
 	if r == nil {
 		return nil
 	}
+	if m.embedded && (l.kind == "jobs" || l.kind == "streams") && r.detail != nil {
+		// In interactive mode a job or a stream opens its page, with
+		// what can be done with it.
+		l.detail, l.dscroll = true, 0
+		return nil
+	}
+	return m.drill(l, r)
+}
+
+// drill opens what a job (its files) or a stream (its recent plays)
+// holds, or a row's details.
+func (m *explorer) drill(l *level, r *row) tea.Cmd {
+	// Embedded, the job's (or stream's) page stays under the level
+	// opened from it: esc goes back to that page.
+	l.detail = l.detail && m.embedded
+	title := "Job " + r.key
+	if l.detail {
+		title = "Files"
+	}
 	switch l.kind {
 	case "jobs":
-		nl := &level{kind: "items", arg: r.key, title: "Job " + r.key, cols: jobItemCols, loading: true}
+		nl := &level{kind: "items", arg: r.key, title: title, cols: jobItemCols, loading: true}
 		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
 		return m.load(m.tab, nl)
 	case "streams":
-		nl := &level{kind: "plays", arg: r.key, title: "Stream " + r.key + " · recent plays", cols: playCols, loading: true}
+		playTitle := "Stream " + r.key + " · recent plays"
+		if l.detail {
+			playTitle = "Recent plays"
+		}
+		nl := &level{kind: "plays", arg: r.key, title: playTitle, cols: playCols, loading: true}
 		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
 		return m.load(m.tab, nl)
+	}
+	if len(r.matches) > 0 && l.kind != "matches" {
+		// An enterprise result: its songs are a list of their own.
+		title := r.cells[3] + " in " + r.cells[2] // a job's file
+		if l.kind == "recent" {
+			title = r.cells[1] + " in " + r.cells[3]
+		}
+		nl := &level{kind: "matches", arg: l.kind + ":" + r.key, title: title, cols: matchCols, rows: r.matches}
+		m.tabs[m.tab] = append(m.tabs[m.tab], nl)
+		return nil
 	}
 	if r.detail != nil {
 		l.detail, l.dscroll = true, 0
@@ -215,9 +247,11 @@ func (m *explorer) rowAction(s string, r *row) tea.Cmd {
 			return m.setFlash("No link to open")
 		}
 		if err := openURL(r.link); err != nil {
-			return m.setFlash("Could not open the browser: " + err.Error())
+			m.osc = oscCopy(r.link)
+			return tea.Batch(m.setFlash(noBrowser),
+				tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearCopyMsg{} }))
 		}
-		return m.setFlash("Opened " + r.link)
+		return m.setFlash("Opened in your browser: " + r.link)
 	case "c":
 		val, what = r.link, "link"
 	case "i":
@@ -259,7 +293,7 @@ func (m *explorer) streamAction(f func(ctx context.Context) error, done string) 
 	ctx := m.ctx
 	return func() tea.Msg {
 		if err := f(ctx); err != nil {
-			return actionMsg{flash: "Error: " + output.AsError(err).Message}
+			return actionMsg{flash: "Error: " + capFirst(output.AsError(err).Message)}
 		}
 		return actionMsg{flash: done, reload: true, tab: tabStreams}
 	}
@@ -269,12 +303,22 @@ func (m *explorer) startInput(p inputPurpose, prompt, value string) tea.Cmd {
 	m.purpose = p
 	m.input.Prompt = prompt
 	m.input.SetValue(value)
+	// A value to change is as if all selected: typing replaces it.
+	m.inputFresh = value != ""
 	m.input.CursorEnd()
 	return m.input.Focus()
 }
 
 func (m *explorer) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
+	case "ctrl+u":
+		m.input.SetValue("")
+		if m.purpose == inputFilter {
+			if l := m.top(); l != nil {
+				l.filter, l.cursor = "", 0
+			}
+		}
+		return m, nil
 	case "esc", "ctrl+c":
 		if m.purpose == inputFilter {
 			if l := m.top(); l != nil {
@@ -287,9 +331,24 @@ func (m *explorer) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		val := strings.TrimSpace(m.input.Value())
 		p := m.purpose
+		if (p == inputSetURL || p == inputAddURL) && val != "" {
+			if problem := streamURLProblem(val); problem != "" {
+				// Not sent: the text stays, to fix it.
+				return m, m.setFlash(problem)
+			}
+		}
 		m.purpose = inputNone
 		m.input.Blur()
 		return m, m.submit(p, val)
+	}
+	if m.inputFresh {
+		m.inputFresh = false
+		if k.Type == tea.KeyRunes || k.Type == tea.KeySpace || k.String() == "backspace" {
+			m.input.SetValue("")
+			if k.String() == "backspace" {
+				return m, nil
+			}
+		}
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(k)
@@ -327,7 +386,10 @@ func (m *explorer) submit(p inputPurpose, val string) tea.Cmd {
 	case inputSetURL:
 		id, _ := strconv.Atoi(m.pending["id"])
 		if val == "" || m.d.SetStreamURL == nil {
-			return m.setFlash("Cancelled")
+			return m.setFlash("Cancelled. Nothing was changed.")
+		}
+		if m.onSetURL != nil {
+			return m.onSetURL(id, val)
 		}
 		return m.streamAction(func(ctx context.Context) error { return m.d.SetStreamURL(ctx, id, val) }, fmt.Sprintf("Updated the URL of stream %d", id))
 	}

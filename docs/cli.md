@@ -63,8 +63,8 @@ permissions; `audd auth status` shows what was approved.
 ## Interactive mode
 
 On a terminal, `audd` with no arguments (or `audd ui`) opens a full-screen
-interface: Recognize, Now playing, Streams, History, Account, Settings, and
-Help. Recognize takes a file, URL, or folder, or switches its Source to the
+interface: Recognize, Now playing, Streams, Recognitions, Account, Settings,
+and Help. Recognize takes a file, URL, or folder, or switches its Source to the
 microphone (`audd listen`). The bottom line shows the command each action
 runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its
 arguments and flags; `?` lists the keys of the screen, and `q` quits.
@@ -72,13 +72,62 @@ arguments and flags; `?` lists the keys of the screen, and `q` quits.
 Interactive mode runs the same commands, with the same limits and
 confirmations: it asks before spending more than one request and never adds
 `--yes`. `audd ui --section <name>` opens a section (`recognize`,
-`now-playing`, `streams`, `history`, `account`, `settings`, `help`).
+`now-playing`, `streams`, `recognitions`, `account`, `settings`, `help`).
 
-Esc goes back one step, and so does left from the left-most item: to the
-screen you came from (a Help step, a hint), or to the sidebar. Left and right
-walk tabs and pages. The mouse works too: click a section, a page, a row, a
-field, or a button, and scroll with the wheel. To select text with the mouse,
-hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
+Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes
+back. On the sidebar, up and down pick a section and right or Enter opens it.
+Help, Streams, Recognitions, and Account have a tab bar: left and right
+switch tabs, and down or Enter goes into the page. On a page, up and down move
+through the list or form, right or Enter opens the selected item, and up from
+the top goes back to the tab bar. Left and Esc go back one level: from details
+to the list, to the tab bar, then to the sidebar (or to the screen a Help step
+or a hint came from). Inside typed text left moves the cursor; on a choice,
+left and right change it, and left on its first option goes back. `[` and
+`]` switch tabs from anywhere. The path at
+the top of the page shows where you are, and the line above the key hints
+says what just happened.
+
+What a page can do is on buttons under it: Tab (or down from the end of the
+page) reaches them, left and right move between them, and Enter presses one.
+A letter shown on a button, such as `(o)`, presses it from anywhere on the
+page; each letter means one thing everywhere (`o` opens in the browser, `c`
+copies, `r` refreshes, `d` removes, `e` edits, `x` exports, `s` stops). A key
+works only where it is listed; any other key says it does nothing.
+
+When a text field is selected, you are typing in it: letters, digits, and
+symbols go in, left and right move the cursor (left at its start goes back),
+and ctrl+u clears it. Esc stops typing and keeps what you typed; the cursor
+stays on the form (Enter types again). `1`-`7` jump to a section from the
+menu, a tab bar, or a list, never in a form, and `q` quits only from the menu
+or a tab bar (inside a page it says to press Esc first). Recognize
+opens typing in its File, URL, or folder field; the other pages open with no
+text field selected. While you type a path, audd counts its files in the
+background and never looks through a whole disk without asking. Enter in a
+form's last text field runs the form; in Add a stream, Enter in the ID field
+adds the stream, and the box below it is optional. After an error, the
+cursor is back in the field the error is about.
+
+On a saved value (a setting, the callback URL, a stream's URL), typing
+replaces it as if it was all selected, Enter or Edit edits it, and Esc puts
+the old value back; on a text field letters always type. Settings
+of audd and a stream's URL save right away; `u` (or ctrl+z) undoes the last
+change until you make another or leave the section. Spending requests
+(including resuming a job), removing a stream, signing out, and replacing the
+token or the callback URL ask first in a dialog with a button named for the
+action. Every dialog opens on Cancel, so Enter twice never spends anything:
+move to the action with left, right, or Tab and press Enter (or click it);
+`n` or Esc cancels (`y` does nothing in a dialog; elsewhere it copies the
+command on the bottom line). Without an API token, buttons that need one are
+dimmed and offer the ways to get one (streams need your own token, not the
+public test token). When something typed is not saved or a command runs,
+`q` asks first and says what would be lost (ctrl+c twice quits). Paths can
+start with `~`. On the Callback page, Enter in the URL goes on to the data
+boxes and Save asks; Esc puts back the URL, and Revert changes puts back
+everything.
+
+The mouse works too: click a section, a tab, a row, a field, or a button, and
+scroll with the wheel. To select text with the mouse, hold Shift (Option in
+iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
 
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help
 instead, so scripts and agents get plain output.
@@ -140,11 +189,20 @@ audd jobs list
 audd jobs show <id>
 audd jobs resume <id>
 audd jobs resume <id> --retry-failed
+audd jobs resume <id> --retry-all-failed
 ```
 
 `audd jobs resume <id>` sends the files that are left. Files that failed after
 their upload started, or that were being sent when audd stopped, may have been
-counted, so they are sent again only with `--retry-failed`.
+counted, so they are sent again only with `--retry-failed`, which retries the
+failures a retry can fix (connection, server, rate limit, quota). Files that
+fail the same way again (audio that cannot be decoded, an unsupported format)
+are sent again only with `--retry-all-failed`. `audd jobs show` and the
+summary say which failures can be retried: "2 files failed: 1 can be retried,
+1 can't (corrupt.mp3: ...)". A job keeps the command as you typed it (the
+folder or glob, not every file found), and summaries count every request
+that reached AudD, retries included; when some of them failed, the summary
+says "N requests sent (up to N billed)".
 
 Running the same batch again while its job is unfinished offers to resume it.
 Without a terminal it stops with exit 6 (`resume_available`): pass `--resume`

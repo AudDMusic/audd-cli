@@ -25,7 +25,7 @@ func TestMicSnapshots(t *testing.T) {
 		useListenTools(t, media.Tools{})
 		// The install hint depends on the system, so no golden file.
 		v = runHome(t, newTestHome(t, &fakeRun{}, homeOpts{start: "listen"}), size[0], size[1], "sox works too", "")
-		if !strings.Contains(v, "needs ffmpeg") || !strings.Contains(v, "Try: ") {
+		if !strings.Contains(v, "needs ffmpeg") || !strings.Contains(v, "To install it: ") {
 			t.Fatalf("missing tool:\n%s", v)
 		}
 	}
@@ -71,7 +71,7 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 	if got := h.command(); got != "audd listen --return spotify" {
 		t.Fatalf("command: %s", got)
 	}
-	// Left on Microphone goes back to a file first, then to the sidebar.
+	// Left goes back to a file; on the first option it goes back.
 	press(h, key("left"))
 	if s.mic() || h.focus != focusContent {
 		t.Fatal("left switches back to a file")
@@ -83,7 +83,7 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 		t.Fatalf("file fields:\n%s", v)
 	}
 	press(h, key("left"))
-	if h.focus != focusSidebar {
+	if h.focus != focusSidebar || s.mic() {
 		t.Fatal("left on the first option goes back to the sidebar")
 	}
 }
@@ -107,7 +107,7 @@ func TestMicRuns(t *testing.T) {
 	s.form.focusName("listen")
 	press(h, key("enter"))
 	f.waitFor(t, "listen --seconds 12 --device usb --return spotify")
-	if v := h.View(); !strings.Contains(v, "Warriors") || !strings.Contains(v, "o open the link") || !strings.Contains(v, "r listen again") {
+	if v := h.View(); !strings.Contains(v, "Warriors") || !strings.Contains(v, "Open the song link (o)") || !strings.Contains(v, "→/enter details") {
 		t.Fatalf("result:\n%s", v)
 	}
 	if got := h.command(); got != "audd listen --seconds 12 --device usb --return spotify" {

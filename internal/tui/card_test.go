@@ -179,7 +179,7 @@ func TestCardDetailsLongKeysStaySeparated(t *testing.T) {
 	v := sampleView()
 	v.Extra = map[string]any{"release_date_extra": "x"}
 	RenderResultCard(&out, a, v, true)
-	if !strings.Contains(out.String(), "release_date_extra x") {
+	if !strings.Contains(out.String(), "Release date extra x") {
 		t.Fatalf("long keys need a separator:\n%s", out.String())
 	}
 }

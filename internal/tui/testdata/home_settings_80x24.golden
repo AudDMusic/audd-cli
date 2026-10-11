@@ -1,24 +1,24 @@
 AudD  ·  profile default
-                 │ Settings  profile default
- 1 Recognize     │ 
- 2 Now playing   │ › token                        0123…cdef  (audd config set t…
- 3 Streams       │     API token, kept in the system credential store
- 4 History       │   format                       auto  (default)
- 5 Account       │     default output format: table, json, jsonl, csv (auto: ta…
-*6 Settings      >   max_requests                 no limit  (default)
- 7 Help          │     default --max-requests for every command
-                 │   concurrency                  4  (default)
-                 │     parallel requests for batch recognition
-                 │   streams.background_recorder  true  (default)
-                 │     start the background stream recorder automatically
+                 │ Settings
+ 1 Recognize     │ Profile default
+ 2 Now playing   │ 
+ 3 Streams       │ › Output format                     auto  (default)
+ 4 Recognitions  │     format · default output format: table, json, jsonl, csv
+ 5 Account       │     (auto: table on a terminal, JSON when piped)
+*6 Settings      >   Request limit per command         no limit  (default)
+ 7 Help          │     max_requests · default --max-requests for every command
+                 │   Parallel requests                 4  (default)
+                 │     concurrency · parallel requests for batch recognition
+                 │   Start the recorder automatically  on  (default)
+                 │     streams.background_recorder · start the background stream
+                 │     recorder automatically
+                 │   API token                         0123…cdef  (saved token)
+                 │     token · API token, kept in memory (for this session only)
                  │ 
                  │ Settings apply to profile default and are saved in
-                 │ config-dir/config.toml. Environment variables (env) win over
-                 │ the file.
-                 │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
-←/esc back  ↑/↓ setting  enter change  u unset  r reload
-$ audd config get token                                                   y copy
+                 │ ↓ 2 more lines
+ [ Commands ]    │ 
+ [ Keys ] esc ←  │ [ Edit (e) ]  [ Reload (r) ]
+
+↑/↓ move  →/enter edit  ←/esc back  tab buttons  ? keys
+$ audd config get format                                                  y copy

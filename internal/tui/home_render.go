@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"sort"
 	"strings"
 
@@ -55,7 +56,7 @@ func parseRecognition(doc map[string]any) recognition {
 	cached, _ := doc["cached"].(bool)
 	v, ok := api.View(raw, cached)
 	if !ok {
-		return recognition{text: "No match."}
+		return recognition{text: "No match.\nTry another moment of the file with Clip at, or scan more of it with Enterprise."}
 	}
 	return recognition{view: &v, link: v.SongLink, matched: true}
 }
@@ -87,7 +88,7 @@ func enterpriseRecognition(doc map[string]any) recognition {
 		}
 	}
 	if !r.matched {
-		r.text = "No match."
+		r.text = "No match in the part scanned.\nRaise the Limit to scan more of the file."
 		return r
 	}
 	if doc["cached"] == true {
@@ -104,6 +105,97 @@ type batchState struct {
 	total   int
 	results []map[string]any
 	summary map[string]any
+
+	// selectable: when done, the results are a list to move through;
+	// detail shows the selected one.
+	selectable  bool
+	cursor, off int
+	detail      bool
+	title       string // a heading of its own ("3 matches in mix.mp3")
+	inJobs      bool   // shown in Recognitions › Jobs, so it does not point there
+}
+
+// selected is the result under the cursor.
+func (b *batchState) selected() map[string]any {
+	if b == nil || b.cursor < 0 || b.cursor >= len(b.results) {
+		return nil
+	}
+	return b.results[b.cursor]
+}
+
+func (b *batchState) move(d int) {
+	b.cursor = max(0, min(len(b.results)-1, b.cursor+d))
+}
+
+// batchLink is the song link of a batch result line ("" for none).
+func batchLink(m map[string]any) string {
+	if m == nil {
+		return ""
+	}
+	if o, ok := m["result"].(map[string]any); ok {
+		return str(o["song_link"])
+	}
+	if arr, ok := m["result"].([]any); ok {
+		for _, c := range arr {
+			o, _ := c.(map[string]any)
+			if songs, ok := o["songs"].([]any); ok && len(songs) > 0 {
+				o, _ = songs[0].(map[string]any)
+			}
+			if l := str(o["song_link"]); l != "" {
+				return l
+			}
+		}
+	}
+	return ""
+}
+
+// listView is a finished batch: the summary, then a row per file with
+// the cursor (row draws a row, selected or not).
+func (b *batchState) listView(st output.Styles, w, ht int, row func(label string, sel bool) string) string {
+	var out strings.Builder
+	head := b.view(st, w, 0, false)
+	if b.title != "" {
+		head = st.Bold.Render(b.title) + "\n"
+	}
+	if head != "" {
+		out.WriteString(head + "\n")
+	}
+	room := max(1, ht-strings.Count(out.String(), "\n"))
+	// Finished files are listed in the order of the input, not the order
+	// they finished in.
+	sort.SliceStable(b.results, func(i, j int) bool {
+		return num(b.results[i]["index"]) < num(b.results[j]["index"])
+	})
+	if b.cursor < b.off {
+		b.off = b.cursor
+	}
+	if b.cursor >= b.off+room {
+		b.off = b.cursor - room + 1
+	}
+	inW := min(32, w/2)
+	timed := len(b.results) > 0 && b.results[0]["start"] != nil
+	if timed {
+		// Matches in one file: where each starts and ends.
+		out.WriteString(st.Dim.Render(truncate("  "+padRight("Starts at", 11)+padRight("Ends at", 10)+"Song", w)) + "\n")
+		room--
+	}
+	for i := b.off; i < len(b.results) && i < b.off+room; i++ {
+		m := b.results[i]
+		label := padRight(truncate(fileName(str(m["input"])), inW-1), inW) + resultSong(m)
+		if timed {
+			label = padRight(str(m["start"]), 11) + padRight(str(m["end"]), 10) + resultSong(m)
+		}
+		out.WriteString(truncate(row(label, i == b.cursor), w) + "\n")
+	}
+	return strings.TrimRight(out.String(), "\n")
+}
+
+// fileName is the last part of a path (URLs stay whole).
+func fileName(name string) string {
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 && !strings.Contains(name, "://") {
+		return name[i+1:]
+	}
+	return name
 }
 
 func (b *batchState) add(line string) {
@@ -139,9 +231,13 @@ func resultSong(m map[string]any) string {
 	switch m["status"] {
 	case "failed":
 		if e, ok := m["error"].(map[string]any); ok {
-			return "failed: " + str(e["message"])
+			msg := str(e["message"])
+			if strings.HasPrefix(strings.ToLower(msg), "recognition failed") {
+				return capFirst(msg)
+			}
+			return "Failed: " + msg
 		}
-		return "failed"
+		return "Failed"
 	case "no_match":
 		return "no match"
 	}
@@ -199,9 +295,17 @@ func (b *batchState) view(st output.Styles, w, ht int, running bool) string {
 		out.WriteString(st.Bold.Render(fmt.Sprintf("Job %s: %d recognized, %d no match, %d failed",
 			b.jobID, int(num(s["recognized"])), int(num(s["no_match"])), int(num(s["failed"])))) + "\n")
 		if n := int(num(s["requests_spent_this_run"])); n > 0 || s["requests_spent_this_run"] != nil {
-			out.WriteString(st.Dim.Render(fmt.Sprintf("%s used in this run. The job is in History.", output.Plural(n, "request"))) + "\n")
+			note := output.Plural(n, "request") + " used in this run."
+			if !b.inJobs {
+				note += " The job is in Recognitions › Jobs."
+			}
+			out.WriteString(st.Dim.Render(note) + "\n")
 		}
 		out.WriteString("\n")
+	}
+	if ht == 0 {
+		// The heading alone (listView draws the rows).
+		return strings.TrimRight(out.String(), "\n")
 	}
 	rows := b.results
 	room := max(1, ht-strings.Count(out.String(), "\n")-1)
@@ -307,4 +411,81 @@ func tableOf(list []any, st output.Styles, w int, title string) string {
 		b.WriteString(truncate(cellsLine(r, widths), w) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// batchPage is a batch's results: a list to move through, or the details
+// of the selected one.
+func (h *home) batchPage(bs *batchState, w, ht int) string {
+	st := h.st
+	if bs.detail {
+		if m := bs.selected(); m != nil {
+			ds := detailStyles{title: st.Title.Inherit(st.Accent), dim: st.Dim, key: st.Key}
+			out := st.Dim.Render(truncate(str(m["input"]), w)) + "\n\n"
+			if m["start"] != nil {
+				where := "Starts at " + str(m["start"])
+				if e := str(m["end"]); e != "" {
+					where += ", ends at " + e
+				}
+				where += " (in the file)"
+				out = where + "\n\n"
+			}
+			if m["result"] != nil && m["status"] != "no_match" {
+				raw, _ := json.Marshal(m["result"])
+				return out + resultDetail(raw, ds)
+			}
+			if m["status"] == "failed" {
+				// The file's own error, in full.
+				return out + styleLines(st.Warn, output.Wrap("Failed: "+capFirst(failMessage(m)), w))
+			}
+			return out + resultSong(m)
+		}
+	}
+	return bs.listView(st, w, ht, func(label string, sel bool) string { return h.listRow(label, sel) })
+}
+
+// batchButtons are the buttons of a batch result's details.
+func (h *home) batchButtons(bs *batchState) []button {
+	if bs == nil {
+		return nil
+	}
+	var retry []button
+	if n := retryableResults(bs.results); n > 0 && bs.jobID != "" {
+		// The failures a retry can fix, retried here (the same question as
+		// on the job's page).
+		id := bs.jobID
+		retry = []button{{label: "Retry " + output.Plural(n, "file"), do: func() tea.Cmd { return h.retryJob(id) }}}
+	}
+	link := batchLink(bs.selected())
+	if link == "" {
+		return retry
+	}
+	return append(retry, []button{
+		{label: "Open the song link", key: "o", do: func() tea.Cmd {
+			return h.openLink(link)
+		}},
+		{label: "Copy the song link", key: "c", do: func() tea.Cmd { return h.copy(link, "the link "+link) }},
+	}...)
+}
+
+// failMessage is the error of a failed batch result.
+func failMessage(m map[string]any) string {
+	if e, ok := m["error"].(map[string]any); ok {
+		msg := str(e["message"])
+		if RetryHelps(str(e["code"])) {
+			return strings.TrimSuffix(msg, ".") + ". A retry can work: the Retry button below"
+		}
+		return strings.TrimSuffix(msg, ".") + ". Retrying won't help"
+	}
+	return "failed"
+}
+
+// retryJob retries the failures of job id a retry can fix, from
+// Recognitions (asked first, with the plan).
+func (h *home) retryJob(id string) tea.Cmd {
+	hs, ok := h.subs["recognitions"].(*historySection)
+	if !ok {
+		return nil
+	}
+	cmd := h.jump("recognitions")
+	return tea.Batch(cmd, h.wrap("recognitions", hs.startResume(id, true)))
 }

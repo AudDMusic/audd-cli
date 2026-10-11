@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -66,9 +67,12 @@ func (m *npModel) bodyHeight() int {
 
 func (m *npModel) headerLine() string {
 	left := m.st.Bold.Render("Now playing")
+	if m.embedded {
+		left = "" // the path at the top names the screen
+	}
 	right := ""
 	if len(m.stations) > 1 {
-		right = m.st.Dim.Render(fmt.Sprintf("stream %d of %d", m.sel+1, len(m.stations)))
+		right = m.st.Dim.Render(fmt.Sprintf("%d of %d streams", m.sel+1, len(m.stations)))
 	}
 	return spread(left, right, m.w)
 }
@@ -85,6 +89,9 @@ func (m *npModel) footerLine() string {
 
 // keyList is the key hints for the current view.
 func (m *npModel) keyList() []string {
+	if m.embedded {
+		return m.embeddedKeys()
+	}
 	var keys []string
 	switch {
 	case m.help:
@@ -93,9 +100,9 @@ func (m *npModel) keyList() []string {
 		if len(m.stations) > 1 {
 			keys = append(keys, "←/→ stream", "enter grid")
 		}
-		keys = append(keys, "o open", "c copy link", "h history", "r refresh", "? help", "q quit")
+		keys = append(keys, "h history", "o open link", "c copy link", "r refresh", "? help", "q quit")
 	default:
-		keys = []string{"←/→/↑/↓ select", "enter zoom", "o open", "c copy link", "h history", "? help", "q quit"}
+		keys = []string{"←/→/↑/↓ select", "enter zoom", "h history", "o open link", "c copy link", "r refresh", "? help", "q quit"}
 	}
 	if m.embedded {
 		keys = slices.DeleteFunc(keys, func(k string) bool { return k == "? help" || k == "q quit" })
@@ -200,7 +207,7 @@ func (m *npModel) infoBlock(d stationData, w int, big bool) string {
 	}
 	p := d.Plays[0]
 	if d.Down() {
-		lines = append(lines, m.st.Dim.Render("Last heard: "+songLine(p.ResultView)+" · "+ago(p.Ago(now))))
+		lines = append(lines, m.st.Dim.Render("Last heard: "+songLine(p.ResultView)+" · "+agoAt(p.Ago(now), now)))
 		return clip(lines, w)
 	}
 	head, detail, bar := playStatus(p, now)
@@ -280,12 +287,16 @@ func (m *npModel) playLines(plays []Play, max, w int, full bool) string {
 		return ""
 	}
 	var lines []string
-	for i, p := range plays {
-		if i >= max {
-			break
-		}
-		t := p.At.In(localZone).Format("15:04")
-		line := m.st.Dim.Render(t) + "  " + songLine(p.ResultView)
+	if len(plays) > max {
+		plays = plays[:max]
+	}
+	whenW := 0
+	for _, p := range plays {
+		whenW = mathMax(whenW, len([]rune(playWhen(p, m.now()))))
+	}
+	for _, p := range plays {
+		t := padRight(playWhen(p, m.now()), whenW+2)
+		line := m.st.Dim.Render(t) + songLine(p.ResultView)
 		if full {
 			if meta := metaLine(p.ResultView); meta != "" {
 				line += m.st.Dim.Render("  " + meta)
@@ -332,7 +343,35 @@ func (m *npModel) gridView(h int) string {
 		}
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, cards...))
 	}
-	return strings.Join(rows, "\n")
+	out := strings.Join(rows, "\n")
+	below := len(m.stations) - min(len(m.stations), (firstRow+visibleRows)*cols)
+	above := firstRow * cols
+	if (below > 0 || above > 0) && m.embedded {
+		var marks []string
+		if above > 0 {
+			marks = append(marks, "↑ "+plural(above, "more stream")+" above")
+		}
+		if below > 0 {
+			marks = append(marks, "↓ "+plural(below, "more stream")+" below")
+		}
+		out += "\n" + m.st.Dim.Render(strings.Join(marks, " · "))
+	}
+	return out
+}
+
+// embeddedKeys are the hints in interactive mode, for the view shown:
+// the grid, one stream, or its history.
+func (m *npModel) embeddedKeys() []string {
+	if len(m.stations) < 2 {
+		return nil
+	}
+	switch {
+	case m.history:
+		return []string{"←/→ previous, next stream"}
+	case m.single():
+		return []string{"←/→ previous, next stream", "enter all streams"}
+	}
+	return []string{"←/→ previous, next stream", "↑/↓ rows", "enter open"}
 }
 
 func (m *npModel) gridCard(i, w int) string {
@@ -373,7 +412,23 @@ func (m *npModel) gridCard(i, w int) string {
 	} else if m.color {
 		style = style.BorderForeground(lipgloss.Color("240"))
 	}
-	return style.Render(content)
+	card := style.Render(content)
+	if m.mark == nil {
+		return card
+	}
+	// A click selects the stream; on the selected one it zooms in.
+	click := func() tea.Cmd {
+		if m.sel == i {
+			m.zoom = true
+		}
+		m.sel = i
+		return nil
+	}
+	lines := strings.Split(card, "\n")
+	for j, l := range lines {
+		lines[j] = m.mark(l, click)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *npModel) cardAccent(d stationData) lipgloss.Color {
@@ -434,4 +489,19 @@ func oscCopy(s string) string {
 	var b strings.Builder
 	copyOSC52(&b, s)
 	return b.String()
+}
+
+// plural is "1 more stream", "3 more streams".
+func plural(n int, what string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, what)
+	}
+	return fmt.Sprintf("%d %ss", n, what)
+}
+
+func mathMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -93,7 +93,7 @@ func (s *recognizeSection) setupDone(m listenSetupMsg) {
 			opts = append(opts, d.Value)
 		}
 		cur := s.form.get("device")
-		*cur = *enumField("device", "Device", "Input device (←/→ to choose)", opts)
+		*cur = *enumField("device", "Device", "Input device (→ or space to choose)", opts)
 	}
 	s.sync()
 }
@@ -118,20 +118,23 @@ func (s *recognizeSection) micKeys() []keyHelp {
 	case "running":
 		return []keyHelp{{"s or esc", "stop"}}
 	case "result":
-		k := []keyHelp{{"r", "listen again"}, {"esc", "back"}}
-		if s.rec.link != "" {
-			k = append(k, keyHelp{"o", "open the link"}, keyHelp{"c", "copy it"})
-		}
+		k := []keyHelp{{"enter", "listen again"}}
 		if s.rec.view != nil {
-			k = append(k, keyHelp{"d", "details"})
+			k = []keyHelp{{"→", "details"}}
 		}
-		return k
+		if s.rec.link != "" {
+			k = append(k, keyHelp{"o", "open link"}, keyHelp{"c", "copy link"})
+		}
+		return append(k, keyHelp{"esc", "back to the form"})
 	}
-	return []keyHelp{{"↑/↓", "field"}, {"←/→", "choose"}, {"space", "toggle"}, {"enter", "listen"}, {"esc", "sidebar"}}
+	return s.form.rowKeys("listen")
 }
 
 // startListen records and recognizes.
 func (s *recognizeSection) startListen() tea.Cmd {
+	if s.h.signedOut {
+		return s.needToken(s.startListen)
+	}
 	if e := s.form.check(); e != "" {
 		s.form.err = e
 		return nil
@@ -169,8 +172,9 @@ func (s *recognizeSection) micNotes(w int) string {
 	var b strings.Builder
 	if t := s.m.tools; t != nil && t.FFmpeg == "" && t.Sox == "" {
 		e := media.MissingTool("ffmpeg", "listening to the microphone")
-		b.WriteString("\n\n" + styleLines(st.Warn, output.Wrap(e.Message+" (sox works too)", w)))
-		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
+		b.WriteString("\n\n" + styleLines(st.Warn, output.Wrap(capFirst(e.Message)+" (sox works too)", w)))
+		b.WriteString("\n" + output.Wrap("To install it: "+e.Hint, w))
+		b.WriteString("\n" + styleLines(st.Dim, output.Wrap("Then come back here: audd looks for it again when you open Recognize.", w)))
 	}
 	if len(s.m.devices) == 1 {
 		b.WriteString("\n\n" + st.Dim.Render(truncate("Input: "+s.m.devices[0].Label, w)))

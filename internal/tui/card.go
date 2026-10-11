@@ -178,6 +178,9 @@ func providerLinks(extra map[string]any) [][2]string {
 	// Other scalar fields the API added, so nothing is hidden.
 	var keys []string
 	for k, v := range extra {
+		if k == "start_seconds" || k == "end_seconds" {
+			continue // shown as where the match starts and ends
+		}
 		switch v.(type) {
 		case string, float64, bool:
 			keys = append(keys, k)
@@ -185,11 +188,44 @@ func providerLinks(extra map[string]any) [][2]string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
+		// Field names in words: "new_field" → "New field".
 		if s := str(extra[k]); s != "" {
-			out = append(out, [2]string{k, s})
+			if strings.HasSuffix(k, "_offset") {
+				s += " ms" // where the match is within the song
+			}
+			out = append(out, [2]string{plainName(k), s})
 		} else if b, ok := extra[k].(bool); ok {
-			out = append(out, [2]string{k, fmt.Sprint(b)})
+			out = append(out, [2]string{plainName(k), fmt.Sprint(b)})
 		}
 	}
 	return out
+}
+
+// detailFields are a song's details, each with its label (Title,
+// Artist, Album, …), for the details pages of interactive mode.
+func detailFields(r app.ResultView, key lipgloss.Style) []string {
+	rows := [][2]string{{"Title", r.Title}, {"Artist", r.Artist}, {"Album", r.Album}, {"Label", r.Label},
+		{"Released", r.ReleaseDate}, {"ISRC", r.ISRC}, {"UPC", r.UPC}, {"Position in the song", r.Timecode}}
+	if r.Score > 0 {
+		rows = append(rows, [2]string{"Score", fmt.Sprint(r.Score)})
+	}
+	rows = append(rows, [2]string{"Link", r.SongLink})
+	rows = append(rows, providerLinks(r.Extra)...)
+	// The labels shown line up: as wide as the longest (at least 12).
+	lw := 12
+	for _, kv := range rows {
+		if kv[1] != "" {
+			lw = max(lw, len([]rune(kv[0])))
+		}
+	}
+	var lines []string
+	for _, kv := range rows {
+		if kv[1] != "" {
+			lines = append(lines, key.Render(fmt.Sprintf("%-*s ", lw, kv[0]))+kv[1])
+		}
+	}
+	if r.Cached {
+		lines = append(lines, "", "Cached result, no request used")
+	}
+	return lines
 }

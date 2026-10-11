@@ -1,14 +1,16 @@
 AudD  ·  profile default
-                 │ [Getting started]  Guide   Commands   Keys   Exit codes and output   Links 
- 1 Recognize     │ Getting started
- 2 Now playing   │ 
- 3 Streams       │ › 1. Sign in
- 4 History       │      Sign in to your AudD account (or paste an API token) so audd can recognize music and show your
- 5 Account       │      account.
- 6 Settings      │      $ audd login
-*7 Help          > 
+                 │ Help › Getting started
+ 1 Recognize     │ >Getting started< Guide  Commands  Keys  Exit codes  Links 
+ 2 Now playing   │ Getting started
+ 3 Streams       │ 
+ 4 Recognitions  │ · 1. Sign in  ✓ done
+ 5 Account       │      Sign in to your AudD account (or paste an API token) so audd can recognize music and show your
+ 6 Settings      │      account.
+*7 Help          >      $ audd login --device
+                 │ 
                  │   2. Recognize a file
-                 │      Pick a file, URL, or folder and recognize it. This fills in AudD's example song.
+                 │      Pick a file, URL, or folder and recognize it. Enter here fills in AudD's example song so you can
+                 │      try a recognition.
                  │      $ audd recognize https://audd.tech/example.mp3
                  │ 
                  │   3. Use the microphone
@@ -23,7 +25,7 @@ AudD  ·  profile default
                  │      Press ctrl+k to search every command and run it from a form.
                  │      $ audd commands
                  │ 
-                 │ Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.
+                 │ Enter goes to the step. Every page shows the command it runs at the bottom; y copies it.
                  │ 
                  │ 
                  │ 
@@ -31,10 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
-←/esc back  ↑/↓ step  enter go  ←/→ [ ] pages
-$ audd login                                                                                                      y copy
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
+
+←/→ tabs  ↓ open  esc back  ? keys
+$ audd login --device                                                                                             y copy

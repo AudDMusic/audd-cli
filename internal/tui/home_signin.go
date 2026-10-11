@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/oauth"
 	"github.com/AudDMusic/audd-cli/internal/output"
 )
@@ -40,10 +41,48 @@ func newSignin(h *home, heading string) *signinSection {
 	return s
 }
 
-var signinChoices = []struct{ title, help string }{
-	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token."},
-	{"Paste an API token", "Use the API token from your dashboard at https://dashboard.audd.io."},
-	{"Try with the test token", "The public test token: 10 requests a day, standard endpoint only. Nothing is saved."},
+var signinChoices = []struct{ title, help, step string }{
+	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token.", "login"},
+	{"Paste an API token", "Use the API token from your dashboard at https://dashboard.audd.io.", "paste"},
+	{"Try with the test token", "The public test token: 10 requests a day, standard endpoint only. Nothing is saved.", "test"},
+}
+
+// tokenSetChoices are Account's choices when an API token is set but
+// the account is not signed in.
+var tokenSetChoices = []struct{ title, help, step string }{
+	{"Sign in to your account", "Sign in to your AudD account in the browser (or with a code on another device) to see your plan, usage, and billing.", "login"},
+	{"Paste a different token", "Replace the API token of this profile with one from https://dashboard.audd.io.", "paste"},
+}
+
+// testTokenChoices are Account's choices while the test token is in use.
+var testTokenChoices = []struct{ title, help, step string }{
+	{"Paste your token…", "Use your own API token from https://dashboard.audd.io; it is saved for this profile.", "paste"},
+	{"Sign in", "Sign in to your AudD account in the browser (or with a code on another device). audd saves your API token.", "login"},
+}
+
+// choiceList is what the screen offers.
+func (s *signinSection) choiceList() []struct{ title, help, step string } {
+	switch {
+	case s.heading != "" && s.h.testToken:
+		return testTokenChoices
+	case s.heading != "" && !s.h.signedOut:
+		return tokenSetChoices
+	}
+	return signinChoices
+}
+
+// suspiciousToken says why a pasted value does not look like an API
+// token ("" when it does).
+func suspiciousToken(v string) string {
+	switch {
+	case strings.EqualFold(v, "your-api-token"):
+		return "This is the example text from the docs, not your token."
+	case strings.ContainsAny(v, " \t"):
+		return "This has spaces; an API token is one word."
+	case len(v) < 10:
+		return "This is shorter than an API token."
+	}
+	return ""
 }
 
 func (s *signinSection) title() string { return "Sign in" }
@@ -63,7 +102,9 @@ func (s *signinSection) back() bool {
 		s.step = ""
 		return true
 	case "paste":
-		s.step = ""
+		if !s.paste.leaveField() {
+			s.step = ""
+		}
 		return true
 	}
 	return false
@@ -83,10 +124,10 @@ func (s *signinSection) command() string {
 	case "paste":
 		return "audd config set token -"
 	}
-	switch s.choice {
-	case 0:
+	switch s.choiceList()[min(s.choice, s.choices()-1)].step {
+	case "login":
 		return displayCommand(s.loginArgs())
-	case 1:
+	case "paste":
 		return "audd config set token -"
 	}
 	return "audd recognize song.mp3 --token test"
@@ -98,9 +139,9 @@ func (s *signinSection) keys() []keyHelp {
 		if s.panel.running && s.panel.pending != nil {
 			return s.keysFor(s.panel)
 		}
-		return []keyHelp{{"esc", "back"}}
+		return nil
 	case "paste":
-		return []keyHelp{{"enter", "save"}, {"esc", "back"}}
+		return s.paste.rowKeys("save")
 	}
 	return []keyHelp{{"↑/↓", "choose"}, {"enter", "go"}}
 }
@@ -117,10 +158,7 @@ func (s *signinSection) keysFor(p *cmdPanel) []keyHelp {
 // choices is how many choices the screen offers: the Account section
 // only offers the sign-in (a token alone does not reach the account).
 func (s *signinSection) choices() int {
-	if s.heading != "" {
-		return 1
-	}
-	return len(signinChoices)
+	return len(s.choiceList())
 }
 
 func (s *signinSection) update(msg tea.Msg) tea.Cmd {
@@ -128,13 +166,17 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 		if done {
 			if s.panel.res.ok() {
 				switch s.panel.args[0] {
-				case "login", "config":
+				case "login":
 					s.step = ""
 					return s.h.signedIn(false)
+				case "config":
+					s.step = ""
+					s.paste.get("token").setValue("")
+					return tea.Batch(s.h.signedIn(false), s.h.setFlash("Token saved for profile "+s.h.profileName()))
 				}
 			}
 			if s.step == "paste" && s.panel.res.err != nil {
-				s.paste.err = s.panel.res.err.Message
+				s.paste.err = tokenSaveFailed(s.panel.res.err)
 			}
 		}
 		return nil
@@ -145,16 +187,8 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 	}
 	switch s.step {
 	case "login":
-		if k.String() == "left" && !s.panel.capturing() {
-			s.back()
-			return nil
-		}
 		return s.panel.key(k, s.h.h)
 	case "paste":
-		if k.String() == "left" && s.paste.leftExits() {
-			s.step = ""
-			return nil
-		}
 		act, cmd := s.paste.update(k)
 		if act == "save" {
 			v := s.paste.value("token")
@@ -163,25 +197,57 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			s.paste.err = ""
-			return s.panel.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
+			save := func() tea.Cmd {
+				return s.panel.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
+			}
+			owner := "signin"
+			if s.heading != "" {
+				owner = "account"
+			}
+			if why := suspiciousToken(v); why != "" {
+				return s.h.askFirst(&confirmState{
+					owner: owner, question: why + " Save it anyway?", action: "Save anyway",
+					topic: "Save anyway?", command: "audd config set token -", cancel: "Cancelled. API token unchanged.", yes: save,
+					onCancel: func() {
+						// Back in the field, typing, the token as it was.
+						s.paste.focusName("token")
+						s.paste.resume()
+						s.paste.get("token").input.CursorEnd()
+					},
+				})
+			}
+			if s.h.signedOut || s.h.testToken {
+				return save()
+			}
+			// A token is saved: replacing it is asked first.
+			return s.h.askFirst(&confirmState{
+				owner:    owner,
+				question: "Replace the API token of profile " + s.h.profileName() + "?",
+				notes:    []string{"New: " + config.MaskToken(v), "Commands in this profile use the new token from now on."},
+				command:  "audd config set token -",
+				action:   "Replace the token",
+				cancel:   "Cancelled. API token unchanged.",
+				yes:      save,
+			})
 		}
 		return cmd
 	}
 	switch k.String() {
-	case "down", "j", "tab":
+	case "down", "tab":
 		s.choice = (s.choice + 1) % s.choices()
-	case "up", "k", "shift+tab":
+	case "up", "shift+tab":
 		s.choice = (s.choice + s.choices() - 1) % s.choices()
 	case "enter":
-		switch s.choice {
-		case 0:
+		switch s.choiceList()[min(s.choice, s.choices()-1)].step {
+		case "login":
 			s.step = "login"
 			return s.panel.start(runReq{args: s.loginArgs(), format: "jsonl", stream: true})
-		case 1:
+		case "paste":
 			s.step = "paste"
 			s.paste.focusName("token")
+			s.paste.resume()
 			return nil
-		case 2:
+		case "test":
 			return tea.Batch(s.h.signedIn(true), s.h.setFlash("Using the test token: 10 requests a day, standard endpoint only"))
 		}
 	}
@@ -209,38 +275,56 @@ func (s *signinSection) view(w, h int) string {
 		b.WriteString(s.paste.view(w, st, s.h.color))
 		return b.String()
 	}
-	if s.heading != "" {
+	switch {
+	case s.heading != "" && s.h.testToken:
 		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
-		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
-	} else {
+		b.WriteString(output.Wrap("Using the public test token for this session (10 requests a day). Nothing is saved. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
+	case s.heading != "" && !s.h.signedOut:
+		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
+		b.WriteString(output.Wrap("An API token is saved for profile "+s.h.profileName()+", so audd can recognize music. Your account, usage, and billing need a sign-in to your AudD account.", w) + "\n\n")
+	case s.heading != "":
+		b.WriteString(st.Bold.Render(s.heading) + "\n\n")
+		b.WriteString(output.Wrap("Your account, usage, and billing need a sign-in to your AudD account. To only recognize music, an API token is enough:", w) + "\n\n")
+	default:
 		b.WriteString(st.Bold.Render("Welcome to AudD") + "\n\n")
-		b.WriteString(output.Wrap("audd recognizes music in files, URLs, and from the microphone, monitors streams, and manages your account. To start, choose how audd gets your API token:", w) + "\n\n")
+		b.WriteString(output.Wrap("Recognize music in files, URLs, and from the microphone, and monitor streams. Choose how audd gets your API token:", w) + "\n\n")
 	}
-	for i, c := range signinChoices[:s.choices()] {
-		mark := "  "
-		title := c.title
-		if i == s.choice {
-			mark = "› "
-			title = st.Bold.Render(title)
-		}
-		item := mark + title + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
+	for i, c := range s.choiceList() {
+		item := s.h.listRow(c.title, i == s.choice) + "\n" + styleLines(st.Dim, indent(output.Wrap(c.help, max(10, w-4)), "    "))
 		b.WriteString(s.h.mark(item, func() tea.Cmd {
-			if s.choice == i {
-				return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
-			}
+			// A click opens the choice, as enter does.
 			s.choice = i
-			return nil
+			return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
 		}) + "\n\n")
 	}
-	if s.heading == "" {
-		b.WriteString(styleLines(st.Dim, output.Wrap("You can also look around first: the sections on the left work once a token is set.", w)))
+	if s.heading == "" && s.h.signedOut {
+		b.WriteString(styleLines(st.Dim, output.Wrap("You can look around first; recognizing needs a token.", w)))
 	}
 	return b.String()
 }
 
-// leftExits: left leaves from the choices; inside a step it goes back
-// to them.
-func (s *signinSection) leftExits() bool { return s.step == "" }
+// leftExits: left goes back, from a step to the choices too, except
+// inside typed text.
+func (s *signinSection) leftExits() bool {
+	switch s.step {
+	case "login":
+		return !s.panel.capturing()
+	case "paste":
+		return s.paste.leftExits()
+	}
+	return true
+}
+
+// crumbs: the step chosen.
+func (s *signinSection) crumbs() []string {
+	switch s.step {
+	case "login":
+		return []string{"Sign in to AudD"}
+	case "paste":
+		return []string{"Paste an API token"}
+	}
+	return nil
+}
 
 func indent(s, pre string) string {
 	lines := strings.Split(s, "\n")
@@ -248,4 +332,9 @@ func indent(s, pre string) string {
 		lines[i] = pre + lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// tokenSaveFailed says that saving a token failed, and what to do.
+func tokenSaveFailed(e *runError) string {
+	return "Saving the token failed: " + strings.TrimSuffix(e.Message, ".") + ". Try again, or set AUDD_API_TOKEN."
 }

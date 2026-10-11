@@ -122,6 +122,15 @@ func (s *uiSession) quit() int {
 	case code := <-s.done:
 		s.done <- code
 		return code
+	case <-time.After(2 * time.Second):
+		// It asked first (something typed is not saved, or a command
+		// runs): a second Ctrl-C quits.
+		s.keys.Write([]byte(kCtrlC))
+	}
+	select {
+	case code := <-s.done:
+		s.done <- code
+		return code
 	case <-time.After(15 * time.Second):
 		s.t.Fatal("audd did not exit after Ctrl-C")
 	}
@@ -197,13 +206,13 @@ func TestUIBatchWithConfirmation(t *testing.T) {
 	if n := e.api.Count(testutil.EndpointRecognize); n != 0 {
 		t.Fatalf("%d requests before the confirmation", n)
 	}
-	s.press("y")
+	s.press(kRight, kEnter)
 	s.wait("2 recognized, 0 no match, 0 failed")
 	if n := e.api.Count(testutil.EndpointRecognize); n != 2 {
 		t.Fatalf("%d recognitions", n)
 	}
 	// The job is in History.
-	s.press(kEsc, "4")
+	s.press(kEsc, kEsc, "4")
 	s.press("\t")
 	s.wait("done")
 }
@@ -213,19 +222,19 @@ func TestUIAddAndRemoveStream(t *testing.T) {
 	t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
 	s := e.ui("ui", "--section", "streams")
 	s.wait("No streams yet")
-	s.press("a")
+	s.press(kDown, "a")
 	s.wait("Add a stream")
 	s.typeText("https://radio.example/7.mp3")
-	s.press(kDown)
+	s.press(kDown, "\x15") // ID: clear the suggested one (ctrl+u)
 	s.typeText("7")
 	s.press(kDown, kDown, kEnter) // past "start" to Add
-	s.wait("Streams · 1")
+	s.wait("Streams · 1 stream")
 	if st := e.streams.Streams(); len(st) != 1 || st[0].RadioID != 7 || !strings.Contains(s.out.String(), "Added stream 7") {
 		t.Fatalf("streams: %+v", st)
 	}
-	s.press("d")
+	s.press(kEnter, "d") // the stream's page, then Remove (d)
 	s.wait("Remove stream 7?")
-	s.press("y")
+	s.press(kRight, kEnter)
 	s.wait("Removed stream 7")
 	if st := e.streams.Streams(); len(st) != 0 {
 		t.Fatalf("streams after removing: %+v", st)
@@ -238,8 +247,9 @@ func TestUIBillingLink(t *testing.T) {
 	s := e.ui("ui", "--section", "account")
 	s.wait("Paid until")
 	s.press("]", "]")
-	s.wait("startup_plan")
-	s.press(kDown, "s")
+	s.wait("$450/mo")
+	// Into the plans (Indie is the account's own), down to Startup.
+	s.press(kDown, kDown, kEnter)
 	s.wait("nothing is charged")
 	s.wait(testutil.FakePaymentURL)
 	if n := len(e.mcp.CallsTo("subscribe_to_plan")); n != 1 {
@@ -252,9 +262,10 @@ func TestUIRotateToken(t *testing.T) {
 	e.loginByPaste()
 	s := e.ui("ui", "--section", "account")
 	s.wait("Paid until")
-	s.press("[", "[")
+	s.press("]", "]", "]")
 	s.wait("0123…cdef")
-	s.press("R")
+	// The New token… button: tab to the buttons, then →, →, enter.
+	s.press(kDown, "\t", kRight, kRight, kEnter)
 	s.wait("Type rotate")
 	s.typeText("rotate")
 	s.press(kEnter)
@@ -268,10 +279,10 @@ func TestUIEditSetting(t *testing.T) {
 	e := uiEnv(t)
 	s := e.ui("ui", "--section", "settings")
 	s.wait("background_recorder")
-	s.press(kDown, kEnter, kRight)
+	s.press(kEnter, kRight, kRight)
 	s.wait("audd config set format json")
 	s.press(kEnter)
-	s.wait("Set format")
+	s.wait("Output format set to json")
 	s.quit()
 	r := e.ok("config", "get", "format")
 	if d := doc(t, r.Stdout); d["value"] != "json" {
@@ -286,8 +297,78 @@ func TestUIHelpSearch(t *testing.T) {
 	s.wait("Getting started")
 	s.press("]")
 	s.wait("AUDD CLI")
-	s.press("/")
+	s.press(kDown, "/")
 	s.typeText("exit codes")
 	s.press(kEnter)
 	s.wait(`"exit codes" · n next`)
+}
+
+// Errors of real runs show their message and what to try, on the page
+// that ran them.
+func TestUIRecognizeErrorsShow(t *testing.T) {
+	t.Run("missing path", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(filepath.Join(e.dir, "nope.mp3"))
+		s.press(kEnter)
+		s.wait("o such file or folder")
+		s.wait("check")
+	})
+	t.Run("too many files", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		for _, n := range []string{"a", "b", "c"} {
+			e.file("music/"+n+".mp3", n)
+		}
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(filepath.Join(e.dir, "music"))
+		s.wait("fill in Max files")
+		s.press(kEnter) // enter goes to what is missing
+		s.typeText("2")
+		s.press(kEnter)
+		s.wait("more than Max files 2")
+		s.wait("Set Max files to 3")
+		if n := e.api.Count(testutil.EndpointRecognize); n != 0 {
+			t.Fatalf("%d requests", n)
+		}
+	})
+	t.Run("missing limit", func(t *testing.T) {
+		e := uiEnv(t)
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		song := e.file("song.mp3", "song audio")
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.press(kCtrlK)
+		s.typeText("recognize")
+		s.press(kEnter)
+		s.wait("audd recognize")
+		s.typeText(song)
+		s.press(down(8)...) // Enterprise
+		s.press(" ")        // on, with no limit
+		s.wait("[x] Enterprise")
+		for range 8 {
+			s.press(kUp)
+		}
+		s.press(kEnter) // enter in a text field runs
+		s.wait("--enterprise needs --limit")
+		s.wait("dd --limit N")
+		if n := e.api.Count(testutil.EndpointEnterprise); n != 0 {
+			t.Fatalf("%d requests", n)
+		}
+	})
+	t.Run("rejected token", func(t *testing.T) {
+		e := uiEnv(t)
+		e.api.AcceptTokens("some-other-token")
+		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+		song := e.file("song.mp3", "song audio")
+		s := e.ui("ui", "--section", "recognize")
+		s.wait("Recognize music")
+		s.typeText(song)
+		s.press(kEnter)
+		s.wait("Wrong API token")
+		s.wait("Set an API token first")
+	})
 }

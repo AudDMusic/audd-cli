@@ -70,13 +70,19 @@ audd recognize song.mp3 --return apple_music,spotify --format json | jq .result.
 Run `audd` with no arguments on a terminal, or `audd ui`, for a full-screen interface to everything audd does:
 
 - **Recognize**: files, URLs, and folders, with the plan shown before any requests are spent; switch Source to Microphone to identify the music playing near you.
-- **Now playing**, **Streams**, and **History**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
+- **Now playing**, **Streams**, and **Recognitions**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
 - **Account** and **Settings**: plan, usage, payment links, the API token, profiles, and every `audd config` key.
 - **Help**: getting started, the CLI guide, every command, and every key.
 
 The bottom line shows the command each action runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its arguments and flags. Limits and confirmations work as on the command line: interactive mode asks before spending more than one request and never adds `--yes`. `audd ui --section streams` opens a section directly.
 
-Esc, or left from the left-most item, goes back one step: to the screen you came from, or to the sidebar. Left and right walk tabs and pages. The mouse works too: click sections, pages, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
+Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back:
+
+- **Sidebar**: ↑/↓ pick a section, → or Enter opens it (`1`-`7` jump straight to one).
+- **Tab bar** (Help, Streams, Recognitions, Account): ←/→ switch tabs, ↓ or Enter goes into the page.
+- **Page**: ↑/↓ move through the list or form, → or Enter opens the selected item; ↑ from the top goes back to the tab bar.
+
+← and Esc always go back one level, and the path at the top of the page shows where you are. Inside typed text ← moves the cursor; on a choice such as Source, ←/→ change it. When a text field is selected you are typing in it: everything you type goes in, ctrl+u clears it, and Esc stops typing but keeps the value and the form. Recognize opens typing in its File, URL, or folder field; other pages open with no text field selected. Enter in a form's last text field runs it, and after an error the cursor is back in the field it is about. Outside text fields each letter means one thing everywhere: `o` opens in the browser, `c` copies, `r` refreshes, `d` removes after asking. What a page can do is on buttons under it (Tab reaches them, Enter presses one); a letter shown on a button presses it directly. Typing on a saved value replaces it, Enter or Edit edits it, and Esc puts the old value back; settings of audd and a stream's URL save right away, and `u` (or ctrl+z) undoes the last change until you make another or leave the section. Spending requests and anything that removes or replaces asks in a dialog that opens on Cancel: move to the action and press Enter (or click it); `n` or Esc cancels. `1`-`7` jump to a section from the menu, a tab bar, or a list (never in a form), and `[` and `]` switch tabs outside text fields. A key that does nothing where you press it says so above the hints. `q` quits from the menu or a tab bar, and asks first when something typed is not saved or a command is running. The mouse works too: click sections, tabs, rows, fields, and buttons, and scroll with the wheel. To select text with the mouse, hold Shift (Option in iTerm2); `AUDD_NO_MOUSE=1` turns the mouse off.
 
 Without a terminal, or with `CI` or `AUDD_NO_TUI` set, `audd` prints its help instead, so scripts and agents get plain output.
 
@@ -132,7 +138,7 @@ audd jobs resume <id>
 audd jobs resume <id> --retry-failed
 ```
 
-A plain resume sends only the files that are left. Files that failed after their upload started, or that were being sent when audd stopped, may have been counted, so they are sent again only with `--retry-failed`.
+A plain resume sends only the files that are left. Files that failed after their upload started, or that were being sent when audd stopped, may have been counted, so they are sent again only with `--retry-failed`, which retries the failures a retry can fix (connection, server, rate limit, quota). Audio that cannot be decoded fails the same way again, so it is sent again only with `--retry-all-failed`.
 
 Running the same batch again while its job is unfinished offers to resume it. Without a terminal it stops with exit 6: pass `--resume` to continue that job, or `--new` to recognize every file again.
 

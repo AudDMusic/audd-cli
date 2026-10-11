@@ -1,40 +1,39 @@
 AudD  ·  profile default
-                 │  Getting started   Guide   Commands  [Keys]  Exit codes and output   Links 
- 1 Recognize     │ Everywhere
- 2 Now playing   │   ctrl+k or :    command palette: run any command
- 3 Streams       │   1-7            jump to a section
- 4 History       │   ↑/↓ j/k        move in the sidebar
- 5 Account       │   enter          open the section
- 6 Settings      │   esc, ←         back (← from the left-most item)
-*7 Help          >   ←/→            tabs and pages
-                 │   click, wheel   select or press; scroll
-                 │   y              copy the command shown at the bottom
+                 │ Help › Keys
+ 1 Recognize     │  Getting started  Guide  Commands >Keys< Exit codes  Links 
+ 2 Now playing   │ Moving around
+ 3 Streams       │   Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
+ 4 Recognitions  │   The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page.
+ 5 Account       │   On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. When a text field is
+ 6 Settings      │   selected, you are typing in it: letters, digits, and symbols go in, ←/→ move the cursor (← at its
+*7 Help          >   start goes back), ctrl+u clears it, and esc stops typing but keeps the value and the form (enter
+                 │   types again). 1-7 jump to a section from the menu, a tab bar, or a list; in a form they never do,
+                 │   and q quits only from the menu or a tab bar. Recognize opens typing in its File, URL, or folder
+                 │   field; other pages open with no text field selected. After an error the cursor is back in the field
+                 │   it is about. On a saved value, such as the callback URL, typing replaces it (as if it was all
+                 │   selected), enter or e edits it, and esc puts the old value back; on a text field letters always
+                 │   type, never shortcuts. Enter in a form's last text field runs it (in Add a stream, enter in ID adds
+                 │   it; the box below is optional). What a page can do is on its buttons: tab (or ↓ from the end of the
+                 │   page) reaches them, ←/→ move between them, enter presses one. A letter on a button, such as (o),
+                 │   presses it from anywhere on the page. A key works only where it is listed; any other key says it
+                 │   does nothing. Settings of audd and a stream's URL save right away; u or ctrl+z undoes the last
+                 │   change until you make another or leave the section. Spending requests, removing, signing out, or
+                 │   replacing the token asks in a dialog: every dialog opens on Cancel; ←/→ move to the action and
+                 │   enter presses it (or click it); esc cancels. Outside dialogs y copies the command at the bottom.
+                 │ 
+                 │   ↑/↓            move in the menu, a list, or a form
+                 │   → or enter     go in: open the section, the page, the selected item
+                 │   ← or esc       come back one level (in typed text ← moves the cursor)
+                 │   ←/→            on a tab bar: switch tabs; on a choice: change it
+                 │   ↑              from the top of a page: back to its tab bar
+                 │   [ ]            previous or next tab, from anywhere in the section outside text fields
+                 │ 
+                 │ Everywhere
+                 │   1-7            jump to a section from the menu, a tab bar, or a list (never in a form)
+                 │   ctrl+k or :    run any command; ctrl+k again closes it
+                 │   y              copy the command shown at the bottom (not in a dialog)
                  │   ?              keys for this screen
-                 │   F1             help
-                 │   q              quit (ctrl+c always quits)
-                 │ 
-                 │ Mouse
-                 │   Click a section, a page, a row, a field, or a button; click a selected row again to open it. The
-                 │   wheel scrolls. To select text with the mouse, hold Shift (Option in iTerm2). AUDD_NO_MOUSE=1 turns
-                 │   the mouse off.
-                 │ 
-                 │ Recognize
-                 │   ↑/↓ tab        move between fields
-                 │   ←/→            Source: a file or the microphone
-                 │   space          tick a box
-                 │   ctrl+o         pick a file or folder
-                 │   enter          next field, or press a button
-                 │   s              stop a batch or a recording
-                 │   o, c, d        result: open, copy the link, details
-                 │ 
-                 │ Now playing
-                 │   ←/→            previous or next stream
-                 │   enter          zoom in or out
-                 │   h              history of the stream
-                 │   o, c           open or copy the song link
-                 │   r              refresh
-                 │ 
- ctrl+k commands │ Streams
- ? keys  q quit  │   ←/→ [ ]        pages: streams, callback, recorder, history and reports
-esc back  ↑/↓ scroll  ←/→ [ ] pages
-ctrl+k runs any audd command
+ [ Commands ]    │   F1             help
+ [ Keys ] q quit │ ↓ 74 more lines below
+
+←/→ tabs  ↓ open  esc back  ? keys

@@ -1,12 +1,13 @@
 AudD  ·  profile default
-                 │  Getting started   Guide   Commands   Keys  [Exit codes and output]  Links 
- 1 Recognize     │ Exit codes
- 2 Now playing   │   0    ok           success, including no match
- 3 Streams       │   1    unexpected   unexpected error, or no match with --fail-on-no-match
- 4 History       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
- 5 Account       │   3    auth         missing or rejected API token, or sign-in needed (audd login)
- 6 Settings      │   4    quota        quota, plan, or feature not available on the account
-*7 Help          >   5    network      network or server error; retrying may help
+                 │ Help › Exit codes
+ 1 Recognize     │  Getting started  Guide  Commands  Keys >Exit codes< Links 
+ 2 Now playing   │ Exit codes
+ 3 Streams       │   0    ok           success, including no match
+ 4 Recognitions  │   1    unexpected   unexpected error, or no match with --fail-on-no-match
+ 5 Account       │   2    usage        invalid arguments or input, or a missing tool such as ffmpeg
+ 6 Settings      │   3    auth         missing or rejected API token, or sign-in needed (audd login)
+*7 Help          >   4    quota        quota, plan, or feature not available on the account
+                 │   5    network      network or server error; retrying may help
                  │   6    safety       a bound is missing (--limit, --max-files), a confirmation is needed (--yes),
                  │                     --max-requests was reached, or an unfinished job for the same files needs
                  │                     --resume or --new
@@ -32,9 +33,8 @@ AudD  ·  profile default
                  │ 
                  │ error
                  │   printed to stderr when a command fails in a machine format
-                 │ 
-                 │ list
- ctrl+k commands │   one JSON document with the rows under "items": {"schema_version":1,"items":[...]}
- ? keys  q quit  │ 
-esc back  ↑/↓ scroll  ←/→ [ ] pages
+ [ Commands ]    │ 
+ [ Keys ] q quit │ ↓ 37 more lines below
+
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd commands --json                                                                                            y copy

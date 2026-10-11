@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/AudDMusic/audd-cli/internal/api"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,7 +29,7 @@ import (
 //	match-*  a match (title = file name)    none-*  no match
 //	bad-*    error 300 (invalid audio)      auth-*  error 900 (bad token)
 //	rate-*   HTTP 429 twice, then a match   drop-*  connection dropped mid-request
-//	daily-*  error 611 (daily rate limit)
+//	daily-*  error 611 (daily rate limit)   gw-*    HTTP 502 (bad gateway)
 //
 // The enterprise endpoint returns two matches per file.
 type fakeAPI struct {
@@ -104,6 +105,8 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"status":"success","result":{"artist":"Artist","title":"%s"}}`, base)
 	case strings.HasPrefix(name, "daily-"):
 		fmt.Fprint(w, `{"status":"error","error":{"error_code":611,"error_message":"Rate limit reached"}}`)
+	case strings.HasPrefix(name, "gw-"):
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 	case strings.HasPrefix(name, "drop-"):
 		hj, _ := w.(http.Hijacker)
 		conn, _, _ := hj.Hijack()
@@ -147,7 +150,7 @@ func (rw rewrite) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func (f *fakeAPI) client() *audd.Client {
 	u, _ := url.Parse(f.srv.URL)
-	hc := &http.Client{Transport: rewrite{u}}
+	hc := &http.Client{Transport: api.Counted(rewrite{u})}
 	return audd.NewClient(testutil.PlaceholderToken, audd.WithHTTPClient(hc),
 		audd.WithBackoffFactor(time.Millisecond), audd.WithOnDeprecation(func(string) {}))
 }

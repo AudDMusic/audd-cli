@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/AudDMusic/audd-cli/internal/api"
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -157,6 +159,9 @@ type runner struct {
 	used     int
 	reserved int
 	unknown  int
+	// maybe are the requests of this run that reached AudD and failed: they
+	// may or may not be billed.
+	maybe    int
 	stopErr  error
 	stopCh   chan struct{}
 	lease    *Lease
@@ -172,15 +177,19 @@ type runner struct {
 
 func (r *runner) run(ctx context.Context) (app.BatchSummary, error) {
 	a := r.a
-	retry := r.opts.RetryFailed
 	for i, it := range r.items {
 		switch {
 		case it.State == StatePending,
-			it.State == StateFailed && (it.SafeRetry || retry):
+			it.State == StateFailed && r.retries(it):
 			r.todo = append(r.todo, i)
 		}
 	}
 
+	if r.job != nil {
+		if can, cant := RetrySplit(r.items); can+cant > 0 {
+			a.Out.Info("%s.", RetryLine(r.items))
+		}
+	}
 	plan := r.plan()
 	if r.opts.DryRun {
 		err := PrintDryRun(a.Out, "", r.jobID(), plan.Endpoint, plan,
@@ -220,7 +229,12 @@ func (r *runner) run(ctx context.Context) (app.BatchSummary, error) {
 		for i, it := range r.items {
 			inputs[i] = it.Input
 		}
-		job, err := r.st.Create(commandKey(inputs), inputs, r.p.Map())
+		params := r.p.Map()
+		if len(r.opts.CommandLine) > 0 {
+			b, _ := json.Marshal(r.opts.CommandLine)
+			params[CommandLineKey] = string(b)
+		}
+		job, err := r.st.Create(commandKey(inputs), inputs, params)
 		if err != nil {
 			return app.BatchSummary{}, err
 		}
@@ -278,11 +292,10 @@ func (r *runner) refresh() error {
 	if len(items) != len(r.items) {
 		return fmt.Errorf("job %s changed while starting", r.job.ID)
 	}
-	retry := r.opts.RetryFailed
 	var todo []int
 	for _, i := range r.todo {
 		it := items[i]
-		if it.State == StatePending || it.State == StateFailed && (it.SafeRetry || retry) && it.ErrCode != ErrCodeInFlight {
+		if it.State == StatePending || it.State == StateFailed && r.retries(it) && it.ErrCode != ErrCodeInFlight {
 			todo = append(todo, i)
 		} else if it.State == StateFailed && it.ErrCode == ErrCodeInFlight && r.items[i].State == StateFailed && r.items[i].ErrCode == ErrCodeInFlight {
 			// Already in flight when this run planned it: --retry-failed
@@ -532,16 +545,20 @@ func (r *runner) refund(res reservation) {
 
 // charge records what a call that reached the API used, on the item and in
 // the run's totals.
-func (r *runner) charge(it *Item, res reservation) {
+func (r *runner) charge(it *Item, res reservation, times int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	n := res.n * max(1, times)
+	// The budget (--max-requests) counts the retries too: only one
+	// request was reserved for them.
+	r.spent += n - res.n
 	switch {
 	case res.exact:
-		it.Requests = res.n
-		r.used += res.n
+		it.Requests += n
+		r.used += n
 	case res.limit != nil:
-		it.RequestsReserved = res.n
-		r.reserved += res.n
+		it.RequestsReserved += n
+		r.reserved += n
 	default:
 		it.RequestsUnknown = true
 		r.unknown++
@@ -584,7 +601,9 @@ func (r *runner) budgetStop() error {
 func (r *runner) process(runCtx, ctx context.Context, i int) {
 	it := r.items[i]
 	it.Err, it.ErrCode, it.APICode, it.SafeRetry, it.Cached, it.Result = "", "", 0, false, false, nil
-	it.Requests, it.RequestsReserved, it.RequestsUnknown, it.BudgetLimit = 0, 0, false, 0
+	// The requests of earlier attempts (a retry) stay counted: each one
+	// reached AudD.
+	it.BudgetLimit = 0
 
 	if res, ok := r.cached[i]; ok {
 		it.State, it.Result, it.Cached = StateDone, res, true
@@ -641,13 +660,22 @@ func (r *runner) process(runCtx, ctx context.Context, i int) {
 		return
 	}
 	for attempt := 0; ; attempt++ {
-		result, err := Recognize(ctx, r.a, it.Input, p)
+		// Every HTTP request that reaches AudD is counted, the SDK's own
+		// retries (a 502, say) included.
+		var sent atomic.Int64
+		result, err := Recognize(api.CountSent(ctx, &sent), r.a, it.Input, p)
+		times := max(1, int(sent.Load()))
 		if err == nil {
 			it.State, it.Result = StateDone, result
 			if budgetLimited {
 				it.BudgetLimit = *res.limit
 			}
-			r.charge(&it, res)
+			r.charge(&it, res, times)
+			if times > 1 {
+				r.mu.Lock()
+				r.maybe += res.n * (times - 1) // the failed tries before
+				r.mu.Unlock()
+			}
 			// --no-cache skips the cache read only: fresh results are
 			// still recorded (as single recognition does), so they show in
 			// the explorer's Recent tab and serve later runs.
@@ -685,7 +713,11 @@ func (r *runner) process(runCtx, ctx context.Context, i int) {
 		if f.safe {
 			r.refund(res)
 		} else {
-			r.charge(&it, res)
+			// It reached AudD and failed: it may be billed.
+			r.charge(&it, res, times)
+			r.mu.Lock()
+			r.maybe += res.n * times
+			r.mu.Unlock()
 		}
 		r.fail(&it, f)
 		return
@@ -762,9 +794,12 @@ func (r *runner) finish(ctx context.Context, status string) (app.BatchSummary, e
 		})
 	}
 	if a.Out.IsHuman() || a.Out.Format() == output.FormatCSV {
-		used := RequestsUsed(sum.RequestsSpent, sum.RequestsReserved, unknown) + " in this run"
+		r.mu.Lock()
+		maybe := r.maybe
+		r.mu.Unlock()
+		used := RequestsSent(sum.RequestsSpent, sum.RequestsReserved, unknown, maybe) + " in this run"
 		if job.Requests != sum.RequestsSpent || job.RequestsReserved != sum.RequestsReserved || job.RequestsUnknownFiles != unknown {
-			used += " (" + RequestsUsed(job.Requests, job.RequestsReserved, job.RequestsUnknownFiles) + " in the whole job)"
+			used += " (" + RequestsSent(job.Requests, job.RequestsReserved, job.RequestsUnknownFiles, failedRequests(r.items)) + " in the whole job)"
 		}
 		a.Out.Info("Job %s: %d recognized, %d no match, %d failed, %d cached; %s.",
 			job.ID, sum.Recognized, sum.NoMatch, sum.Failed, sum.Cached, used)
@@ -789,7 +824,14 @@ func (r *runner) finish(ctx context.Context, status string) (app.BatchSummary, e
 			Message: fmt.Sprintf("stopped with %d of %d files done; nothing finished is lost", job.Done, job.Total),
 			Hint:    "audd jobs resume " + job.ID}
 	case job.Failed > 0:
-		hint := "see the failures with audd jobs show " + job.ID + ", retry them with audd jobs resume " + job.ID + " --retry-failed"
+		can, cant := RetrySplit(r.items)
+		hint := "see the failures with audd jobs show " + job.ID
+		if can > 0 {
+			hint += ", retry the " + output.Plural(can, "file") + " that can work with audd jobs resume " + job.ID + " --retry-failed"
+		}
+		if cant > 0 {
+			hint += "; " + output.Plural(cant, "file") + " failed in a way a retry does not fix (" + firstCant(r.items) + ")"
+		}
 		tooLarge := 0
 		for _, it := range r.items {
 			if it.State == StateFailed && it.ErrCode == "file_too_large" {
@@ -817,3 +859,84 @@ func (noProgress) Start(int, string) {}
 func (noProgress) Inc(int)           {}
 func (noProgress) SetLabel(string)   {}
 func (noProgress) Done()             {}
+
+// retries reports whether this run sends the failed item again: always
+// when nothing reached AudD, with --retry-failed when a retry can work,
+// with --retry-all-failed in any case.
+func (r *runner) retries(it Item) bool {
+	switch {
+	case it.SafeRetry, r.opts.RetryAllFailed:
+		return true
+	case r.opts.RetryFailed:
+		return RetryHelps(it.ErrCode)
+	}
+	return false
+}
+
+// RetryHelps reports whether sending a file that failed with this error
+// code again can work: the connection, the server, a rate or quota limit
+// (after topping up), the token (after fixing it), or a run that stopped.
+// Bad or unsupported audio fails the same way again.
+func RetryHelps(code string) bool {
+	switch code {
+	case "", "network", "server", "rate_limited", "interrupted", ErrCodeInFlight, "quota_exceeded", "token_rejected", "no_token":
+		return true
+	}
+	return false
+}
+
+// RetrySplit counts the failed items a retry can fix, and the others.
+func RetrySplit(items []Item) (can, cant int) {
+	for _, it := range items {
+		if it.State != StateFailed {
+			continue
+		}
+		if RetryHelps(it.ErrCode) {
+			can++
+		} else {
+			cant++
+		}
+	}
+	return can, cant
+}
+
+// firstCant names the first failure a retry does not fix: "corrupt.mp3:
+// the audio could not be decoded".
+func firstCant(items []Item) string {
+	for _, it := range items {
+		if it.State == StateFailed && !RetryHelps(it.ErrCode) {
+			name := it.Input.Name()
+			if !strings.Contains(name, "://") {
+				name = filepath.Base(name)
+			}
+			return name + ": " + strings.TrimSuffix(it.Err, ".")
+		}
+	}
+	return ""
+}
+
+// RetryLine says what the failures are: "2 failed: 1 can be retried, 1
+// can't (corrupt.mp3: the audio could not be decoded)".
+func RetryLine(items []Item) string {
+	can, cant := RetrySplit(items)
+	line := output.Plural(can+cant, "file") + " failed"
+	switch {
+	case cant == 0:
+		return line + ": a retry can work"
+	case can == 0:
+		return line + ", in a way a retry does not fix (" + firstCant(items) + ")"
+	}
+	return fmt.Sprintf("%s: %d can be retried, %d can't (%s)", line, can, cant, firstCant(items))
+}
+
+// failedRequests counts the requests of failed files that reached AudD
+// (they may be billed).
+func failedRequests(items []Item) int {
+	n := 0
+	for _, it := range items {
+		if it.State == StateFailed {
+			n += it.Requests
+		}
+	}
+	return n
+}

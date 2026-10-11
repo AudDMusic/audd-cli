@@ -496,7 +496,16 @@ func (s *Store) Gaps(since time.Time, radioIDs ...int) ([]Gap, error) {
 		}
 		since = e
 	}
+	// Before recording started (the earliest recorded period or play)
+	// nothing was missed: that is not a gap.
+	if e, err := s.Earliest(); err == nil && !e.IsZero() && e.After(since) {
+		since = e
+	}
 	since = since.UTC()
+	var firstAll sql.NullInt64
+	if err := s.db.QueryRow(`SELECT min(first_seen) FROM streams`).Scan(&firstAll); err != nil {
+		return nil, err
+	}
 	ids := radioIDs
 	if len(ids) == 0 {
 		var err error
@@ -513,10 +522,6 @@ func (s *Store) Gaps(since time.Time, radioIDs ...int) ([]Gap, error) {
 		// Nothing but store-wide coverage (or nothing at all).
 		return s.streamGaps(since, now, `1=1`)
 	}
-	var firstAll sql.NullInt64
-	if err := s.db.QueryRow(`SELECT min(first_seen) FROM streams`).Scan(&firstAll); err != nil {
-		return nil, err
-	}
 	var all []Gap
 	for _, id := range ids {
 		from := since
@@ -526,12 +531,16 @@ func (s *Store) Gaps(since time.Time, radioIDs ...int) ([]Gap, error) {
 			return nil, err
 		}
 		if first.Valid && firstAll.Valid && first.Int64 > firstAll.Int64+int64(heartbeatSlack/time.Second) {
+			// A stream added later: its time before that is not a gap.
 			if t := time.Unix(first.Int64, 0).UTC(); t.After(from) {
 				from = t
 			}
 		}
 		g, err := s.streamGaps(from, now, `radio_id IN (`+strconv.Itoa(id)+`, 0)`)
 		if err != nil {
+			return nil, err
+		}
+		if g, err = s.trimByPlays(id, g); err != nil {
 			return nil, err
 		}
 		all = append(all, g...)
@@ -617,4 +626,36 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// trimByPlays takes out of a stream's gaps the time its plays show it was
+// heard: plays saved for a period (results delivered while the recorder
+// was not marking coverage) mean that period was not missed. What is
+// left before the first play and after the last one stays a gap, when it
+// is longer than the heartbeat slack.
+func (s *Store) trimByPlays(id int, gaps []Gap) ([]Gap, error) {
+	var out []Gap
+	for _, g := range gaps {
+		var first, last, lastLen sql.NullInt64
+		err := s.db.QueryRow(`SELECT min(ts), max(ts), max(play_length) FROM plays WHERE radio_id = ? AND ts >= ? AND ts <= ?`,
+			id, g.From.Unix(), g.To.Unix()).Scan(&first, &last, &lastLen)
+		if err != nil {
+			return nil, err
+		}
+		if !first.Valid {
+			out = append(out, g)
+			continue
+		}
+		before := Gap{From: g.From, To: time.Unix(first.Int64, 0).UTC()}
+		after := Gap{From: time.Unix(last.Int64+lastLen.Int64, 0).UTC(), To: g.To}
+		for _, p := range []Gap{before, after} {
+			if p.To.Sub(p.From) > heartbeatSlack {
+				out = append(out, p)
+			}
+		}
+	}
+	if out == nil {
+		out = []Gap{}
+	}
+	return out, nil
 }

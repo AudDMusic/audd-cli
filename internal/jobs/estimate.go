@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AudDMusic/audd-cli/internal/app"
@@ -165,6 +166,17 @@ func RequestsUsed(spent, reserved, unknown int) string {
 	}
 	if unknown > 0 {
 		s += ", plus an unknown number for " + output.Plural(unknown, "file") + " of unknown length sent without --limit"
+	}
+	return s
+}
+
+// RequestsSent is RequestsUsed, said with care when some requests failed
+// after reaching AudD (they may or may not be billed): "7 requests sent
+// (up to 7 billed)".
+func RequestsSent(spent, reserved, unknown, failed int) string {
+	s := RequestsUsed(spent, reserved, unknown)
+	if failed > 0 && spent > 0 {
+		s = strings.Replace(s, output.Plural(spent, "request")+" used", output.Plural(spent, "request")+" sent (up to "+output.Thousands(spent)+" billed)", 1)
 	}
 	return s
 }

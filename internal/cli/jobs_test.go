@@ -103,7 +103,7 @@ func TestJobsShowFormats(t *testing.T) {
 
 	r = run(t, "jobs", "show", id, "--format", "table")
 	for _, want := range []string{"Job " + id, "1 recognized, 1 no match, 1 failed, 0 cached; 2 requests used.", "✓ /music/one.mp3  Artist — One", "· /music/two.mp3  no match",
-		"✗ https://example.com/three.mp3  failed: Recognition failed", "audd jobs resume " + id + " --retry-failed"} {
+		"✗ https://example.com/three.mp3  failed: Recognition failed", "1 file failed, in a way a retry does not fix (https://example.com/three.mp3: Recognition failed)."} {
 		if !strings.Contains(r.Stdout, want) {
 			t.Fatalf("missing %q in\n%s", want, r.Stdout)
 		}
@@ -151,9 +151,15 @@ func TestJobsResumeFinishedJobSendsNothing(t *testing.T) {
 	if !strings.Contains(r.Stdout, `"type":"summary"`) {
 		t.Fatalf("piped resume streams JSONL: %q", r.Stdout)
 	}
+	// The failure is bad audio: --retry-failed leaves it, and says why;
+	// --retry-all-failed sends it.
 	r = run(t, "jobs", "resume", id, "--retry-failed", "--dry-run")
-	if r.Code != 0 || !strings.Contains(r.Stdout, `"requests":1`) || !strings.Contains(r.Stdout, `"job_id":"`+id+`"`) {
+	if r.Code != 0 || !strings.Contains(r.Stdout, `"requests":0`) || !strings.Contains(r.Stderr, "1 file failed, in a way a retry does not fix") {
 		t.Fatalf("dry run: %d %q %q", r.Code, r.Stdout, r.Stderr)
+	}
+	r = run(t, "jobs", "resume", id, "--retry-all-failed", "--dry-run")
+	if r.Code != 0 || !strings.Contains(r.Stdout, `"requests":1`) || !strings.Contains(r.Stdout, `"job_id":"`+id+`"`) {
+		t.Fatalf("dry run, all: %d %q %q", r.Code, r.Stdout, r.Stderr)
 	}
 }
 

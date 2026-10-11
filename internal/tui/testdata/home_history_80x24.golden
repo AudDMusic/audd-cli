@@ -1,10 +1,10 @@
 AudD  ·  profile default
-                 │ [Recent]  Jobs 
- 1 Recognize     │   When    Song      Album         Source
- 2 Now playing   │ > Oct 0…  Imagine…  Warriors      warriors.mp3
- 3 Streams       │   Oct 0…  No match                https://aud…
-*4 History       >   Oct 0…  2 match…                mix.mp3
- 5 Account       │ 
+                 │ Recognitions › Recent
+ 1 Recognize     │ >Recent< Jobs 
+ 2 Now playing   │   When          Song                         Source
+ 3 Streams       │ · Oct 8 11:00   Imagine Dragons — Warriors   warriors.mp3
+*4 Recognitions  >   Oct 8 10:00   No match                     https://audd.…
+ 5 Account       │   Oct 8 09:00   2 matches                    mix.mp3
  6 Settings      │ 
  7 Help          │ 
                  │ 
@@ -16,9 +16,9 @@ AudD  ·  profile default
                  │ 
                  │ 
                  │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ Recognized with audd · 3
-←/esc back  ↑/↓ move  enter open  / filter  o open  c copy  e export  tab next
+                 │ Recognized with audd · 3 recognitions
+ [ Commands ]    │ 
+ [ Keys ] q quit │ [ Refresh (r) ]  [ Export (x) ]
+
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd browse --tab recent                                                y copy

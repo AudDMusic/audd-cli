@@ -1,24 +1,24 @@
 AudD  ·  profile default
-                 │ [Account]  Usage   Billing   API token   Profiles 
- 1 Recognize     │ Sign in to see this
- 2 Now playing   │ 
- 3 Streams       │ Your account, usage, and billing need a sign-in to your AudD
- 4 History       │ account.
-*5 Account       > 
- 6 Settings      │ › Sign in
- 7 Help          │     Sign in to your AudD account in the browser (or with a
-                 │     code on another device). audd saves your API token.
+                 │ Account › Overview
+ 1 Recognize     │ >Overview< Usage  Billing  API token  Profiles 
+ 2 Now playing   │ Sign in to see this
+ 3 Streams       │ 
+ 4 Recognitions  │ An API token is saved for profile default, so audd can
+*5 Account       > recognize music. Your account, usage, and billing need a
+ 6 Settings      │ sign-in to your AudD account.
+ 7 Help          │ 
+                 │ · Sign in to your account
+                 │     Sign in to your AudD account in the browser (or with a
+                 │     code on another device) to see your plan, usage, and
+                 │     billing.
+                 │ 
+                 │   Paste a different token
+                 │     Replace the API token of this profile with one from
+                 │     https://dashboard.audd.io.
                  │ 
                  │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
-                 │ 
- ctrl+k commands │ 
- ? keys  q quit  │ 
-←/esc back  ↑/↓ choose  enter go  ←/→ [ ] pages
+ [ Commands ]    │ 
+ [ Keys ] q quit │ 
+
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --browser                                                    y copy

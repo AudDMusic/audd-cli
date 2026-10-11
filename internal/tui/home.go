@@ -3,7 +3,12 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/AudDMusic/audd-cli/internal/paths"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -55,9 +60,9 @@ func init() {
 
 // HomeSections are the section names audd ui --section accepts, in
 // sidebar order. It also accepts listen: Recognize with the microphone.
-var HomeSections = []string{"recognize", "now-playing", "streams", "history", "account", "settings", "help"}
+var HomeSections = []string{"recognize", "now-playing", "streams", "recognitions", "account", "settings", "help"}
 
-var homeTitles = []string{"Recognize", "Now playing", "Streams", "History", "Account", "Settings", "Help"}
+var homeTitles = []string{"Recognize", "Now playing", "Streams", "Recognitions", "Account", "Settings", "Help"}
 
 // isListen reports whether a section name asks for the microphone.
 func isListen(name string) bool { return strings.ToLower(strings.TrimSpace(name)) == "listen" }
@@ -185,16 +190,21 @@ func wrapGen(owner string, gen int, cmd tea.Cmd) tea.Cmd {
 // wrap tags what cmd returns for owner in the current session.
 func (h *home) wrap(owner string, cmd tea.Cmd) tea.Cmd { return wrapGen(owner, h.gen, cmd) }
 
+// focusArea is the level that has the keys: the sidebar (1), a
+// section's tab bar (2), or the page under it (3, and anything opened
+// from it).
 type focusArea int
 
 const (
 	focusSidebar focusArea = iota
+	focusTabs
 	focusContent
 )
 
 // headerMsg carries the account line of the header.
 type headerMsg struct {
 	email, plan string
+	planKey     string // the plan's identifier, as list_plans names it
 	remaining   int
 	known       bool
 	err         error
@@ -221,7 +231,28 @@ type home struct {
 	// backTo are the screens jumps came from (a Help step, a hint, the
 	// palette): esc at the top of a screen returns to the last one, and
 	// to the sidebar when there is none.
-	backTo []string
+	backTo []origin
+	// headRows are the rows above the section's page (breadcrumb, tab
+	// bar) in the last frame.
+	headRows int
+	// tip is the first-run line that states how to move around.
+	tip bool
+	// confirmedAt is when a dialog was last answered yes (see confirmed).
+	confirmedAt time.Time
+	// sideBtn is the button under the menu that has the keys: 1
+	// Commands, 2 Keys (0: none, a section has them).
+	sideBtn int
+	// confirm is a question of the screen's own, before something that
+	// spends requests or cannot be undone.
+	confirm *confirmState
+	// tipKeys counts the keys pressed while the tip shows.
+	tipKeys int
+	// keysScroll scrolls the keys overlay.
+	keysScroll scrollView
+	// btnActive: the page's buttons have the keys; btnCur is the
+	// focused one.
+	btnActive bool
+	btnCur    int
 
 	// Mouse: what each region of the last frame does when clicked.
 	zoneFns []func() tea.Cmd
@@ -238,12 +269,15 @@ type home struct {
 
 	signedOut bool
 	testToken bool
-	hdr       headerMsg
-	hdrLoaded bool
+	// recognized and streamAdded mark Getting started steps done.
+	recognized, listened, streamAdded bool
+	hdr                               headerMsg
+	hdrLoaded                         bool
 
-	flash  string
-	flashN int
-	osc    string
+	flash     string
+	lastFlash string
+	flashN    int
+	osc       string
 
 	runs   runRegistry
 	arts   *artStore
@@ -262,11 +296,15 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 	h.st = a.Out.Styles()
 	h.color = !a.Out.Options().NoColor
 	h.runs.cancels = map[int]context.CancelFunc{}
+	h.runs.spending = map[int]string{}
 	h.build()
 	h.signedOut = h.noToken()
+	h.tip = a.Profile != nil && !a.Profile.UITipSeen
 	switch {
 	case start >= 0:
-		h.cur, h.focus = start, focusContent
+		h.cur = start
+		h.focus = h.entryFocus()
+		h.pageEntered()
 	case h.signedOut:
 		h.showSignin, h.focus = true, focusContent
 	default:
@@ -281,14 +319,14 @@ func newHome(ctx context.Context, a *app.App, start int) *home {
 func (h *home) build() {
 	h.order = append([]string(nil), HomeSections...)
 	h.subs = map[string]section{
-		"recognize":   newRecognizeSection(h),
-		"now-playing": newNowPlayingSection(h),
-		"streams":     newStreamsSection(h),
-		"history":     newHistorySection(h),
-		"account":     newAccountSection(h),
-		"settings":    newSettingsSection(h),
-		"help":        newHelpSection(h),
-		"signin":      newSigninSection(h),
+		"recognize":    newRecognizeSection(h),
+		"now-playing":  newNowPlayingSection(h),
+		"streams":      newStreamsSection(h),
+		"recognitions": newHistorySection(h),
+		"account":      newAccountSection(h),
+		"settings":     newSettingsSection(h),
+		"help":         newHelpSection(h),
+		"signin":       newSigninSection(h),
 	}
 	h.palette = newPalette(h)
 	h.subs["palette"] = h.palette
@@ -352,18 +390,43 @@ func (h *home) show(id string, focus bool) tea.Cmd {
 	if focus {
 		h.focus = focusContent
 	}
+	h.btnActive = false
 	cmd := h.activate()
+	h.pageEntered()
+	if h.focus == focusTabs && h.tabs() == nil {
+		h.focus = focusContent
+	}
 	if s, ok := h.subs["recognize"].(*recognizeSection); ok && mic {
 		cmd = tea.Batch(cmd, h.wrap("recognize", s.findDevices()))
 	}
 	return cmd
 }
 
+// origin is where a jump came from: the screen and the level that had
+// the keys.
+type origin struct {
+	id    string
+	focus focusArea
+}
+
 // navigate opens a section the user chose (sidebar, number keys, F1):
-// there is nothing to go back to but the sidebar.
+// there is nothing to go back to but the sidebar. The keys go to the
+// section's tab bar when it has one, else to its page.
 func (h *home) navigate(id string) tea.Cmd {
 	h.backTo = nil
-	return h.show(id, true)
+	cmd := h.show(id, false)
+	h.focus = h.entryFocus()
+	h.pageEntered()
+	return cmd
+}
+
+// entryFocus is where the keys go when a section is opened: its tab
+// bar, or its page when it has no tabs.
+func (h *home) entryFocus() focusArea {
+	if h.tabs() != nil {
+		return focusTabs
+	}
+	return focusContent
 }
 
 // jump opens a screen from an action in another (a Help step, a hint,
@@ -374,20 +437,25 @@ func (h *home) jump(id string) tea.Cmd {
 	if to == "listen" {
 		to = "recognize"
 	}
-	if h.focus == focusContent && from != to {
-		h.backTo = append(h.backTo, from)
+	if h.focus != focusSidebar && from != to {
+		h.backTo = append(h.backTo, origin{from, h.focus})
 	}
 	return h.show(id, true)
 }
 
-// goBack leaves the top of a screen: to the screen a jump came from, or
-// to the sidebar, with its section shown and highlighted.
+// goBack leaves the top of a screen: to the screen a jump came from (at
+// the level it was left from), or to the sidebar, with its section shown
+// and highlighted.
 func (h *home) goBack() tea.Cmd {
 	for len(h.backTo) > 0 {
-		id := h.backTo[len(h.backTo)-1]
+		o := h.backTo[len(h.backTo)-1]
 		h.backTo = h.backTo[:len(h.backTo)-1]
-		if id != h.activeID() {
-			return h.show(id, true)
+		if o.id != h.activeID() {
+			cmd := h.show(o.id, true)
+			if o.focus == focusTabs && h.tabs() != nil {
+				h.focus = focusTabs
+			}
+			return cmd
 		}
 	}
 	h.toSidebar()
@@ -399,6 +467,14 @@ func (h *home) goBack() tea.Cmd {
 func (h *home) toSidebar() {
 	h.focus = focusSidebar
 	h.showSignin = false
+}
+
+// profileName is the session's profile.
+func (h *home) profileName() string {
+	if h.a.Profile != nil {
+		return h.a.Profile.Name
+	}
+	return "default"
 }
 
 // useMic switches Recognize to the microphone.
@@ -421,17 +497,51 @@ func (h *home) send(id string, msg tea.Msg) tea.Cmd {
 	return h.wrap(id, s.update(msg))
 }
 
+// setFlash says something in the status line; it stays until the next
+// key or click.
 func (h *home) setFlash(s string) tea.Cmd {
 	h.flash = s
 	h.flashN++
-	id := h.flashN
-	return tea.Tick(4*time.Second, func(time.Time) tea.Msg { return clearHomeFlashMsg{id: id} })
+	return nil
+}
+
+// noBrowser is said when a link could not be opened: it is copied instead.
+const noBrowser = "Couldn't open a browser here. The link is copied — paste it into a browser."
+
+// openLink opens a link in the browser; when that fails, it copies the
+// link and says so.
+func (h *home) openLink(link string) tea.Cmd {
+	if err := openURL(link); err != nil {
+		h.osc = oscCopy(link)
+		return tea.Batch(h.setFlash(noBrowser),
+			tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} }))
+	}
+	return h.setFlash("Opened in your browser: " + link)
+}
+
+// leaver is a section that forgets something when you leave it (its
+// undo).
+type leaver interface{ left() }
+
+// leftSection tells the section id that it was left, when it was.
+func (h *home) leftSection(id string) {
+	if id == h.activeID() {
+		return
+	}
+	if l, ok := h.subs[id].(leaver); ok {
+		l.left()
+	}
 }
 
 // copy puts s on the clipboard with the next frame.
 func (h *home) copy(s, what string) tea.Cmd {
 	h.osc = oscCopy(s)
-	return tea.Batch(h.setFlash("Copied "+what),
+	// One line: a long command is shortened in the middle.
+	msg := "Copied " + what
+	if len([]rune(msg)) > h.w {
+		msg = truncMiddle(msg, max(20, h.w))
+	}
+	return tea.Batch(h.setFlash(msg),
 		tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} }))
 }
 
@@ -444,7 +554,33 @@ func (h *home) takeOSC(s string) tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} })
 }
 
-func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (h *home) Update(msg tea.Msg) (m tea.Model, cmd tea.Cmd) {
+	// A bug never closes the window silently: it is said and logged, and
+	// the session goes on.
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(r)
+			h.flash = fmt.Sprintf("Something went wrong: %v (your data is safe; details in %s)", r, panicLog())
+			m, cmd = h, nil
+		}
+	}()
+	return h.update(msg)
+}
+
+// panicLog is the file where panics of interactive mode are written.
+func panicLog() string { return filepath.Join(paths.DataDir(), "ui-errors.log") }
+
+func logPanic(r any) {
+	_ = os.MkdirAll(filepath.Dir(panicLog()), 0o755)
+	f, err := os.OpenFile(panicLog(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s panic: %v\n%s\n", time.Now().Format(time.RFC3339), r, debug.Stack())
+}
+
+func (h *home) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h.w, h.h = msg.Width, msg.Height
@@ -467,9 +603,18 @@ func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subMsg:
 		return h, h.route(msg)
 	case tea.KeyMsg:
-		return h, h.key(msg)
+		before := h.activeID()
+		cmd := h.key(msg)
+		h.leftSection(before)
+		return h, cmd
 	case tea.MouseMsg:
-		return h, h.mouse(msg)
+		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonLeft) {
+			h.flash = ""
+		}
+		before := h.activeID()
+		cmd := h.mouse(msg)
+		h.leftSection(before)
+		return h, cmd
 	}
 	return h, nil
 }
@@ -514,104 +659,36 @@ func (h *home) route(m subMsg) tea.Cmd {
 	return h.send(m.owner, m.msg)
 }
 
-func (h *home) key(k tea.KeyMsg) tea.Cmd {
-	s := k.String()
-	if h.ask != nil {
-		return h.askKey(k)
-	}
-	if s == "ctrl+c" {
-		return tea.Quit
-	}
-	if h.keysO {
-		h.keysO = false
-		if s == "f1" || s == "enter" {
-			return h.navigate("help")
-		}
-		return nil
-	}
-	if h.paletteO {
-		if s == "esc" || s == "left" && h.palette.leftExits() {
-			if !h.palette.back() {
-				h.paletteO = false
-			}
-			return nil
-		}
-		if s == "ctrl+k" {
-			h.paletteO = false
-			return nil
-		}
-		return h.send("palette", k)
-	}
-	switch s {
-	case "ctrl+k":
-		return h.openPalette("")
-	case "f1":
-		return h.navigate("help")
-	}
-	cur := h.active()
-	if h.focus == focusContent && s == "left" && leftExits(cur) {
-		return h.goBack()
-	}
-	if h.focus == focusContent && cur.capturing() {
-		if s == "esc" && !cur.back() {
-			return h.goBack()
-		}
-		return h.send(h.activeID(), k)
-	}
-	switch s {
-	case ":":
-		return h.openPalette("")
-	case "?":
-		h.keysO = true
-		return nil
-	case "q":
-		return tea.Quit
-	case "y":
-		if c := h.command(); c != "" {
-			return h.copy(c, "the command: "+c)
-		}
-		return h.setFlash("No command to copy here")
-	case "1", "2", "3", "4", "5", "6", "7":
-		return h.navigate(h.order[s[0]-'1'])
-	}
-	if h.focus == focusSidebar {
-		h.backTo = nil
-		switch s {
-		case "down", "j":
-			if h.showSignin {
-				h.showSignin = false
-			} else {
-				h.cur = (h.cur + 1) % len(h.order)
-			}
-			return h.activate()
-		case "up", "k":
-			if h.showSignin {
-				h.showSignin = false
-			} else {
-				h.cur = (h.cur + len(h.order) - 1) % len(h.order)
-			}
-			return h.activate()
-		case "enter", "right", "l", "tab":
-			h.focus = focusContent
-			return h.activate()
-		}
-		return nil
-	}
-	if s == "esc" {
-		if !cur.back() {
-			return h.goBack()
-		}
-		return nil
-	}
-	return h.send(h.activeID(), k)
-}
-
 // command is the command for the footer.
 func (h *home) command() string {
+	return h.withSession(h.rawCommand())
+}
+
+func (h *home) rawCommand() string {
+	if h.confirm != nil {
+		return h.confirm.command
+	}
 	if h.paletteO {
 		return h.palette.command()
 	}
 	return h.active().command()
+}
+
+// withSession adds what the session adds to every run (the test token),
+// so the command shown and copied is the one that runs.
+func (h *home) withSession(c string) string {
+	if !h.testToken || !strings.HasPrefix(c, "audd ") || strings.Contains(c, "--token") {
+		return c
+	}
+	for _, p := range []string{"audd login", "audd logout", "audd auth", "audd config", "audd token", "audd ui"} {
+		if strings.HasPrefix(c, p) {
+			return c // these do not use the token they would run with
+		}
+	}
+	if i := strings.Index(c, " > "); i >= 0 {
+		return c[:i] + " --token test" + c[i:]
+	}
+	return c + " --token test"
 }
 
 // openPalette opens the command palette, on a command's form when path
@@ -641,7 +718,7 @@ func (h *home) loadHeader() tea.Cmd {
 			return headerMsg{err: err}
 		}
 		if s, err := b.Status(c); err == nil && s.Plan != nil {
-			m.plan = s.Plan.Name
+			m.plan, m.planKey = s.Plan.Name, s.Plan.Key
 			if m.plan == "" {
 				m.plan = s.Plan.Key
 			}
@@ -655,19 +732,53 @@ func (h *home) loadHeader() tea.Cmd {
 
 // signedIn is called after a token was set or a sign-in finished.
 func (h *home) signedIn(testToken bool) tea.Cmd {
-	h.testToken = testToken
-	if testToken {
-		h.flags.Token = "test"
-	}
-	h.signedOut = h.noToken()
-	h.hdrLoaded = false
+	h.useToken(testToken)
 	h.showSignin = false
 	h.focus = focusContent
 	h.backTo = nil
+	return tea.Batch(h.loadHeader(), h.show("recognize", true))
+}
+
+// useToken makes runs use the public test token, or the profile's own
+// token (saved, from audd login, or from the environment). It is called
+// on every change of token: the token that runs is the one the header
+// shows.
+func (h *home) useToken(test bool) {
+	h.testToken = test
+	h.flags.Token = ""
+	if test {
+		h.flags.Token = "test"
+	}
 	if a, err := HomeApp(h.flags); err == nil {
 		h.a = sessionApp(a)
 	}
-	return tea.Batch(h.loadHeader(), h.show("recognize", true))
+	h.signedOut = h.noToken()
+	h.hdr, h.hdrLoaded = headerMsg{}, false
+	// A result from the other token is not shown as if it was this one's.
+	if r, ok := h.subs["recognize"].(*recognizeSection); ok && r.phase == "result" {
+		r.phase, r.plan = "form", ""
+	}
+	h.reloadData()
+}
+
+// reloadData starts the sections that show account data afresh (with the
+// new token): nothing they loaded with the old one stays shown. The
+// section in view keeps its page (Account reloads it itself); the
+// others load again when opened.
+func (h *home) reloadData() {
+	fresh := map[string]func(*home) section{
+		"now-playing":  newNowPlayingSection,
+		"streams":      newStreamsSection,
+		"recognitions": newHistorySection,
+		"account":      newAccountSection,
+	}
+	for id, mk := range fresh {
+		if !h.inits[id] || id == h.activeID() {
+			continue
+		}
+		h.subs[id] = mk(h)
+		delete(h.inits, id)
+	}
 }
 
 // switchProfile rebuilds the session for another profile.
@@ -678,6 +789,9 @@ func (h *home) switchProfile(name string) tea.Cmd {
 	if err != nil {
 		return h.setFlash("Could not switch: " + output.AsError(err).Message)
 	}
+	// The test token was for this session's profile: the new one runs
+	// with its own token.
+	flags.Token = ""
 	h.flags = flags
 	h.a = sessionApp(a)
 	h.testToken = false
@@ -700,6 +814,9 @@ type runRegistry struct {
 	mu      sync.Mutex
 	wg      sync.WaitGroup
 	cancels map[int]context.CancelFunc
+	// spending are the runs that may spend requests, by id: their
+	// commands, for the question before quitting.
+	spending map[int]string
 }
 
 func (h *home) waitRuns(d time.Duration) {
@@ -712,17 +829,83 @@ func (h *home) waitRuns(d time.Duration) {
 }
 
 // leftExiter is a section that uses the left key in some states (a text
-// cursor, tabs, streams) and says when there is nothing further left, so
-// left goes back to the sidebar.
+// cursor, the stations grid) and says when it does not, so left goes
+// back one level, as esc does.
 type leftExiter interface {
 	leftExits() bool
 }
 
-// leftExits reports whether left returns to the sidebar from s. Sections
-// that don't say keep left only while they are capturing keys.
+// leftExits reports whether left goes back one level in s. Sections that
+// don't say keep left only while they are capturing keys.
 func leftExits(s section) bool {
 	if le, ok := s.(leftExiter); ok {
 		return le.leftExits()
 	}
 	return !s.capturing()
+}
+
+// noTokenChoices is the one wording of the ways to get a token;
+// noTokenChoicesReal leaves out the test token (streams need your own).
+const (
+	noTokenChoices     = "Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."
+	noTokenChoicesReal = "Streams need your own token (the public test token does not work for them): paste yours from dashboard.audd.io, or sign in."
+)
+
+// tokenWays are the ways to get an API token: label and action. With
+// test, the public test token is the first; next runs once it is in use
+// (the page stays where it is).
+func (h *home) tokenWays(test bool, next func() tea.Cmd) []button {
+	var b []button
+	if test {
+		b = append(b, button{label: "Use the test token", do: func() tea.Cmd {
+			h.useToken(true)
+			return tea.Batch(h.loadHeader(), h.setFlash("Using the test token: 10 requests a day"), next())
+		}})
+	}
+	return append(b,
+		button{label: "Paste a token…", do: func() tea.Cmd {
+			cmd := h.jump("signin")
+			if si, ok := h.subs["signin"].(*signinSection); ok {
+				si.step = "paste"
+				si.paste.focusName("token")
+				si.paste.resume()
+			}
+			return cmd
+		}},
+		button{label: "Sign in", do: func() tea.Cmd {
+			cmd := h.jump("signin")
+			if si, ok := h.subs["signin"].(*signinSection); ok {
+				si.choice = 0
+				return tea.Batch(cmd, h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
+			}
+			return cmd
+		}},
+	)
+}
+
+// askToken asks how to get an API token (why says what needs it).
+func (h *home) askToken(owner, why string, test bool, next func() tea.Cmd) tea.Cmd {
+	ways := h.tokenWays(test, next)
+	var choices []string
+	for _, w := range ways {
+		choices = append(choices, w.label)
+	}
+	notes := noTokenChoices
+	if !test {
+		notes = noTokenChoicesReal
+	}
+	return h.askFirst(&confirmState{
+		owner:    owner,
+		question: "You need an API token",
+		notes:    []string{why + " " + notes},
+		choices:  choices,
+		topic:    "API token",
+		cancel:   "Cancelled. Nothing was sent.",
+		pick:     func(i int) tea.Cmd { return ways[i].do() },
+	})
+}
+
+// tokenButtons are the ways to get an API token, as a page's buttons.
+func (h *home) tokenButtons(test bool, next func() tea.Cmd) []button {
+	return h.tokenWays(test, next)
 }

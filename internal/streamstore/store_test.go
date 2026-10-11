@@ -374,3 +374,40 @@ func TestCoverageIsPerStream(t *testing.T) {
 		t.Fatalf("only stream 2 is on the account now: %+v", gaps)
 	}
 }
+
+// Plays saved for a period show the stream was heard then: the gap is
+// only what is before the first play and after the last one.
+func TestGapsLeaveOutPeriodsWithPlays(t *testing.T) {
+	s := openTemp(t)
+	now := t0.Add(3 * time.Hour)
+	s.Now = func() time.Time { return now }
+	if err := s.SetAccountStreams([]int{1}, t0); err != nil {
+		t.Fatal(err)
+	}
+	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(time.Hour), Artist: "A", Title: "One", PlayLength: 180})
+	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(2 * time.Hour), Artist: "B", Title: "Two", PlayLength: 180})
+	gaps, err := s.Gaps(t0)
+	// Before the first play nothing was recorded yet: not a gap. After
+	// the last one, it is.
+	if err != nil || len(gaps) != 1 || !gaps[0].From.Equal(t0.Add(2*time.Hour+180*time.Second)) {
+		t.Fatalf("gaps around the plays: %+v %v", gaps, err)
+	}
+}
+
+// Before a stream was first known is before recording started: not a
+// gap.
+func TestNoGapBeforeAStreamWasKnown(t *testing.T) {
+	s := openTemp(t)
+	now := t0.Add(4 * time.Hour)
+	s.Now = func() time.Time { return now }
+	if err := s.SetAccountStreams([]int{1}, t0.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	for at := t0.Add(2 * time.Hour); !at.After(now); at = at.Add(30 * time.Second) {
+		s.Heartbeat(at, 1)
+	}
+	gaps, err := s.Gaps(t0)
+	if err != nil || len(gaps) != 0 {
+		t.Fatalf("gaps before the stream existed: %+v %v", gaps, err)
+	}
+}

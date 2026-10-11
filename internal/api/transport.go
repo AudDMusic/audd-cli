@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"sync/atomic"
 
 	"strings"
 	"time"
@@ -75,7 +77,16 @@ type transport struct {
 	debug   func(format string, args ...any)
 }
 
-func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	if c, ok := req.Context().Value(sentKey{}).(*atomic.Int64); ok {
+		// Counted unless the connection never opened (nothing reached
+		// AudD then): every retry the SDK makes is a request.
+		defer func() {
+			if err == nil || !PreUpload(err) {
+				c.Add(1)
+			}
+		}()
+	}
 	r := req.Clone(req.Context())
 	apiBase, entBase := t.apiBase, t.entBase
 	if t.fromEnv {
@@ -97,7 +108,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	start := time.Now()
 	t.debug("debug: → %s %s", r.Method, Redact(r.URL.String()))
-	resp, err := t.base.RoundTrip(r)
+	resp, err = t.base.RoundTrip(r)
 	if err != nil {
 		t.debug("debug: ✗ %s %s: %s (%s)", r.Method, Redact(r.URL.String()), Redact(err.Error()), time.Since(start).Round(time.Millisecond))
 		return nil, err
@@ -120,3 +131,29 @@ func rebase(r *http.Request, base *url.URL) {
 
 // Redact hides token values in URLs and messages.
 func Redact(s string) string { return output.Redact(s) }
+
+type sentKey struct{}
+
+// CountSent returns a context whose AudD requests are counted in n: each
+// HTTP request that may have reached AudD, retries included.
+func CountSent(ctx context.Context, n *atomic.Int64) context.Context {
+	return context.WithValue(ctx, sentKey{}, n)
+}
+
+// Counted wraps a transport so requests sent with a CountSent context
+// are counted (the CLI's own transport counts already; this is for
+// other HTTP clients, such as tests').
+func Counted(rt http.RoundTripper) http.RoundTripper { return countedRT{rt} }
+
+type countedRT struct{ rt http.RoundTripper }
+
+func (c countedRT) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	if n, ok := req.Context().Value(sentKey{}).(*atomic.Int64); ok {
+		defer func() {
+			if err == nil || !PreUpload(err) {
+				n.Add(1)
+			}
+		}()
+	}
+	return c.rt.RoundTrip(req)
+}

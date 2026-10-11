@@ -413,6 +413,16 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
+	case "ctrl+o":
+		return tea.KeyMsg{Type: tea.KeyCtrlO}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
@@ -489,7 +499,7 @@ func TestNowPlayingScreenGridAndZoom(t *testing.T) {
 
 	m = npTestModel(t, sampleFeed(), nil, true)
 	view = runModel(t, m, "Feeling Good", key("right"), key("enter"))
-	if !strings.Contains(view, "stream 2 of 3") || !strings.Contains(view, "Stream 2  https://radio.example/b.mp3") || !strings.Contains(view, "LAST PLAYED · ended 21 min ago") || !strings.Contains(view, "played 3:50") {
+	if !strings.Contains(view, "2 of 3 streams") || !strings.Contains(view, "Stream 2  https://radio.example/b.mp3") || !strings.Contains(view, "LAST PLAYED · ended 21 min ago") || !strings.Contains(view, "played 3:50") {
 		t.Fatalf("zoom on the second stream:\n%s", view)
 	}
 }
@@ -498,7 +508,7 @@ func TestNowPlayingScreenHealthDown(t *testing.T) {
 	m := npTestModel(t, sampleFeed(), []int{3}, true)
 	view := runModel(t, m, "Roads")
 	testutil.Golden(t, "nowplaying_down", []byte(view))
-	if !strings.Contains(view, "Last heard: Portishead — Roads · 3 h ago") {
+	if !strings.Contains(view, "Last heard: Portishead — Roads · at 09:00") {
 		t.Fatalf("down view:\n%s", view)
 	}
 }
@@ -511,7 +521,7 @@ func TestNowPlayingScreenHistoryAndKeys(t *testing.T) {
 
 	m := npTestModel(t, sampleFeed(), []int{1}, true)
 	view := runModel(t, m, "Warriors", key("h"), key("o"))
-	if !strings.Contains(view, "recent plays") || !strings.Contains(view, "Teardrop") || !strings.Contains(view, "Opened https://lis.tn/Warriors") {
+	if !strings.Contains(view, "recent plays") || !strings.Contains(view, "Teardrop") || !strings.Contains(view, "Opened in your browser: https://lis.tn/Warriors") {
 		t.Fatalf("history view:\n%s", view)
 	}
 	if len(opened) != 1 || opened[0] != "https://lis.tn/Warriors" {

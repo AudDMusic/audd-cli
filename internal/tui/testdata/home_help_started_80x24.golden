@@ -1,24 +1,24 @@
 AudD  ·  profile default
-                 │ [Getting started]  Guide   Commands   Keys   Exit codes and …
- 1 Recognize     │ Getting started
- 2 Now playing   │ 
- 3 Streams       │ › 1. Sign in
- 4 History       │      Sign in to your AudD account (or paste an API token) so
- 5 Account       │      audd can recognize music and show your account.
- 6 Settings      │      $ audd login
-*7 Help          > 
+                 │ Help › Getting started
+ 1 Recognize     │ >Getting started< Guide  Commands  Keys  Exit codes  Links 
+ 2 Now playing   │ Getting started
+ 3 Streams       │ 
+ 4 Recognitions  │ · 1. Sign in  ✓ done
+ 5 Account       │      Sign in to your AudD account (or paste an API token) so
+ 6 Settings      │      audd can recognize music and show your account.
+*7 Help          >      $ audd login --device
+                 │ 
                  │   2. Recognize a file
-                 │      Pick a file, URL, or folder and recognize it. This fills
-                 │      in AudD's example song.
+                 │      Pick a file, URL, or folder and recognize it. Enter here
+                 │      fills in AudD's example song so you can try a
+                 │      recognition.
                  │      $ audd recognize https://audd.tech/example.mp3
                  │ 
                  │   3. Use the microphone
                  │      In Recognize, set Source to Microphone to record a few
                  │      seconds and identify the song.
-                 │      $ audd listen
-                 │ 
-                 │   4. Add a stream
- ctrl+k commands │      Have AudD monitor a radio or other live stream, then
- ? keys  q quit  │      watch it in Now playing.
-←/esc back  ↑/↓ step  enter go  ←/→ [ ] pages
-$ audd login                                                              y copy
+ [ Commands ]    │      $ audd listen
+ [ Keys ] q quit │ ↓ 13 more lines
+
+←/→ tabs  ↓ open  esc back  ? keys
+$ audd login --device                                                     y copy

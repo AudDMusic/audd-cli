@@ -123,11 +123,21 @@ func (h *home) hitAt(x, y int) func() tea.Cmd {
 
 // inContent reports whether (x, y) is in the content pane.
 func (h *home) inContent(x, y int) bool {
-	cw, ch := h.contentSize()
+	cw, ch := h.paneSize()
 	if h.narrow() {
 		return y >= 2 && y < 2+ch && x < cw
 	}
 	return y >= 1 && y < 1+ch && x >= sidebarW+2
+}
+
+// inPage reports whether (x, y) is on the section's page, under the
+// breadcrumb and the tab bar.
+func (h *home) inPage(x, y int) bool {
+	top := 1
+	if h.narrow() {
+		top = 2
+	}
+	return h.inContent(x, y) && y >= top+h.headRows
 }
 
 // receiver is who gets keys now: the palette when it is open, or the
@@ -151,7 +161,13 @@ func (h *home) mouse(m tea.MouseMsg) tea.Cmd {
 	if m.Action != tea.MouseActionPress {
 		return nil
 	}
-	if h.ask != nil {
+	if h.prompt() {
+		// A question takes only clicks on its buttons.
+		if m.Button == tea.MouseButtonLeft {
+			if fn := h.hitAt(m.X, m.Y); fn != nil {
+				return fn()
+			}
+		}
 		return nil
 	}
 	if h.keysO {
@@ -179,7 +195,7 @@ func (h *home) mouse(m tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	owner := h.receiver()
-	if h.inContent(m.X, m.Y) && !h.paletteO {
+	if h.inPage(m.X, m.Y) && !h.paletteO {
 		h.focus = focusContent
 	}
 	fn := h.hitAt(m.X, m.Y)
@@ -200,24 +216,4 @@ func keyWheel(dir, n int, send func(tea.KeyMsg) tea.Cmd) tea.Cmd {
 		cmds = append(cmds, send(k))
 	}
 	return tea.Batch(cmds...)
-}
-
-// pageStrip is a row of page names with the current one marked; a click
-// opens a page.
-func (h *home) pageStrip(pages []string, cur, w int, open func(int) tea.Cmd) string {
-	st := h.st
-	var parts []string
-	for i, p := range pages {
-		var label string
-		switch {
-		case i == cur && h.color:
-			label = st.Bold.Reverse(true).Render(" " + p + " ")
-		case i == cur:
-			label = "[" + p + "]"
-		default:
-			label = st.Dim.Render(" " + p + " ")
-		}
-		parts = append(parts, h.mark(label, func() tea.Cmd { return open(i) }))
-	}
-	return truncate(strings.Join(parts, " "), w)
 }

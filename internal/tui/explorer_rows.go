@@ -16,6 +16,7 @@ import (
 type column struct {
 	title string
 	width int
+	mid   bool // shortened in the middle (URLs)
 }
 
 // row is one line of a list, with what the shared keys need.
@@ -28,6 +29,36 @@ type row struct {
 	detail func(st detailStyles) string
 	view   *app.ResultView // the song whose cover the detail shows
 	data   any             // exported with e
+	hint   string          // what to do about it, in the status line
+	// matches: an enterprise result's songs, a list of their own that
+	// enter opens.
+	matches []row
+}
+
+var matchCols = []column{{title: "Where", width: 15}, {title: "Song", width: 0}, {title: "Album", width: 24}}
+
+// matchRows are the songs of an enterprise result, each with its own
+// details and link (nil for a single song).
+func matchRows(raw json.RawMessage, source string) []row {
+	_, ms, single := resultSummary(raw)
+	if single || len(ms) == 0 {
+		return nil
+	}
+	rows := make([]row, 0, len(ms))
+	for i, m := range ms {
+		m := m
+		r := newRow(fmt.Sprint(i), m.at, songLine(m.view), m.view.Album)
+		r.link = m.view.SongLink
+		r.copies = map[string]string{"i": m.view.ISRC, "u": m.view.UPC}
+		v := m.view
+		r.view = &v
+		r.detail = func(st detailStyles) string {
+			return st.dim.Render(source) + "\n" + st.dim.Render("At "+m.at) + "\n\n" + strings.Join(detailFields(m.view, st.key), "\n")
+		}
+		r.data = m.view
+		rows = append(rows, r)
+	}
+	return rows
 }
 
 type detailStyles struct {
@@ -42,7 +73,7 @@ func when(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.In(localZone).Format("Jan 02 15:04")
+	return t.In(localZone).Format("Jan 2 15:04")
 }
 
 // --- recognition results ---
@@ -122,9 +153,9 @@ func singleView(raw json.RawMessage) *app.ResultView {
 func resultDetail(raw json.RawMessage, st detailStyles) string {
 	if _, matches, single := resultSummary(raw); single {
 		v, length, _ := ViewFromJSON(raw)
-		lines := cardLines(v, true, st.title, st.dim, st.key)
+		lines := detailFields(v, st.key)
 		if length > 0 {
-			lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Length"))+clock(length))
+			lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Track length"))+clock(length))
 		}
 		return strings.Join(lines, "\n")
 	} else if len(matches) > 0 {
@@ -138,7 +169,7 @@ func resultDetail(raw json.RawMessage, st detailStyles) string {
 		}
 		return strings.TrimRight(b.String(), "\n")
 	}
-	return st.dim.Render("No match.")
+	return st.dim.Render("No match. Recognize it again with Clip at another moment, or scan more with Enterprise.")
 }
 
 func shortSource(s string) string {
@@ -158,6 +189,7 @@ func recentRows(items []RecentItem) []row {
 		r.link = v.SongLink
 		r.copies = map[string]string{"i": v.ISRC, "u": v.UPC}
 		r.view = singleView(it.Result)
+		r.matches = matchRows(it.Result, it.Source)
 		raw := it.Result
 		r.detail = func(st detailStyles) string {
 			return st.dim.Render(it.Source) + "\n\n" + resultDetail(raw, st)
@@ -168,23 +200,58 @@ func recentRows(items []RecentItem) []row {
 	return rows
 }
 
-var recentCols = []column{{"When", 12}, {"Song", 0}, {"Album", 24}, {"Source", 24}}
+var recentCols = []column{{title: "When", width: 12}, {title: "Song", width: 0}, {title: "Album", width: 24}, {title: "Source", width: 24}}
 
 // --- jobs ---
 
-var jobCols = []column{{"Job", 10}, {"Status", 11}, {"Done", 11}, {"Failed", 6}, {"Created", 12}, {"Command", 0}}
+var jobCols = []column{{title: "Job", width: 10}, {title: "Status", width: 11}, {title: "Done", width: 11}, {title: "Failed", width: 6}, {title: "Created", width: 12}, {title: "Input", width: 0, mid: true}}
 
 func jobRows(jobs []JobRow) []row {
 	rows := make([]row, 0, len(jobs))
 	for _, j := range jobs {
-		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), strings.Join(j.Command, " "))
+		// What was recognized: the folder's name ("music"), or the
+		// first file "and N more"; the whole command is on the job's page.
+		input := j.Inputs
+		if input == "" {
+			input = strings.Join(j.Command, " ")
+		}
+		r := newRow(j.ID, j.ID, j.Status, fmt.Sprintf("%d/%d", j.Done, j.Total), fmt.Sprint(j.Failed), when(j.Created), input,
+			fmt.Sprintf("%d/%d, %d failed", j.Done, j.Total, j.Failed))
 		r.data = j
+		j := j
+		r.detail = func(st detailStyles) string {
+			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
+			out := st.title.Render("Job "+j.ID) + "\n\n" +
+				field("Status", j.Status) +
+				field("Done", fmt.Sprintf("%d of %d files, %d failed", j.Done, j.Total, j.Failed)) +
+				field("Created", when(j.Created)) +
+				field("Command", j.BatchCommand())
+			if len(j.Failures) > 0 {
+				// Each failed file and why; whether a retry can fix it.
+				out += "\n" + st.key.Render("Failed") + "\n"
+				for _, f := range j.Failures {
+					note := "a retry can work"
+					if !f.CanRetry {
+						note = "retrying won't help"
+					}
+					out += "  " + f.File + ": " + strings.TrimSuffix(f.Reason, ".") + " " + st.dim.Render("("+note+")") + "\n"
+				}
+			} else if n := j.Failed - j.RetryableFailed; n > 0 && j.FailReason != "" {
+				// Say why, instead of offering a retry that fails again.
+				what := "These files failed"
+				if n == 1 {
+					what = "This file failed"
+				}
+				out += "\n" + st.dim.Render(fmt.Sprintf("%s because %s; retrying won't help.", what, strings.TrimSuffix(j.FailReason, ".")))
+			}
+			return out
+		}
 		rows = append(rows, r)
 	}
 	return rows
 }
 
-var jobItemCols = []column{{"#", 5}, {"State", 8}, {"Input", 30}, {"Result", 0}}
+var jobItemCols = []column{{title: "#", width: 5}, {title: "State", width: 8}, {title: "Input", width: 30}, {title: "Result", width: 0}}
 
 func jobItemRows(items []JobItem) []row {
 	rows := make([]row, 0, len(items))
@@ -192,7 +259,7 @@ func jobItemRows(items []JobItem) []row {
 		res := ""
 		switch {
 		case it.Err != "":
-			res = "Error: " + it.Err
+			res = "Error: " + capFirst(it.Err)
 		case len(it.Result) > 0:
 			res, _, _ = resultSummary(it.Result)
 		}
@@ -201,6 +268,7 @@ func jobItemRows(items []JobItem) []row {
 		r.link = v.SongLink
 		r.copies = map[string]string{"i": v.ISRC, "u": v.UPC}
 		r.view = singleView(it.Result)
+		r.matches = matchRows(it.Result, it.Input)
 		it := it
 		r.detail = func(st detailStyles) string {
 			var b strings.Builder
@@ -221,7 +289,18 @@ func jobItemRows(items []JobItem) []row {
 
 // --- streams ---
 
-var streamCols = []column{{"ID", 4}, {"Health", 19}, {"Latest song", 0}, {"When", 17}, {"URL", 22}}
+var streamCols = []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song"}, {title: "When", width: 17}, {title: "URL", mid: true}}
+
+// streamColsFor is the streams list for a w-wide view: the health and
+// the time keep their width; the URL, shortened in the middle, takes what
+// is left once the song has room, and is left out when there is none
+// (the stream's details show it).
+func streamColsFor(w int) []column {
+	if w >= 100 {
+		return []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song", width: 30}, {title: "When", width: 17}, {title: "URL", mid: true}}
+	}
+	return []column{{title: "ID", width: 4}, {title: "Health", width: 13}, {title: "Latest song"}, {title: "When", width: 17}}
+}
 
 func streamRows(data []stationData, now time.Time) []row {
 	rows := make([]row, 0, len(data))
@@ -239,13 +318,24 @@ func streamRows(data []stationData, now time.Time) []row {
 		}
 		r := newRow(fmt.Sprint(d.RadioID), fmt.Sprint(d.RadioID), d.healthShort(), song, since, d.URL)
 		r.link = link
+		d, song, since := d, song, since
+		r.detail = func(st detailStyles) string {
+			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
+			out := st.title.Render(fmt.Sprintf("Stream %d", d.RadioID)) + "\n\n" +
+				field("URL", d.URL) + field("Health", d.HealthText())
+			if h := d.healthNext(); h != "" {
+				out += field("Next step", h)
+			}
+			return out + field("Latest", song+"  "+st.dim.Render(since))
+		}
+		r.hint = d.healthHint()
 		r.data = stationDoc(d, now)
 		rows = append(rows, r)
 	}
 	return rows
 }
 
-var playCols = []column{{"Time", 12}, {"Song", 0}, {"Album", 28}, {"Played", 7}, {"Length", 7}}
+var playCols = []column{{title: "When", width: 18}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played for", width: 10}, {title: "Track length", width: 12}}
 
 // whenShort is the "When" cell of a stream: "now · 1:23" while a song
 // plays, "ended 2 min ago" for a result sent when the song ended, else the
@@ -258,12 +348,15 @@ func whenShort(p Play, now time.Time) string {
 		}
 		return "now · " + clock(p.Elapsed(now))
 	case p.PlayLength > 0:
-		return "ended " + ago(p.Ago(now))
+		if end, _ := p.Ended(); end.After(now) {
+			return "playing"
+		}
+		return "ended " + agoAt(p.Ago(now), now)
 	}
-	return ago(p.Ago(now))
+	return "started " + agoAt(p.Ago(now), now)
 }
 
-func playRows(plays []Play) []row {
+func playRows(plays []Play, at time.Time) []row {
 	rows := make([]row, 0, len(plays))
 	for _, p := range plays {
 		played, length := "", ""
@@ -273,7 +366,7 @@ func playRows(plays []Play) []row {
 		if p.TrackLength > 0 {
 			length = clock(p.TrackLength)
 		}
-		r := newRow(p.key(), when(p.At), songLine(p.ResultView), p.Album, played, length)
+		r := newRow(p.key(), playWhen(p, at), songLine(p.ResultView), p.Album, played, length)
 		r.search += " " + strings.ToLower(p.Label+" "+p.ISRC)
 		r.link = p.SongLink
 		r.copies = map[string]string{"i": p.ISRC, "u": p.UPC}
@@ -283,10 +376,10 @@ func playRows(plays []Play) []row {
 			head := st.dim.Render(fmt.Sprintf("Stream %d · %s", p.RadioID, p.At.In(localZone).Format("2006-01-02 15:04:05")))
 			lines := cardLines(p.ResultView, true, st.title, st.dim, st.key)
 			if p.PlayLength > 0 {
-				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Played"))+clock(p.Played()))
+				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Played for"))+clock(p.Played()))
 			}
 			if p.TrackLength > 0 {
-				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Length"))+clock(p.TrackLength))
+				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Track length"))+clock(p.TrackLength))
 			}
 			return head + "\n\n" + strings.Join(lines, "\n")
 		}

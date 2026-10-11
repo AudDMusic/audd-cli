@@ -22,7 +22,7 @@ var (
 		default:
 			cmd = exec.Command("xdg-open", u)
 		}
-		return cmd.Start()
+		return startAndReap(cmd)
 	}
 	// notify shows a desktop notification.
 	notify = func(title, body string) error {
@@ -57,4 +57,14 @@ func windowsToast(title, body string) string {
 // modern terminals support it, including over SSH.
 func copyOSC52(w io.Writer, s string) {
 	fmt.Fprintf(w, "\x1b]52;c;%s\a", base64.StdEncoding.EncodeToString([]byte(s)))
+}
+
+// startAndReap starts a helper (a browser opener) without waiting for
+// it, and collects it when it exits, so it never lingers as a zombie.
+func startAndReap(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
 }

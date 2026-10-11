@@ -3,6 +3,7 @@ package cli_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/AudDMusic/audd-cli/internal/jobs"
 	"io"
 	"net/http"
 	"os"
@@ -929,5 +930,32 @@ func TestRecognizeBatchNamesTheConfigCeiling(t *testing.T) {
 	if r.Code != output.ExitSafety || errCode(t, r) != "max_requests_reached" ||
 		!strings.Contains(r.Stderr, "the max_requests setting (1)") || !strings.Contains(r.Stderr, "audd config unset max_requests") {
 		t.Fatalf("%d %s", r.Code, r.Stderr)
+	}
+}
+
+// A batch keeps the command as typed (the folder, not every file), and
+// that is what jobs show and copy.
+func TestBatchKeepsTheCommandAsTyped(t *testing.T) {
+	f, dir := setup(t)
+	f.Reply(testutil.EndpointRecognize, testutil.Success(testutil.MatchResult()))
+	audio(t, dir, "a.mp3", "x")
+	audio(t, dir, "b.mp3", "y")
+	r := run(t, "recognize", dir, "--max-files", "5", "--yes", "--return", "spotify", "--token", "secret-token-value")
+	if r.Code != 0 {
+		t.Fatalf("%d %s", r.Code, r.Stderr)
+	}
+	st, err := jobs.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, _ := jobs.List(st)
+	st.Close()
+	if len(list) != 1 {
+		t.Fatalf("jobs: %d", len(list))
+	}
+	got := strings.Join(list[0].CommandLine, " ")
+	if !strings.HasPrefix(got, "recognize "+dir+" ") || !strings.Contains(got, "--max-files 5") || !strings.Contains(got, "--return spotify") ||
+		strings.Contains(got, "a.mp3") || strings.Contains(got, "secret-token-value") || strings.Contains(got, "--yes") {
+		t.Fatalf("command line: %q", got)
 	}
 }

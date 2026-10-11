@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -33,6 +34,9 @@ type runReq struct {
 	spends bool
 	// tag is for the section's own bookkeeping.
 	tag string
+	// agreed: the user already confirmed this run in a dialog of its
+	// own (after its dry run), so the command's question is answered yes.
+	agreed bool
 }
 
 // run is a run in flight.
@@ -118,6 +122,9 @@ func (h *home) start(req runReq) tea.Cmd {
 	ctx, cancel := context.WithCancel(h.ctx)
 	h.runs.mu.Lock()
 	h.runs.cancels[r.id] = cancel
+	if req.spends {
+		h.runs.spending[r.id] = displayCommand(req.args)
+	}
 	h.runs.mu.Unlock()
 	h.runs.wg.Add(1)
 	width := h.contentWidth()
@@ -143,6 +150,9 @@ func (h *home) start(req runReq) tea.Cmd {
 			}
 		}}
 		ask := func(q string) bool {
+			if req.agreed {
+				return true
+			}
 			reply := make(chan bool, 1)
 			msg := runAskMsg{run: r, question: q, notes: noteLines(errBuf.String()), reply: reply}
 			select {
@@ -178,6 +188,7 @@ func (rr *runRegistry) done(id int) {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	delete(rr.cancels, id)
+	delete(rr.spending, id)
 }
 
 // cancel stops a run (Ctrl-C for that command).
@@ -267,6 +278,18 @@ func parseResult(code int, stdout, stderr string) runResult {
 				continue
 			}
 		}
+		// A command that prints for people (--format table) writes its
+		// error as "Error: …" and "Try: …" lines.
+		switch {
+		case res.err == nil && strings.HasPrefix(t, "Error: "):
+			res.err = &runError{Code: "error", Message: strings.TrimPrefix(t, "Error: ")}
+			continue
+		case res.err != nil && res.err.Hint == "" && strings.HasPrefix(t, "Try: "):
+			res.err.Hint = strings.TrimPrefix(t, "Try: ")
+			continue
+		case strings.HasPrefix(t, "Docs: "):
+			continue
+		}
 		res.notes = append(res.notes, strings.TrimRight(l, " "))
 	}
 	if code != 0 && res.err == nil {
@@ -351,9 +374,13 @@ type askState struct {
 	input    textinput.Model
 	typed    string
 	mismatch bool
+	cur      int // the focused button; 0 is Cancel
 }
 
 func newAskState(owner string, m runAskMsg, h *home) *askState {
+	// A command asks before spending more than one request. Cancel has
+	// the focus, so a double enter never spends; only enter on the
+	// action (or a click) confirms.
 	s := &askState{owner: owner, msg: m, typed: m.run.req.typed}
 	if s.typed != "" {
 		ti := textinput.New()
@@ -363,6 +390,33 @@ func newAskState(owner string, m runAskMsg, h *home) *askState {
 		s.input = ti
 	}
 	return s
+}
+
+// action is the confirming button, named from the question: "Recognize
+// 2 files, using 2 requests?" is [ Recognize 2 files ].
+func (s *askState) action() string {
+	q := strings.TrimSpace(s.msg.question)
+	for _, sep := range []string{"? ", ", "} {
+		if i := strings.Index(q, sep); i > 0 {
+			q = q[:i]
+		}
+	}
+	q = strings.TrimSuffix(q, "?")
+	// "Scan up to 5 chunks of mix.mp3 with the enterprise endpoint" is
+	// [ Scan mix.mp3 ].
+	q = strings.TrimSuffix(q, " with the enterprise endpoint")
+	if strings.HasPrefix(q, "Scan ") {
+		if i := strings.LastIndex(q, " of "); i > 0 {
+			q = "Scan " + q[i+4:]
+		}
+	}
+	if w := strings.Fields(q); len(w) > 6 {
+		q = strings.Join(w[:6], " ") + "…"
+	}
+	if q == "" {
+		return "Go ahead"
+	}
+	return q
 }
 
 // askWaiting is a confirmation that waits for the one on screen.
@@ -395,7 +449,7 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 	}
 	if key == "esc" {
 		h.answer(false)
-		return h.setFlash("Cancelled")
+		return h.setFlash("Cancelled. Nothing was sent.")
 	}
 	if s.typed != "" {
 		if key == "enter" {
@@ -412,37 +466,95 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 	switch key {
-	case "y", "Y":
-		h.answer(true)
+	case "left", "shift+tab":
+		s.cur = max(0, s.cur-1)
 		return nil
-	case "n", "N", "enter":
-		h.answer(false)
-		return h.setFlash("Cancelled")
+	case "right", "tab":
+		s.cur = min(len(h.askButtons())-1, s.cur+1)
+		return nil
+	case "enter":
+		return h.pressAsk(s.cur)
+	case "n", "N":
+		return h.pressAsk(0)
+	case "?":
+		return h.setFlash("←/→ choose · enter press · esc cancel")
 	}
-	return nil
+	return h.setFlash(keyName(key) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
+
+// pressAsk answers with button i: 0 is Cancel.
+func (h *home) pressAsk(i int) tea.Cmd {
+	if i == 1 {
+		h.answer(true)
+		h.confirmed()
+		return nil
+	}
+	ways := h.tokenWays(false, nil)
+	h.answer(false)
+	if i >= 2 && i-2 < len(ways) {
+		// Use your own token instead: nothing was sent.
+		return tea.Batch(h.setFlash("Cancelled. Nothing was sent."), ways[i-2].do())
+	}
+	return h.setFlash("Cancelled. Nothing was sent.")
+}
+
+// askButtons are the buttons of a command's question: Cancel and the
+// action; with the public test token also the ways to use your own.
+func (h *home) askButtons() []string {
+	b := []string{"Cancel", h.ask.action()}
+	if h.testToken {
+		b = append(b, "Paste a token…", "Sign in")
+	}
+	return b
+}
+
+// testTokenNote says what the public test token allows, for a question
+// that spends requests ("" with your own token).
+func (h *home) testTokenNote(s *askState) string {
+	if !h.testToken {
+		return ""
+	}
+	need := ""
+	for _, t := range append([]string{s.msg.question}, s.msg.notes...) {
+		if m := requestsRe.FindStringSubmatch(t); m != nil {
+			need = m[1]
+			break
+		}
+	}
+	note := "The test token allows 10 requests a day"
+	if need != "" {
+		note += "; this run needs " + need + " and stops after the daily limit"
+	}
+	return note + ". Use your own token:"
+}
+
+// requestsRe finds "1,500 requests" in a plan.
+var requestsRe = regexp.MustCompile(`([0-9][0-9,]*) requests?\b`)
 
 // askView is the confirmation in the content pane.
 func (h *home) askView(w, ht int) string {
 	s := h.ask
 	var b strings.Builder
-	b.WriteString(h.st.Bold.Render("Confirm") + "\n\n")
+	// The question, then what it costs (the plan); the command is on the
+	// bottom line.
+	b.WriteString(styleLines(h.st.Bold, output.Wrap(s.msg.question, w)) + "\n\n")
 	for _, n := range s.msg.notes {
 		b.WriteString(output.Wrap(n, w) + "\n")
 	}
 	if len(s.msg.notes) > 0 {
 		b.WriteString("\n")
 	}
-	b.WriteString(styleLines(h.st.Warn, output.Wrap(s.msg.question, w)) + "\n\n")
-	b.WriteString(h.st.Dim.Render("$ "+displayCommand(s.msg.run.req.args)) + "\n\n")
 	if s.typed != "" {
-		b.WriteString(fmt.Sprintf("Type %s and press Enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))
-		b.WriteString(s.input.View() + "\n")
+		b.WriteString(fmt.Sprintf("Type %s and press enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))
+		b.WriteString(inputView(s.input, h.color) + "\n")
 		if s.mismatch {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}
 	} else {
-		b.WriteString("Press y to confirm, n or esc to cancel.\n")
+		if note := h.testTokenNote(s); note != "" {
+			b.WriteString(styleLines(h.st.Warn, output.Wrap(note+" Paste a token or Sign in below.", w)) + "\n\n")
+		}
+		b.WriteString(h.dialogButtons(h.askButtons(), s.cur, h.pressAsk, w) + "\n")
 	}
 	return b.String()
 }

@@ -1,0 +1,24 @@
+AudD  ·  profile default
+                 │ Streams › List
+ 1 Recognize     │ [List] Callback  Recorder  History & reports 
+ 2 Now playing   │   ID    Health         Latest song        When
+*3 Streams       >   1     Live           Imagine Dragons …  ended 1 min ago
+ 4 Recognitions  │ › 2     Live           Nina Simone — Fe…  ended 21 min ago
+ 5 Account       │   3     No connection  Portishead — Roa…  ended at 09:00
+ 6 Settings      │ 
+ 7 Help          │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ 
+                 │ Streams · 3 streams · https://radio.example/b.mp3
+ [ Commands ]    │ 
+ [ Keys ] esc ←  │ [ Add a stream (a) ]  [ Refresh (r) ]  [ Export (x) ]
+
+↑/↓ move  → open  ←/esc back  / filter  tab buttons  ? keys
+$ audd streams list                                                       y copy

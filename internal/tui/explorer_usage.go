@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AudDMusic/audd-cli/internal/account"
 	"github.com/AudDMusic/audd-cli/internal/output"
@@ -23,7 +24,11 @@ func (m *explorer) usageView() string {
 	}
 	u := m.usage
 	var b strings.Builder
-	b.WriteString(m.st.Bold.Render("This billing cycle") + "\n\n")
+	title := "This billing cycle"
+	if u.CycleStart != "" && u.CycleEnd != "" {
+		title += " (" + dayWords(u.CycleStart) + " to " + dayWords(u.CycleEnd) + ")"
+	}
+	b.WriteString(m.st.Bold.Render(title) + "\n\n")
 	fmt.Fprintf(&b, "  %-12s %s\n", "Used", fmtInt(u.UsedThisCycle))
 	if u.Allowance > 0 {
 		fmt.Fprintf(&b, "  %-12s %s\n", "Allowance", fmtInt(u.Allowance))
@@ -38,11 +43,24 @@ func (m *explorer) usageView() string {
 		}
 	}
 	if len(u.Days) > 0 {
-		b.WriteString("\n" + m.st.Bold.Render("Requests per day") + "\n\n")
-		b.WriteString(dayChart(u.Days, m.w-4, m.h-16, m.st))
+		// The chart is the last days, which is not the billing cycle:
+		// said, so the two never seem to contradict each other.
+		head := fmt.Sprintf("Requests per day (last %d days)", len(u.Days))
+		b.WriteString("\n" + m.st.Bold.Render(head) + "\n")
+		if note := usageMismatch(u); note != "" {
+			b.WriteString(m.st.Dim.Render(output.Wrap(note, max(20, m.w-2))) + "\n")
+		}
+		b.WriteString("\n")
+		// The chart takes the rows left (and at least a few).
+		used := strings.Count(b.String(), "\n") + 4
+		b.WriteString(dayChart(u.Days, m.w-4, max(3, m.h-used), m.st))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n" + m.st.Dim.Render("Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"))
+	note := "Plans and payments: audd billing plans · audd billing renew · audd billing buy <n>"
+	if m.embedded {
+		note = "Plans, payments, and more requests: → or enter opens the Billing tab."
+	}
+	b.WriteString("\n" + styleLines(m.st.Dim, output.Wrap(note, max(20, m.w-2))))
 	return b.String()
 }
 
@@ -85,4 +103,35 @@ func fmtInt(n int) string {
 		return "-" + string(out)
 	}
 	return string(out)
+}
+
+// dayWords is a date of the API ("2026-10-01") as "Oct 1, 2026".
+func dayWords(d string) string {
+	t, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		return d
+	}
+	return t.Format("Jan 2, 2006")
+}
+
+// usageMismatch says, when the daily counts and the cycle's total do not
+// agree, that both are as AudD reports them.
+func usageMismatch(u *account.Usage) string {
+	inCycle := 0
+	for _, d := range u.Days {
+		if (u.CycleStart == "" || d.Date >= u.CycleStart) && (u.CycleEnd == "" || d.Date < u.CycleEnd) {
+			inCycle += d.Requests
+		}
+	}
+	total := 0
+	for _, d := range u.Days {
+		total += d.Requests
+	}
+	if total > 0 && inCycle != u.UsedThisCycle && inCycle == 0 {
+		return "These days are outside the billing cycle AudD reports, so they are not in Used above."
+	}
+	if inCycle > u.UsedThisCycle {
+		return fmt.Sprintf("AudD reports %s used this cycle; the days below add up to %s.", fmtInt(u.UsedThisCycle), fmtInt(inCycle))
+	}
+	return ""
 }

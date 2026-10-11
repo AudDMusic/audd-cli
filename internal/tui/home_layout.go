@@ -4,16 +4,24 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/AudDMusic/audd-cli/internal/output"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 // Layout of interactive mode:
 //
-//	header (1 row)
+//	header (1 row, 2 when it does not fit)
 //	sidebar │ content        or, under 80 columns:  tab strip / content
+//	status (1 row): what just happened, or the first-run tip
 //	key hints (1 row)
 //	$ command (1 row)
+//
+// The content pane starts with a breadcrumb and, for sections with
+// tabs, the tab bar; the section's page is under them.
 const (
 	sidebarW    = 17 // sidebar width, without the rule
 	narrowWidth = 80
@@ -21,12 +29,23 @@ const (
 
 func (h *home) narrow() bool { return h.w < narrowWidth }
 
-// contentSize is the size of the content pane.
-func (h *home) contentSize() (int, int) {
+// paneSize is the size of the content pane.
+func (h *home) paneSize() (int, int) {
+	rows := h.h - 2 - h.statusRows() - len(h.headerLines())
 	if h.narrow() {
-		return max(1, h.w), max(1, h.h-4)
+		rows--
 	}
-	return max(1, h.w-sidebarW-2), max(1, h.h-3)
+	if h.narrow() {
+		return max(1, h.w), max(1, rows)
+	}
+	return max(1, h.w-sidebarW-2), max(1, rows)
+}
+
+// contentSize is the size of the page: the content pane under the
+// breadcrumb and the tab bar.
+func (h *home) contentSize() (int, int) {
+	w, ht := h.paneSize()
+	return w, max(1, ht-h.headRowsNow()-h.actionRowsNow())
 }
 
 func (h *home) View() string {
@@ -35,22 +54,36 @@ func (h *home) View() string {
 	}
 	h.arts.beginView()
 	h.zoneFns = nil
-	cw, ch := h.contentSize()
+	cw, ch := h.paneSize()
+	head := h.crumbLine(cw)
+	if t := h.tabs(); t != nil && !h.overlay() {
+		head += "\n" + h.tabBar(t, cw)
+	}
+	h.headRows = h.headRowsNow()
+	bh := max(1, ch-h.headRows)
 	var body string
 	switch {
 	case h.ask != nil:
-		body = h.askView(cw, ch)
+		body = h.askView(cw, bh)
+	case h.confirm != nil:
+		body = h.confirmView(cw)
 	case h.keysO:
-		body = h.keysView(cw)
+		h.keysScroll.lines = strings.Split(h.keysView(cw), "\n")
+		body = h.keysScroll.view(cw, bh)
 	case h.paletteO:
-		body = h.palette.view(cw, ch)
+		body = h.palette.view(cw, bh)
 	default:
-		body = h.active().view(cw, ch)
+		if acts := h.pageActions(); len(acts) > 0 {
+			rows := h.actionRowsNow()
+			body = fit(h.active().view(cw, bh-rows), cw, bh-rows) + "\n\n" + h.buttonsLine(acts, cw)
+		} else {
+			body = h.active().view(cw, bh)
+		}
 	}
-	body = fit(body, cw, ch)
-	var page string
+	body = fit(head+"\n"+fit(body, cw, bh), cw, ch)
+	page := strings.Join(h.headerLines(), "\n")
 	if h.narrow() {
-		page = h.headerLine() + "\n" + h.tabStrip() + "\n" + body
+		page += "\n" + h.tabStrip() + "\n" + body
 	} else {
 		side := strings.Split(h.sidebar(ch), "\n")
 		lines := strings.Split(body, "\n")
@@ -61,9 +94,9 @@ func (h *home) View() string {
 				b.WriteString("\n")
 			}
 		}
-		page = h.headerLine() + "\n" + b.String()
+		page += "\n" + b.String()
 	}
-	page += "\n" + h.hintsLine() + "\n" + h.commandLine()
+	page += "\n" + h.statusLine() + "\n" + h.hintsLine() + "\n" + h.commandLine()
 	page = h.scanZones(page)
 	page = h.arts.finishView(page, h.w)
 	if h.osc != "" {
@@ -72,7 +105,18 @@ func (h *home) View() string {
 	return page
 }
 
-func (h *home) headerLine() string {
+// headerLines is the header: on one row, or on two when it does not
+// fit (the account line goes to the second).
+func (h *home) headerLines() []string {
+	parts := h.headerParts()
+	sep := h.st.Dim.Render("  ·  ")
+	if one := strings.Join(parts, sep); ansiWidth(one) <= h.w || len(parts) < 3 {
+		return []string{truncate(one, h.w)}
+	}
+	return []string{truncate(strings.Join(parts[:2], sep), h.w), truncate("  "+strings.Join(parts[2:], sep), h.w)}
+}
+
+func (h *home) headerParts() []string {
 	mark := h.st.Bold.Render("AudD")
 	if h.color {
 		mark = h.st.Bold.Inherit(h.st.Accent).Render("AudD")
@@ -100,13 +144,47 @@ func (h *home) headerLine() string {
 			parts = append(parts, fmtInt(h.hdr.remaining)+" requests left")
 		}
 	}
-	return truncate(strings.Join(parts, h.st.Dim.Render("  ·  ")), h.w)
+	return parts
+}
+
+// statusRows is how many rows the status line takes: two for a long
+// message.
+func (h *home) statusRows() int {
+	if h.flash != "" && ansiWidth(h.flash) > h.w {
+		return 2
+	}
+	return 1
+}
+
+// statusLine says what just happened (until the next key), or shows
+// the first-run tip; a click on the tip hides it.
+func (h *home) statusLine() string {
+	if h.flash != "" {
+		// A long message wraps to a second row instead of being cut.
+		lines := strings.Split(output.Wrap(h.flash, h.w), "\n")
+		if len(lines) > 2 {
+			lines[1] = truncate(strings.Join(lines[1:], " "), h.w)
+			lines = lines[:2]
+		}
+		return strings.Join(lines, "\n")
+	}
+	if !h.tip || h.overlay() {
+		return ""
+	}
+	t := truncate(tipText, h.w)
+	if h.color {
+		t = h.st.Accent.Render(t)
+	}
+	return h.mark(t, func() tea.Cmd {
+		h.seenTip()
+		return nil
+	})
 }
 
 // contentFocused reports whether keys go to the content pane (or an
 // overlay on it).
 func (h *home) contentFocused() bool {
-	return h.focus == focusContent || h.paletteO || h.ask != nil || h.keysO
+	return h.focus != focusSidebar || h.overlay()
 }
 
 // rule is row i of the line between the sidebar and the content. It
@@ -157,8 +235,28 @@ func (h *home) sidebar(rows int) string {
 		lines = append(lines, "")
 	}
 	if rows >= 13 {
-		lines[rows-2] = h.st.Dim.Render(" ctrl+k commands")
-		lines[rows-1] = h.st.Dim.Render(" ? keys  q quit")
+		// Two buttons (their keys, ctrl+k and ?, are in the footer).
+		// Two buttons (their keys, ctrl+k and ?, are in the footer); ↓
+		// past the last section reaches them.
+		btn := func(i int, label string) string {
+			if h.focus == focusSidebar && h.sideBtn == i && !h.overlay() {
+				if h.color {
+					return h.st.Bold.Reverse(true).Render(" " + label + " ")
+				}
+				return "[>" + label + "<]"
+			}
+			return "[ " + label + " ]"
+		}
+		lines[rows-2] = " " + h.mark(btn(1, "Commands"), func() tea.Cmd { return h.openPalette("") })
+		// q quits from the menu and the tab bars; on a page esc goes back.
+		quit := " q quit"
+		if h.focus == focusContent || h.overlay() {
+			quit = " esc ←" // "esc back" does not fit the menu
+		}
+		lines[rows-1] = " " + h.mark(btn(2, "Keys"), func() tea.Cmd {
+			h.keysO, h.keysScroll.off = true, 0
+			return nil
+		}) + h.st.Dim.Render(quit)
 	}
 	return strings.Join(lines[:rows], "\n")
 }
@@ -168,6 +266,7 @@ func (h *home) clickSection(i int) func() tea.Cmd {
 	return func() tea.Cmd {
 		h.paletteO = false
 		h.backTo = nil
+		h.sideBtn = 0
 		h.cur = i
 		h.toSidebar()
 		return h.activate()
@@ -199,62 +298,22 @@ func (h *home) tabStrip() string {
 }
 
 func (h *home) hintsLine() string {
-	if h.flash != "" {
-		return truncate(h.flash, h.w)
-	}
-	var keys []keyHelp
-	switch {
-	case h.ask != nil:
-		return ""
-	case h.keysO:
-		keys = []keyHelp{{"any key", "close"}, {"F1", "full help"}}
-	case h.paletteO:
-		keys = h.palette.keys()
-	case h.focus == focusSidebar:
-		keys = []keyHelp{{"↑/↓", "section"}, {"enter", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"?", "keys"}, {"q", "quit"}}
-	default:
-		keys = backHint(h.active().keys(), leftExits(h.active()))
-		if h.narrow() {
-			keys = append(keys, keyHelp{"ctrl+k", "commands"})
-		}
-	}
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, k.key+" "+k.help)
-	}
-	return truncate(h.st.Dim.Render(strings.Join(parts, "  ")), h.w)
-}
-
-// backHint puts how to go back first in a section's keys: ← and esc
-// when left leaves too, esc alone otherwise (unless the section says
-// what esc does).
-func backHint(keys []keyHelp, left bool) []keyHelp {
-	out := make([]keyHelp, 0, len(keys)+1)
-	hasEsc := false
-	for _, k := range keys {
-		if k.key == "esc" && k.help == "sidebar" {
-			continue
-		}
-		if strings.Contains(k.key, "esc") {
-			hasEsc = true
-		}
-		out = append(out, k)
-	}
-	switch {
-	case left && hasEsc:
-		return append([]keyHelp{{"←", "back"}}, out...)
-	case left:
-		return append([]keyHelp{{"←/esc", "back"}}, out...)
-	case !hasEsc:
-		return append([]keyHelp{{"esc", "back"}}, out...)
-	}
-	return out
+	return truncate(h.st.Dim.Render(fitKeys(h.footer(), h.w)), h.w)
 }
 
 func (h *home) commandLine() string {
 	c := h.command()
 	if c == "" {
-		return truncate(h.st.Dim.Render("ctrl+k runs any audd command"), h.w)
+		// Part of the first-run tip: once that is dismissed, it stays
+		// gone.
+		if h.tip {
+			return truncate(h.st.Dim.Render("ctrl+k runs any audd command"), h.w)
+		}
+		return ""
+	}
+	if h.prompt() {
+		// y does nothing in a dialog: no "y copy" here.
+		return truncate(h.st.Dim.Render("$ "+c), h.w)
 	}
 	right := h.st.Dim.Render("y copy")
 	left := "$ " + c
@@ -264,20 +323,31 @@ func (h *home) commandLine() string {
 	return spread(truncate(left, h.w-8), right, h.w)
 }
 
+// moveKeys are how to move around, for the keys overlay and the Keys
+// page.
+var moveKeys = []keyHelp{
+	{"↑/↓", "move in the menu, a list, or a form"},
+	{"→ or enter", "go in: open the section, the page, the selected item"},
+	{"← or esc", "come back one level (in typed text ← moves the cursor)"},
+	{"←/→", "on a tab bar: switch tabs; on a choice: change it"},
+	{"↑", "from the top of a page: back to its tab bar"},
+	{"[ ]", "previous or next tab, from anywhere in the section outside text fields"},
+}
+
 // globalKeys are the keys that work everywhere.
 var globalKeys = []keyHelp{
-	{"ctrl+k or :", "command palette: run any command"},
-	{"1-7", "jump to a section"},
-	{"↑/↓ j/k", "move in the sidebar"},
-	{"enter", "open the section"},
-	{"esc, ←", "back (← from the left-most item)"},
-	{"←/→", "tabs and pages"},
-	{"click, wheel", "select or press; scroll"},
-	{"y", "copy the command shown at the bottom"},
+	{"1-7", "jump to a section from the menu, a tab bar, or a list (never in a form)"},
+	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
+	{"y", "copy the command shown at the bottom (not in a dialog)"},
 	{"?", "keys for this screen"},
 	{"F1", "help"},
-	{"q", "quit (ctrl+c always quits)"},
+	{"q", "quit, from the menu or a tab bar; it asks first when something is not saved or a command runs"},
+	{"ctrl+c", "quit, also while typing; asks like q, and a second ctrl+c quits"},
+	{"ctrl+u", "clear the field being typed in"},
+	{"click, wheel", "select or press; scroll"},
 }
+
+func ansiWidth(s string) int { return ansi.StringWidth(s) }
 
 func (h *home) keysView(w int) string {
 	var b strings.Builder
@@ -285,16 +355,39 @@ func (h *home) keysView(w int) string {
 	if h.showSignin {
 		title = "Sign in"
 	}
+	if h.paletteO {
+		title = "Commands"
+	}
 	b.WriteString(h.st.Bold.Render("Keys: "+title) + "\n\n")
-	for _, k := range h.active().keys() {
-		fmt.Fprintf(&b, "  %-14s %s\n", k.key, k.help)
+	keys := h.active().keys()
+	if h.paletteO {
+		keys = h.palette.keys()
 	}
+	b.WriteString(keyLines(keys, w) + "\n")
+	b.WriteString("\n" + h.st.Bold.Render("Moving around") + "\n")
+	b.WriteString(indent(output.Wrap(tipText, max(10, w-2)), "  ") + "\n\n")
+	b.WriteString(keyLines(moveKeys, w) + "\n")
 	b.WriteString("\n" + h.st.Bold.Render("Everywhere") + "\n\n")
-	for _, k := range globalKeys {
-		fmt.Fprintf(&b, "  %-14s %s\n", k.key, k.help)
-	}
-	b.WriteString("\n" + h.st.Dim.Render("Press F1 or Enter for the Help section, any other key to close."))
+	b.WriteString(keyLines(globalKeys, w) + "\n")
+	b.WriteString("\n" + styleLines(h.st.Dim, output.Wrap("Esc closes this; F1 opens the Help section, with the keys of every section.", w)))
 	return b.String()
+}
+
+// keyLines lists keys and what they do, the descriptions wrapped under
+// themselves.
+func keyLines(keys []keyHelp, w int) string {
+	var lines []string
+	for _, k := range keys {
+		desc := output.Wrap(k.help, max(10, w-19))
+		for i, l := range strings.Split(desc, "\n") {
+			if i == 0 {
+				lines = append(lines, truncate(fmt.Sprintf("  %-14s %s", k.key, l), w))
+			} else {
+				lines = append(lines, truncate(strings.Repeat(" ", 17)+l, w))
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // box frames s with a rounded border (plain when color is off).

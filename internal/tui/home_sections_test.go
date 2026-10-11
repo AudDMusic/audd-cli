@@ -27,15 +27,15 @@ func TestNowPlayingSection(t *testing.T) {
 	// No streams on the account.
 	h := newTestHome(t, &fakeRun{}, homeOpts{start: "now-playing"})
 	NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
-	v := runHome(t, h, 100, 30, "no streams", "")
-	if !strings.Contains(v, "Try: audd streams add") || !strings.Contains(v, "press 3") {
+	v := runHome(t, h, 100, 30, "No streams yet", "")
+	if strings.Contains(v, "Error") || !strings.Contains(v, "[ Add a stream ]") {
 		t.Fatalf("no streams:\n%s", v)
 	}
 }
 
 func TestHistorySection(t *testing.T) {
-	snap(t, "history", func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "history"}) }, "Warriors")
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "history"}), 120, 40)
+	snap(t, "history", func() *home { return newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}) }, "Warriors")
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}), 120, 40)
 	drain(h, h.activate(), 0)
 	if h.command() != "audd browse --tab recent" {
 		t.Fatalf("command: %s", h.command())
@@ -52,8 +52,9 @@ func TestHistoryResumesJob(t *testing.T) {
 	f.reply("jobs resume k3x9 --retry-failed",
 		`{"schema_version":1,"type":"result","job_id":"k3x9","index":2,"input":"/music/c.mp3","status":"matched","result":{"artist":"Portishead","title":"Roads"}}`+"\n"+
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
-	h := newTestHome(t, f, homeOpts{start: "history"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("R"), "Job k3x9: 3 recognized")
+	f.reply("jobs resume k3x9 --retry-failed --dry-run", "Plan: 1 file, at most 1 request.\nNothing was sent (--dry-run).\n", "", 0)
+	h := newTestHome(t, f, homeOpts{start: "recognitions"})
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry 1 file", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("right"), key("enter"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -62,11 +63,13 @@ func TestHistoryResumesJob(t *testing.T) {
 func TestStreamsSectionPages(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("streams callback get", `{"schema_version":1,"url":"https://audd.tech/empty/"}`, "", 0)
-	f.reply("streams recorder status", "Running:        yes (pid 4242)\nStore:          /data/streams-default.db\n", "", 0)
+	f.reply("streams recorder status", `{"schema_version":1,"running":true,"pid":4242,"store":"/data/streams-default.db","plays":12}`, "", 0)
 	f.reply("streams history", "TIME   STREAM  SONG\n12:00  1       Imagine Dragons — Warriors\n", "", 0)
 	snap(t, "streams_list", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si")
+	// ↓ from the tab bar goes into the list: its first row has the keys.
+	snap(t, "streams_list_row", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("down"), key("down"), "$ audd streams list")
 	snap(t, "streams_callback", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), "Callback URL: https")
-	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "pid 4242")
+	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "Running. Press enter")
 
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	drain(h, h.activate(), 0)
@@ -95,12 +98,14 @@ func TestStreamsExportWritesFile(t *testing.T) {
 	f.reply("streams export", `{"type":"result","radio_id":1}`+"\n"+`{"type":"result","radio_id":2}`+"\n", "", 0)
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	drain(h, h.activate(), 0)
-	press(h, key("["))
+	press(h, key("]"), key("]"), key("]"))
 	s := h.subs["streams"].(*streamsSection)
 	s.dataForm.get("kind").setValue("export")
 	s.dataForm.get("since").setValue("all")
+	s.dataForm.get("format").setValue("jsonl")
 	s.syncData()
-	if h.command() != "audd streams export --since all --format jsonl > plays.jsonl" {
+	// The command names the very file that is written.
+	if want := "audd streams export --since all --format jsonl > " + shellQuote(s.exportPath()); h.command() != want || filepath.Dir(s.exportPath()) != dir {
 		t.Fatalf("command: %s", h.command())
 	}
 	press(h, key("enter"))
@@ -127,9 +132,9 @@ func TestStreamsAddAndRemove(t *testing.T) {
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	NewExplorerData = func(a *app.App) (ExplorerData, error) { return d, nil }
 	drain(h, h.activate(), 0)
-	press(h, key("a"))
+	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/7.mp3")...)
-	press(h, key("down"))
+	press(h, key("down"), key("ctrl+u"))
 	press(h, typeText("7")...)
 	press(h, key("down"), key(" "))
 	if h.command() != "audd streams add https://radio.example/7.mp3 --id 7 --start" {
@@ -140,11 +145,11 @@ func TestStreamsAddAndRemove(t *testing.T) {
 	if s := h.subs["streams"].(*streamsSection); s.adding || !strings.Contains(h.View(), "Added stream 7") {
 		t.Fatalf("after adding:\n%s", h.View())
 	}
-	press(h, key("d"))
-	if !strings.Contains(h.View(), "Remove stream 1?") || h.command() != "audd streams remove 1" {
+	press(h, key("enter"), key("d"))
+	if v := h.View(); !strings.Contains(v, "Remove stream 1?") || !strings.Contains(v, "AudD stops monitoring it") || h.command() != "audd streams remove 1" {
 		t.Fatalf("remove asks:\n%s", h.View())
 	}
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	api.mu.Lock()
 	defer api.mu.Unlock()
 	if len(api.removed) != 1 || api.removed[0] != 1 {
@@ -153,12 +158,12 @@ func TestStreamsAddAndRemove(t *testing.T) {
 }
 
 func TestExplorerPaneError(t *testing.T) {
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "history"}), 100, 30)
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognitions"}), 100, 30)
 	NewExplorerData = func(a *app.App) (ExplorerData, error) {
 		return ExplorerData{}, output.Errf(3, "no_token", "audd login", "no API token is set")
 	}
 	drain(h, h.activate(), 0)
-	if v := h.View(); !strings.Contains(v, "Error: no API token is set") {
+	if v := h.View(); !strings.Contains(v, "No API token yet") || strings.Contains(v, "Error") || !strings.Contains(v, "[ Use the test token ]") {
 		t.Fatalf("%s", v)
 	}
 	_ = context.Background
@@ -177,25 +182,42 @@ func TestErrorSnapshots(t *testing.T) {
 		r.form.get("input").setValue("song.mp3")
 		r.form.focusName("recognize")
 		return h
-	}, "Recognize music", key("enter"), "Try: audd login")
+	}, "Recognize music", key("enter"), "No API token yet")
 	snap(t, "error_nowplaying", func() *home {
 		h := newTestHome(t, f, homeOpts{start: "now-playing"})
 		NewFeed = func(a *app.App) (Feed, error) { return &fakeFeed{}, nil }
 		return h
-	}, "no streams")
+	}, "No streams yet")
 }
 
 func TestErrorHintOpensCommand(t *testing.T) {
 	useSigninMethod(t, "device")
 	f := &fakeRun{}
 	f.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
-	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"no_token","message":"no API token is set","hint":"audd login"}}`+"\n", 3)
+	f.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"login_required","message":"this needs you to sign in","hint":"audd login"}}`+"\n", 3)
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
 	r := recognizeOf(h)
 	r.form.get("input").setValue("song.mp3")
 	r.form.focusName("recognize")
-	drive(t, h, 120, 40, "Recognize music", key("enter"), "Try: audd login", key("enter"), "Welcome to AudD")
+	// A hint to sign in is a Sign in button, not a command.
+	v := drive(t, h, 120, 40, "Recognize music", key("enter"), "Sign in first")
+	if strings.Contains(v, "audd login") || strings.Contains(v, "Press enter to open") || !strings.Contains(v, "[ Sign in ]") {
+		t.Fatalf("the sign-in hint:\n%s", v)
+	}
+	press(h, key("tab"), key("enter"))
 	if h.activeID() != "signin" {
-		t.Fatalf("audd login opens the sign-in screen: %s", h.activeID())
+		t.Fatalf("Sign in opens the sign-in page: %s", h.activeID())
+	}
+	// Another command hint: Enter opens it, as the page says.
+	f2 := &fakeRun{}
+	f2.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f2.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"unknown_stream","message":"no such stream","hint":"audd streams list"}}`+"\n", 2)
+	h = newTestHome(t, f2, homeOpts{start: "recognize"})
+	r = recognizeOf(h)
+	r.form.get("input").setValue("song.mp3")
+	r.form.focusName("recognize")
+	drive(t, h, 120, 40, "Recognize music", key("enter"), "Press enter to open it in Commands.", key("enter"))
+	if h.activeID() != "streams" && !h.paletteO {
+		t.Fatalf("enter opens audd streams list: %s\n%s", h.activeID(), h.View())
 	}
 }

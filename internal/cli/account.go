@@ -82,26 +82,52 @@ JSON output carries the account service's full results under "account" and
 // signInRows writes one "provider: label" row per sign-in method.
 func signInRows(row func(k, v string), methods []account.SignInMethod) {
 	key := "Sign-in"
+	seen := map[string]bool{}
 	for _, m := range methods {
-		v := m.Provider
-		if m.Label != "" {
+		v := providerName(m.Provider, m.Label)
+		if m.Label != "" && !strings.HasPrefix(m.Label, "twitch:") {
 			if v != "" {
 				v += ": "
 			}
 			v += m.Label
 		}
-		if v == "" {
-			continue
+		if v == "" || seen[v] {
+			continue // listed once
 		}
+		seen[v] = true
 		row(key, v)
 		key = ""
 	}
 }
 
+// providerName names a sign-in method for people: "auth0" →
+// "Email and password", "google-oauth2" → "Google".
+func providerName(provider, label string) string {
+	switch {
+	case provider == "auth0":
+		return "Email and password"
+	case strings.HasPrefix(provider, "google"):
+		return "Google"
+	case provider == "github":
+		return "GitHub"
+	case strings.HasPrefix(label, "twitch:"):
+		return "Twitch: " + strings.TrimPrefix(label, "twitch:")
+	case provider == "apple":
+		return "Apple"
+	}
+	return provider
+}
+
 // planSummary is "Startup, $450.00/month, 100,000 requests included".
 func planSummary(p account.Plan) string {
 	parts := []string{}
-	if name := cmp.Or(p.Name, p.Key); name != "" {
+	// A plan without a name shows its key in words: "indie_plan_outside"
+	// → "Indie plan outside".
+	key := strings.ReplaceAll(p.Key, "_", " ")
+	if key != "" {
+		key = strings.ToUpper(key[:1]) + key[1:]
+	}
+	if name := cmp.Or(p.Name, key); name != "" {
 		parts = append(parts, name)
 	}
 	if p.MonthlyPriceCents > 0 {

@@ -100,7 +100,7 @@ func commandDoc(c *cobra.Command, w int, st output.Styles) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-var helpPages = []string{"Getting started", "Guide", "Commands", "Keys", "Exit codes and output", "Links"}
+var helpPages = []string{"Getting started", "Guide", "Commands", "Keys", "Exit codes", "Links"}
 
 // helpLinks are the Links page.
 var helpLinks = []struct{ label, url string }{
@@ -114,33 +114,45 @@ var helpLinks = []struct{ label, url string }{
 // gettingStarted are the steps of the first Help page.
 var gettingStarted = []struct{ title, text, cmd string }{
 	{"Sign in", "Sign in to your AudD account (or paste an API token) so audd can recognize music and show your account.", "audd login"},
-	{"Recognize a file", "Pick a file, URL, or folder and recognize it. This fills in AudD's example song.", "audd recognize https://audd.tech/example.mp3"},
+	{"Recognize a file", "Pick a file, URL, or folder and recognize it. Enter here fills in AudD's example song so you can try a recognition.", "audd recognize https://audd.tech/example.mp3"},
 	{"Use the microphone", "In Recognize, set Source to Microphone to record a few seconds and identify the song.", "audd listen"},
 	{"Add a stream", "Have AudD monitor a radio or other live stream, then watch it in Now playing.", "audd streams add <url> --id 1"},
 	{"Run any command", "Press ctrl+k to search every command and run it from a form.", "audd commands"},
 }
 
 // mouseHelp is the mouse paragraph of the Keys page.
-const mouseHelp = "Click a section, a page, a row, a field, or a button; click a selected row again to open it. The wheel scrolls. To select text with the mouse, hold Shift (Option in iTerm2). AUDD_NO_MOUSE=1 turns the mouse off."
+const mouseHelp = "Click a section, a tab, a row, a field, or a button; click a selected row again to open it. A click on a part of the path at the top goes back to it. The wheel scrolls. To select text with the mouse, hold Shift (Option in iTerm2). AUDD_NO_MOUSE=1 turns the mouse off."
 
-// sectionKeyDocs are the main keys of each section, for the Keys page.
+// sectionKeyDocs are the keys of each section, for the Keys page (and
+// the keys a section takes beyond moving around).
 var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓ tab", "move between fields"}, {"←/→", "Source: a file or the microphone"}, {"space", "tick a box"}, {"ctrl+o", "pick a file or folder"}, {"enter", "next field, or press a button"}, {"s", "stop a batch or a recording"}, {"o, c, d", "result: open, copy the link, details"}}},
-	{"Now playing", []keyHelp{{"←/→", "previous or next stream"}, {"enter", "zoom in or out"}, {"h", "history of the stream"}, {"o, c", "open or copy the song link"}, {"r", "refresh"}}},
-	{"Streams", []keyHelp{{"←/→ [ ]", "pages: streams, callback, recorder, history and reports"}, {"a", "add a stream"}, {"d", "remove the stream (asks first)"}, {"u", "change its URL"}, {"enter", "recent plays of the stream"}, {"s, x", "recorder: start, stop"}}},
-	{"History", []keyHelp{{"tab", "Recent or Jobs"}, {"/", "filter"}, {"enter", "details, or a job's files"}, {"r, R", "resume a job, retry its failed files"}, {"e", "export to CSV or JSON"}, {"o, c, i, u", "open the link, copy link, ISRC, UPC"}}},
-	{"Account", []keyHelp{{"←/→ [ ]", "pages: account, usage, billing, API token, profiles"}, {"s, n, b", "billing: subscribe, renew, buy requests (payment links only)"}, {"v, c", "API token: reveal, copy"}, {"R", "rotate the API token (type rotate to confirm)"}, {"enter, L", "profiles: switch, sign out"}}},
-	{"Settings", []keyHelp{{"enter", "change a setting"}, {"u", "unset it"}}},
-	{"Help", []keyHelp{{"←/→ [ ]", "pages"}, {"/", "search the guide"}, {"n, N", "next or previous match"}, {"enter", "open a step, a command, or a link"}}},
-	{"Command palette", []keyHelp{{"type", "filter the commands"}, {"enter", "open the command's form, then run it"}, {"esc", "back, or close"}}},
+	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the hint says what); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"esc", "done typing (the value stays); again: back"}, {"ctrl+o", "in File, URL, or folder: pick a file or folder"}, {"→ or enter", "result: details"}}},
+	{"Now playing", []keyHelp{{"←/→/↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in, or back to all streams"}, {"tab", "the buttons: History, Open link, Copy link, Refresh"}}},
+	{"Streams", []keyHelp{{"→ or enter", "a stream's page: History, Edit URL, Remove"}, {"/", "filter"}, {"tab", "the page's buttons: Add a stream, Refresh, Export"}, {"enter", "Recorder: Start or Stop"}}},
+	{"Recognitions", []keyHelp{{"→ or enter", "details; a job's page: Files, Resume, Retry failed files, Copy the batch command"}, {"/", "filter"}, {"tab", "the page's buttons"}}},
+	{"Account", []keyHelp{{"enter", "Billing: Subscribe, or Renew your own plan; Profiles: switch"}, {"tab", "the page's buttons: Billing, Buy requests, Payments, Show, Copy, New token…, Paste a different token…, Sign out"}}},
+	{"Settings", []keyHelp{{"→ or enter", "edit a setting (enter saves after asking, esc cancels)"}, {"tab", "the buttons: Edit, Unset, Reload"}}},
+	{"Help", []keyHelp{{"/", "search the guide"}, {"n", "next match"}, {"{ }", "previous or next heading"}, {"→ or enter", "open a step or a command's details"}}},
+	{"Sign in", []keyHelp{{"↑/↓", "choose"}, {"enter", "go (a click works too)"}}},
+	{"Commands (ctrl+k)", []keyHelp{{"type", "filter the commands"}, {"enter", "open the command's form; on Run, run it"}, {"ctrl+k", "in a form: back to the list; on the list: close"}}},
+}
+
+// letterKeys are the letters shown on buttons; each means one thing
+// everywhere.
+var letterKeys = []keyHelp{
+	{"a", "add"}, {"c", "copy what the button names (a link, a path, a command, the token)"}, {"d", "remove or unset, after asking"},
+	{"e", "edit"}, {"i", "copy the ISRC"}, {"u or ctrl+z", "undo the last change"}, {"o", "open in the browser"}, {"r", "refresh"}, {"s", "stop"},
+	{"x", "export"}, {"y", "copy the command at the bottom"}, {"/", "filter or search"},
 }
 
 type helpSection struct {
-	h    *home
-	page int
+	ranStep  bool // a step was opened from Getting started
+	startOff int  // the Getting started page's scroll
+	h        *home
+	page     int
 
 	stepCur int
 
@@ -192,10 +204,44 @@ func (s *helpSection) init() tea.Cmd {
 }
 
 func (s *helpSection) setPage(p int) {
-	s.page = (p + len(helpPages)) % len(helpPages)
+	s.page = max(0, min(len(helpPages)-1, p))
 	s.searching = false
 	s.details = false
 	s.text.off = 0
+}
+
+func (s *helpSection) tabNames() []string { return helpPages }
+func (s *helpSection) tabIndex() int      { return s.page }
+func (s *helpSection) selectTab(i int) tea.Cmd {
+	s.setPage(i)
+	return nil
+}
+
+// upExits: ↑ at the top of the page goes to the tab bar.
+func (s *helpSection) upExits() bool {
+	switch s.page {
+	case 0:
+		return s.stepCur == 0
+	case 1:
+		return !s.searching && s.scroll.off == 0
+	case 2:
+		return !s.details && (s.picker == nil || s.picker.cursor == 0)
+	case 5:
+		return s.linkCur == 0
+	}
+	return s.text.off == 0
+}
+
+func (s *helpSection) crumbs() []string {
+	switch {
+	case s.searching:
+		return []string{"Search"}
+	case s.page == 2 && s.details && s.picker != nil:
+		if it := s.picker.selected(); it != nil {
+			return []string{"audd " + it.value}
+		}
+	}
+	return nil
 }
 
 func (s *helpSection) capturing() bool {
@@ -235,6 +281,9 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 		case "esc":
 			s.searching = false
 			return nil
+		case "ctrl+u":
+			s.search.SetValue("")
+			return nil
 		}
 		var cmd tea.Cmd
 		s.search, cmd = s.search.Update(k)
@@ -242,47 +291,18 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 	}
 	if s.page == 2 && !s.details {
 		switch ks {
-		case "[", "]":
-			if s.picker.filter.Value() == "" {
-				break
+		case "right", "tab":
+			if s.picker.selected() != nil {
+				s.details = true
+				s.dscroll.off = 0
 			}
-			fallthrough
-		default:
-			if ks == "left" && s.picker.filter.Position() == 0 {
-				s.setPage(s.page - 1)
-				return nil
-			}
-			if ks == "right" || ks == "tab" {
-				if s.picker.selected() != nil {
-					s.details = true
-					s.dscroll.off = 0
-				}
-				return nil
-			}
-			picked, cmd := s.picker.update(k)
-			if picked {
-				return s.h.openPalette(s.picker.selected().value)
-			}
-			return cmd
-		}
-	}
-	switch ks {
-	case "]":
-		s.setPage(s.page + 1)
-		return nil
-	case "[":
-		s.setPage(s.page - 1)
-		return nil
-	case "left":
-		if s.page > 0 && !s.details {
-			s.setPage(s.page - 1)
 			return nil
 		}
-	case "right":
-		if s.page < len(helpPages)-1 && s.page != 2 {
-			s.setPage(s.page + 1)
-			return nil
+		picked, cmd := s.picker.update(k)
+		if picked {
+			return s.h.openPalette(s.picker.selected().value)
 		}
+		return cmd
 	}
 	switch s.page {
 	case 0:
@@ -291,7 +311,7 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 			s.stepCur = min(len(gettingStarted)-1, s.stepCur+1)
 		case "up", "k":
 			s.stepCur = max(0, s.stepCur-1)
-		case "enter":
+		case "enter", "right":
 			return s.runStep(s.stepCur)
 		}
 	case 1:
@@ -302,28 +322,26 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 			return s.search.Focus()
 		case "n":
 			s.findMatch(s.scroll.off+1, 1)
-		case "N":
-			s.findMatch(s.scroll.off-1, -1)
 		case "}":
 			s.jumpHeading(1)
 		case "{":
 			s.jumpHeading(-1)
 		default:
-			s.scroll.key(ks, ht-2)
+			s.scroll.key(ks, ht-1)
 		}
 	case 2:
 		switch ks {
-		case "left", "esc", "backspace":
+		case "backspace":
 			s.details = false
 		case "enter":
 			if it := s.picker.selected(); it != nil {
 				return s.h.openPalette(it.value)
 			}
 		default:
-			s.dscroll.key(ks, ht-2)
+			s.dscroll.key(ks, ht)
 		}
 	case 3, 4:
-		s.text.key(ks, ht-2)
+		s.text.key(ks, ht)
 	case 5:
 		switch ks {
 		case "down", "j":
@@ -343,20 +361,44 @@ func (s *helpSection) update(msg tea.Msg) tea.Cmd {
 // openLink opens the selected link.
 func (s *helpSection) openLink() tea.Cmd {
 	u := helpLinks[s.linkCur].url
-	if err := openURL(u); err != nil {
-		return s.h.setFlash("Could not open it: " + err.Error())
+	return s.h.openLink(u)
+}
+
+// stepDone reports whether a getting-started step is done: a token is
+// set, something was recognized, a stream exists.
+func (s *helpSection) stepDone(i int) bool {
+	switch i {
+	case 0:
+		// The test token is a try, not a sign-in.
+		return !s.h.signedOut && !s.h.testToken
+	case 1:
+		return s.h.recognized
+	case 2:
+		return s.h.listened
+	case 3:
+		if s.h.streamAdded {
+			return true
+		}
+		if st, ok := s.h.subs["streams"].(*streamsSection); ok && st.pane.ex != nil {
+			if l := st.pane.ex.tabs[tabStreams]; len(l) > 0 && len(l[0].rows) > 0 {
+				return true
+			}
+		}
 	}
-	return s.h.setFlash("Opened " + u)
+	return false
 }
 
 // runStep jumps to the section a getting-started step is about.
 func (s *helpSection) runStep(i int) tea.Cmd {
+	s.ranStep = true
 	switch i {
 	case 0:
 		return s.h.jump("signin")
 	case 1:
 		if r, ok := s.h.subs["recognize"].(*recognizeSection); ok {
 			r.prefill("https://audd.tech/example.mp3")
+			// The example is not the person's own unsaved work.
+			r.ranCommand = displayCommand(r.args(false))
 		}
 		return s.h.jump("recognize")
 	case 2:
@@ -373,13 +415,26 @@ func (s *helpSection) runStep(i int) tea.Cmd {
 	return s.h.openPalette("")
 }
 
+// guideIntro starts the guide in interactive mode: how to move around.
+const guideIntro = `## Using interactive mode
+
+Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes back.
+
+- On the sidebar, up and down pick a section; right or Enter opens it.
+- Help, Streams, Recognitions, and Account have a tab bar: left and right switch tabs, down or Enter goes into the page.
+- On a page, up and down move; right or Enter opens what is selected; left or Esc comes back one level.
+- The path at the top shows where you are. The bottom line shows the command each action runs; y copies it.
+- ctrl+k runs any command from a form. ? lists the keys of the screen; the Keys tab lists them all.
+
+`
+
 // layoutGuide renders the guide for width w when it changed.
 func (s *helpSection) layoutGuide(w int) {
 	if s.guideW == w && s.guide != nil {
 		return
 	}
 	s.guideW = w
-	s.guide, s.heads = renderMarkdown(agent.CLIDoc, w, s.h.st)
+	s.guide, s.heads = renderMarkdown(guideIntro+agent.CLIDoc, w, s.h.st)
 	s.scroll.lines = s.guide
 	if s.query != "" {
 		s.findMatch(0, 1)
@@ -424,13 +479,6 @@ func (s *helpSection) jumpHeading(dir int) {
 	}
 }
 
-func (s *helpSection) pageBar(w int) string {
-	return s.h.pageStrip(helpPages, s.page, w, func(i int) tea.Cmd {
-		s.setPage(i)
-		return nil
-	})
-}
-
 // wheel scrolls the page, or moves through its list.
 func (s *helpSection) wheel(dir int) tea.Cmd {
 	_, ht := s.h.contentSize()
@@ -463,32 +511,41 @@ func (s *helpSection) wheel(dir int) tea.Cmd {
 
 func (s *helpSection) view(w, h int) string {
 	st := s.h.st
-	bar := s.pageBar(w) + "\n"
-	h--
+	bar := ""
 	var b strings.Builder
 	switch s.page {
 	case 0:
-		b.WriteString(st.Bold.Render("Getting started") + "\n\n")
+		// The steps scroll to keep the selected one in view.
+		lines := []string{st.Bold.Render("Getting started"), ""}
+		curFrom, curTo := 0, 0
 		for i, step := range gettingStarted {
-			mark := "  "
 			title := fmt.Sprintf("%d. %s", i+1, step.title)
-			if i == s.stepCur {
-				mark = "› "
-				title = st.Bold.Render(title)
+			if s.stepDone(i) {
+				title += st.Dim.Render("  ✓ done")
 			}
-			item := mark + title + "\n" +
+			item := s.h.listRow(title, i == s.stepCur) + "\n" +
 				styleLines(st.Dim, indent(output.Wrap(step.text, max(10, w-5)), "     ")) + "\n" +
-				"     " + st.Accent.Render(truncate("$ "+step.cmd, w-5))
-			b.WriteString(s.h.mark(item, func() tea.Cmd {
+				"     " + st.Accent.Render(truncate("$ "+s.stepCommand(i), w-5))
+			click := func() tea.Cmd {
 				if s.stepCur == i {
 					return s.runStep(i)
 				}
 				s.stepCur = i
 				return nil
-			}) + "\n\n")
+			}
+			if i == s.stepCur {
+				curFrom = len(lines)
+			}
+			for _, l := range strings.Split(item, "\n") {
+				lines = append(lines, s.h.mark(l, click))
+			}
+			if i == s.stepCur {
+				curTo = len(lines)
+			}
+			lines = append(lines, "")
 		}
-		b.WriteString(styleLines(st.Dim, output.Wrap("Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.", w)))
-		return bar + b.String()
+		lines = append(lines, strings.Split(styleLines(st.Dim, output.Wrap("Enter goes to the step. Every page shows the command it runs at the bottom; y copies it.", w)), "\n")...)
+		return bar + windowLines(lines, curFrom, curTo, h, &s.startOff, st)
 	case 1:
 		outlineW := 0
 		if w >= 100 {
@@ -511,7 +568,7 @@ func (s *helpSection) view(w, h int) string {
 		case s.query != "" && s.matchN < 0:
 			status = fmt.Sprintf("No match for %q · %s", s.query, status)
 		case s.query != "":
-			status = fmt.Sprintf("%q · n next, N previous · %s", s.query, status)
+			status = fmt.Sprintf("%q · n next match · %s", s.query, status)
 		}
 		return bar + fit(text, w, textH) + "\n" + truncate(st.Dim.Render(status), w)
 	case 2:
@@ -528,7 +585,7 @@ func (s *helpSection) view(w, h int) string {
 			}
 			return bar + s.dscroll.view(w, h)
 		}
-		return bar + s.picker.view(w, h, st, s.h.color)
+		return bar + s.picker.view(w, h, st, s.h.color, s.h.hasKeys(false))
 	case 3:
 		s.text.lines = strings.Split(s.keysText(w), "\n")
 		return bar + s.text.view(w, h)
@@ -538,13 +595,7 @@ func (s *helpSection) view(w, h int) string {
 	}
 	b.WriteString(st.Bold.Render("Links") + "\n\n")
 	for i, l := range helpLinks {
-		mark := "  "
-		label := l.label
-		if i == s.linkCur {
-			mark = "› "
-			label = st.Bold.Render(label)
-		}
-		line := truncate(mark+padRight(label, min(36, w/2))+st.Accent.Render(l.url), w)
+		line := truncate(s.h.listRow(padRight(l.label, min(36, w/2)), i == s.linkCur)+st.Accent.Render(l.url), w)
 		b.WriteString(s.h.mark(line, func() tea.Cmd {
 			if s.linkCur == i {
 				return s.openLink()
@@ -572,11 +623,16 @@ func (s *helpSection) outline(w, h int) string {
 			continue
 		}
 		label := strings.Repeat("  ", hd.level-2) + hd.text
+		line := st.Dim.Render(truncate("  "+label, w))
 		if i == cur {
-			lines = append(lines, st.Bold.Render(truncate("› "+label, w)))
-		} else {
-			lines = append(lines, st.Dim.Render(truncate("  "+label, w)))
+			line = st.Bold.Render(truncate("› "+label, w))
 		}
+		// A click on a heading scrolls the guide to it.
+		at := hd.line
+		lines = append(lines, s.h.mark(line, func() tea.Cmd {
+			s.scroll.off = at
+			return nil
+		}))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -605,17 +661,19 @@ func joinColumns(left, right string, lw int, st output.Styles) string {
 func (s *helpSection) keysText(w int) string {
 	st := s.h.st
 	var b strings.Builder
-	b.WriteString(st.Bold.Render("Everywhere") + "\n")
-	for _, k := range globalKeys {
-		b.WriteString(truncate(fmt.Sprintf("  %-14s %s", k.key, k.help), w) + "\n")
-	}
+	b.WriteString(st.Bold.Render("Moving around") + "\n")
+	b.WriteString(indent(output.Wrap(tipText, max(10, w-2)), "  ") + "\n")
+	b.WriteString(indent(output.Wrap("The menu is the sidebar; Help, Streams, Recognitions, and Account have a tab bar above their page. On a choice ‹ like this ›, ←/→ change it and ← on its first option goes back. When a text field is selected, you are typing in it: letters, digits, and symbols go in, ←/→ move the cursor (← at its start goes back), ctrl+u clears it, and esc stops typing but keeps the value and the form (enter types again). 1-7 jump to a section from the menu, a tab bar, or a list; in a form they never do, and q quits only from the menu or a tab bar. Recognize opens typing in its File, URL, or folder field; other pages open with no text field selected. After an error the cursor is back in the field it is about. On a saved value, such as the callback URL, typing replaces it (as if it was all selected), enter or e edits it, and esc puts the old value back; on a text field letters always type, never shortcuts. Enter in a form's last text field runs it (in Add a stream, enter in ID adds it; the box below is optional). What a page can do is on its buttons: tab (or ↓ from the end of the page) reaches them, ←/→ move between them, enter presses one. A letter on a button, such as (o), presses it from anywhere on the page. A key works only where it is listed; any other key says it does nothing. Settings of audd and a stream's URL save right away; u or ctrl+z undoes the last change until you make another or leave the section. Spending requests, removing, signing out, or replacing the token asks in a dialog: every dialog opens on Cancel; ←/→ move to the action and enter presses it (or click it); esc cancels. Outside dialogs y copies the command at the bottom.", max(10, w-2)), "  ") + "\n\n")
+	b.WriteString(keyLines(moveKeys, w) + "\n")
+	b.WriteString("\n" + st.Bold.Render("Everywhere") + "\n")
+	b.WriteString(keyLines(globalKeys, w) + "\n")
+	b.WriteString("\n" + st.Bold.Render("Letters on buttons") + "\n")
+	b.WriteString(keyLines(letterKeys, w) + "\n")
 	b.WriteString("\n" + st.Bold.Render("Mouse") + "\n")
 	b.WriteString(indent(output.Wrap(mouseHelp, max(10, w-2)), "  ") + "\n")
 	for _, sec := range sectionKeyDocs {
 		b.WriteString("\n" + st.Bold.Render(sec.section) + "\n")
-		for _, k := range sec.keys {
-			b.WriteString(truncate(fmt.Sprintf("  %-14s %s", k.key, k.help), w) + "\n")
-		}
+		b.WriteString(keyLines(sec.keys, w) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -642,31 +700,55 @@ func (s *helpSection) exitText(w int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// actions are the buttons of the Links page, for the selected link.
+func (s *helpSection) actions() []button {
+	if s.page != 5 {
+		return nil
+	}
+	return []button{
+		{label: "Open in browser", key: "o", do: s.openLink},
+		{label: "Copy", key: "c", do: func() tea.Cmd {
+			u := strings.TrimPrefix(helpLinks[s.linkCur].url, "mailto:")
+			return s.h.copy(u, u)
+		}},
+	}
+}
+
+func (s *helpSection) downExits() bool { return s.page == 5 && s.linkCur == len(helpLinks)-1 }
+
 func (s *helpSection) keys() []keyHelp {
-	pages := keyHelp{"←/→ [ ]", "pages"}
 	switch s.page {
 	case 0:
-		return []keyHelp{{"↑/↓", "step"}, {"enter", "go"}, pages}
+		return []keyHelp{{"↑/↓", "move"}, {"enter", "go to the step"}}
 	case 1:
 		if s.searching {
-			return []keyHelp{{"enter", "find"}, {"esc", "cancel"}}
+			return []keyHelp{{"type", "search"}, {"enter", "find"}, {"esc", "cancel"}}
 		}
-		return []keyHelp{{"↑/↓ pgdn", "scroll"}, {"/", "search"}, {"n N", "next, previous"}, {"{ }", "headings"}, pages}
+		return []keyHelp{{"↑/↓", "scroll"}, {"/", "search"}, {"n", "next match"}, {"{ }", "headings"}}
 	case 2:
 		if s.details {
-			return []keyHelp{{"enter", "open in the palette"}, {"←", "back to the list"}}
+			return []keyHelp{{"↑/↓", "scroll"}, {"enter", "fill in and run"}}
 		}
-		return []keyHelp{{"type", "filter"}, {"→", "details"}, {"enter", "open in the palette"}, pages}
+		return []keyHelp{{"type", "filter"}, {"↑/↓", "move"}, {"→", "details"}, {"enter", "fill in and run"}}
 	case 5:
-		return []keyHelp{{"enter", "open"}, {"c", "copy"}, pages}
+		return []keyHelp{{"↑/↓", "move"}, {"enter", "open in browser"}}
 	}
-	return []keyHelp{{"↑/↓", "scroll"}, pages}
+	return []keyHelp{{"↑/↓", "scroll"}}
+}
+
+// stepCommand is the command a getting-started step runs, as it runs
+// here (the sign-in picks the browser or a code).
+func (s *helpSection) stepCommand(i int) string {
+	if si, ok := s.h.subs["signin"].(*signinSection); ok && i == 0 {
+		return displayCommand(si.loginArgs())
+	}
+	return gettingStarted[i].cmd
 }
 
 func (s *helpSection) command() string {
 	switch s.page {
 	case 0:
-		return gettingStarted[s.stepCur].cmd
+		return s.stepCommand(s.stepCur)
 	case 1:
 		return "audd docs cli"
 	case 2:
@@ -682,8 +764,47 @@ func (s *helpSection) command() string {
 	return ""
 }
 
-// leftExits: left walks back through the pages, and leaves from the
-// first one.
+// leftExits: left goes back, except inside typed text (the search, the
+// filter of Commands).
 func (s *helpSection) leftExits() bool {
-	return s.page == 0 && !s.searching
+	switch {
+	case s.searching:
+		return s.search.Position() == 0
+	case s.page == 2 && !s.details && s.picker != nil:
+		return s.picker.filter.Position() == 0
+	}
+	return true
+}
+
+// windowLines shows h rows of lines, scrolled (*off) so the rows from
+// to to are in view, with "↑ N more" / "↓ N more" where rows are hidden.
+func windowLines(lines []string, from, to, h int, off *int, st output.Styles) string {
+	if len(lines) <= h || h < 4 {
+		return strings.Join(lines, "\n")
+	}
+	room := h - 2 // a marker row at the top and the bottom
+	if from < *off {
+		*off = from
+	}
+	if to > *off+room {
+		*off = to - room
+	}
+	*off = max(0, min(*off, len(lines)-room))
+	var out []string
+	if *off > 0 {
+		out = append(out, st.Dim.Render(moreWords(*off, "↑")))
+	} else {
+		room++ // no marker on top: one more row of the page
+	}
+	end := min(len(lines), *off+room)
+	out = append(out, lines[*off:end]...)
+	if rest := len(lines) - end; rest > 0 {
+		out = append(out, st.Dim.Render(moreWords(rest, "↓")))
+	}
+	return strings.Join(out, "\n")
+}
+
+// moreWords is "↓ 1 more line" / "↑ 12 more lines".
+func moreWords(n int, arrow string) string {
+	return arrow + " " + output.Plural(n, "more line")
 }

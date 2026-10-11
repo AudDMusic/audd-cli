@@ -1,4 +1,4 @@
-Now playing                                                                            stream 1 of 3
+Now playing                                                                           1 of 3 streams
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
 ┃ \e[12C  Stream 1                         ┃│ \e[12C  Stream 2                         │\e_audd-eol\e\
@@ -27,4 +27,4 @@ Now playing                                                                     
 
 
 
-←/→/↑/↓ select  enter zoom  o open  c copy link  h history  ? help  q quit
+←/→/↑/↓ select  enter zoom  h history  o open link  c copy link  r refresh  ? help  q quit
