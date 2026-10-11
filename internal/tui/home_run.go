@@ -486,6 +486,7 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 func (h *home) pressAsk(i int) tea.Cmd {
 	if i == 1 {
 		h.answer(true)
+		h.confirmed()
 		return nil
 	}
 	ways := h.tokenWays(false, nil)
@@ -545,7 +546,7 @@ func (h *home) askView(w, ht int) string {
 	}
 	if s.typed != "" {
 		b.WriteString(fmt.Sprintf("Type %s and press enter to confirm, or esc to cancel.\n", h.st.Bold.Render(s.typed)))
-		b.WriteString(s.input.View() + "\n")
+		b.WriteString(inputView(s.input, h.color) + "\n")
 		if s.mismatch {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}

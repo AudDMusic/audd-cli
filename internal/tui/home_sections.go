@@ -741,7 +741,18 @@ func (s *historySection) actions() []button {
 		if n := retryableResults(s.bs.results); n > 0 {
 			b = append(b, button{label: "Retry " + output.Plural(n, "file"), key: "", do: func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
 		}
-		return append(b, button{label: "Back to the job", key: "", do: func() tea.Cmd { s.resume = false; return nil }})
+		return append(b, button{label: "Back to the job", key: "", do: func() tea.Cmd {
+			s.resume = false
+			// The job's page, not its Files list.
+			if ex := s.pane.ex; ex != nil {
+				levels := ex.tabs[tabJobs]
+				if n := len(levels); n > 1 && levels[n-1].kind == "items" {
+					ex.tabs[tabJobs] = levels[:n-1]
+					ex.tabs[tabJobs][n-2].detail = true
+				}
+			}
+			return nil
+		}})
 	}
 	return s.pane.actions()
 }
@@ -1030,12 +1041,17 @@ func newStreamsSection(h *home) section {
 func (s *streamsSection) syncData() {
 	k := s.dataForm.value("kind")
 	s.dataForm.get("by").hidden = k != "report"
-	s.dataForm.get("format").hidden = k != "export"
+	// Export writes a file; a report can be saved to one (Save this
+	// report): both have a file name and a format.
+	s.dataForm.get("format").hidden = k != "export" && k != "report"
 	file := s.dataForm.get("file")
-	file.hidden = k != "export"
+	file.hidden = k != "export" && k != "report"
 	// The suggested file name is the field's placeholder: typing
 	// replaces it, and it follows the format.
 	s.autoFile = "audd-streams-export-" + s.h.now().Format("20060102") + "." + s.dataForm.value("format")
+	if k == "report" {
+		s.autoFile = "audd-streams-report-by-" + s.dataForm.value("by") + "-" + s.h.now().Format("20060102") + "." + s.dataForm.value("format")
+	}
 	file.placeholder = s.autoFile
 	// The button says what it does.
 	s.dataForm.get("run").label = capFirst(s.dataPrimary())
@@ -1225,6 +1241,9 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			act, cmd := s.add.update(k)
 			if act == "add" {
 				s.add.err = ""
+				if s.h.signedOut {
+					return s.h.askToken("streams", "Adding a stream needs an API token.", false, func() tea.Cmd { return nil })
+				}
 				if url := s.pane.streamURL(s.add.value("id")); url != "" {
 					return s.askReplace(url)
 				}
@@ -1286,7 +1305,13 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 // askCallback asks before changing the account's callback URL, naming
 // the old and the new address.
 func (s *streamsSection) askCallback() tea.Cmd {
+	if s.h.signedOut {
+		return s.h.askToken("streams", "Saving the callback URL needs an API token.", false, func() tea.Cmd { return nil })
+	}
 	old := "not set"
+	if s.cbPanel.res == nil || s.cbPanel.res.err != nil {
+		old = "unknown (it could not be read)"
+	}
 	if s.cbSet {
 		base, ret := splitReturn(s.cbURL)
 		old = base + ", " + dataWords(ret)
@@ -1790,22 +1815,11 @@ type (
 	}
 )
 
-// askSaveReport asks in which format to save the report shown.
+// askSaveReport saves the report shown to the file named in the form
+// (as export does: the same name and replace rules).
 func (s *streamsSection) askSaveReport() tea.Cmd {
-	formats := []string{"csv", "json"}
-	return s.h.askFirst(&confirmState{
-		owner:    "streams",
-		question: "Save this report as…",
-		notes:    []string{"In " + shortPath(absPath(explorerExportDir), 60) + "."},
-		choices:  []string{"CSV (a spreadsheet)", "JSON"},
-		topic:    "Save the report",
-		cancel:   "Cancelled. Nothing was written.",
-		pick: func(i int) tea.Cmd {
-			format := formats[i]
-			path := filepath.Join(explorerExportDir, "audd-streams-report-"+s.h.now().Format("20060102")+"."+format)
-			return func() tea.Msg { return reportCheckMsg{path: path, format: format, exists: fileExists(path)} }
-		},
-	})
+	path, format := s.exportPath(), s.dataForm.value("format")
+	return func() tea.Msg { return reportCheckMsg{path: path, format: format, exists: fileExists(path)} }
 }
 
 // reportChecked asks before writing over a file, else saves.
@@ -1929,6 +1943,10 @@ func (s *streamsSection) command() string {
 	if s.dataForm.value("kind") == "export" {
 		ext := s.dataForm.value("format")
 		return displayCommand(append(args, "--format", ext)) + " > " + shellQuote(s.exportPath())
+	}
+	if s.dataForm.value("kind") == "report" && s.exportTo != "" {
+		// The report saved: the command that wrote the file.
+		return displayCommand(append(args, "--format", s.dataForm.value("format"))) + " > " + shellQuote(s.exportTo)
 	}
 	return displayCommand(args)
 }

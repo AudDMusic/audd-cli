@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -340,6 +341,12 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 // key does something only when it moves around or the page lists it.
 func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
+	if s == "enter" && !h.confirmedAt.IsZero() && time.Since(h.confirmedAt) < 1500*time.Millisecond {
+		// A second enter right after confirming does nothing: never a
+		// Stop by accident.
+		h.confirmedAt = time.Time{}
+		return h.setFlash("Started · to stop it, tab to Stop and press enter")
+	}
 	cur := h.active()
 	typing := cur.capturing()
 	acts := h.pageActions()
@@ -389,6 +396,9 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	case len(s) == 1 && s >= "1" && s <= "7" && inForm(cur):
 		// In a form digits never switch sections.
 		return h.setFlash("Numbers switch sections from the menu, a tab bar, or a list")
+	case s == ":" && inForm(cur):
+		// Text typed on a form never lands in the command palette.
+		return h.setFlash("Press enter to type in the field · ctrl+k opens Commands")
 	}
 	if cmd, ok := h.globalKey(s); ok {
 		return cmd
@@ -957,10 +967,12 @@ func (h *home) pressConfirm(i int) tea.Cmd {
 		}
 		return h.setFlash(msg)
 	case c.choices != nil:
+		h.confirmed()
 		return h.wrap(c.owner, c.pick(i-1))
 	case c.quit:
 		return tea.Quit
 	}
+	h.confirmed()
 	return h.wrap(c.owner, c.yes())
 }
 
@@ -1068,4 +1080,12 @@ type former interface{ inForm() bool }
 func inForm(s section) bool {
 	f, ok := s.(former)
 	return ok && f.inForm()
+}
+
+// confirmed: a dialog was answered yes. The keys leave the page's buttons
+// (a Stop that appears is never focused), and an enter right after does
+// nothing.
+func (h *home) confirmed() {
+	h.btnActive = false
+	h.confirmedAt = time.Now()
 }

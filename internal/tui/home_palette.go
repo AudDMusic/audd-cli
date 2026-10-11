@@ -148,6 +148,9 @@ func newCmdForm(info cmdInfo) (*cmdForm, error) {
 		// command line at the bottom.
 		help := capFirst(fl.Usage) + " (--" + fl.Name + ")"
 		label := plainName(fl.Name)
+		if l, ok := flagLabels[info.path+" --"+fl.Name]; ok {
+			label = l
+		}
 		var f *field
 		if choices := flagChoices(c, fl.Name); kind == fText && len(choices) > 0 {
 			f = enumField("flag:"+fl.Name, label, help, choices)
@@ -300,7 +303,9 @@ func (p *palette) load() {
 	items := make([]pickItem, 0, len(p.cmds))
 	for _, c := range p.cmds {
 		if c.cmd.Runnable() {
-			items = append(items, pickItem{title: c.path, desc: c.cmd.Short, value: c.path})
+			more := c.cmd.Long + " " + strings.Join(c.cmd.Aliases, " ")
+			c.cmd.Flags().VisitAll(func(fl *pflag.Flag) { more += " --" + fl.Name + " " + fl.Usage })
+			items = append(items, pickItem{title: c.path, desc: c.cmd.Short, value: c.path, more: more})
 		}
 	}
 	// Most used first; scripting and setup commands last.
@@ -870,4 +875,10 @@ func plainName(name string) string {
 	}
 	words[0] = capFirst(words[0])
 	return strings.Join(words, " ")
+}
+
+// flagLabels name flags whose names alone say little, in plain words.
+var flagLabels = map[string]string{
+	"usage --check":         "Exit with an error if few remain",
+	"usage --min-remaining": "Fewest requests to remain",
 }

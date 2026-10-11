@@ -34,7 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] q quit │ [ Edit (e) ]  [ Reload (r) ]
+ [ Keys ] esc ←  │ [ Edit (e) ]  [ Reload (r) ]
 
 ↑/↓ move  →/enter edit  ←/esc back  tab buttons  ? keys
 $ audd config get format                                                                                          y copy

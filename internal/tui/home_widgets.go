@@ -731,7 +731,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 			if x.placeholder != "" {
 				x.input.Placeholder = x.placeholderText(color)
 			}
-			val := x.input.View()
+			val := inputView(x.input, color)
 			label := padRight(x.label+req, lw)
 			if cur && color && !x.locked {
 				// The field being typed in: its label in the accent color,
@@ -1038,6 +1038,9 @@ func (t *jsonTree) view(w, h int, st output.Styles) string {
 // pickItem is one entry of a picker.
 type pickItem struct {
 	title, desc, value string
+	// more is searched too (a command's long help, aliases, and flags):
+	// "retry" finds jobs resume.
+	more string
 }
 
 // picker is a list filtered by fuzzy matching.
@@ -1099,13 +1102,15 @@ func (p *picker) matches() []pickItem {
 			}
 		} else if s, ok := fuzzyScore(q, it.desc); ok && len(q) > 2 && strings.Contains(strings.ToLower(it.desc), lq) {
 			loose = append(loose, scored{it, s - 50, i})
+		} else if len(q) > 2 && strings.Contains(strings.ToLower(it.more), lq) {
+			loose = append(loose, scored{it, 100, i})
 		}
 	}
 	if len(out) == 0 {
 		// Only when nothing has the text: the closest spread-out
-		// matches, the weak ones left out.
+		// matches (and words of the help), the weak ones left out.
 		for _, l := range loose {
-			if l.score >= 10*len([]rune(q))+15*(len([]rune(q))-1)/2 {
+			if l.score >= min(100, 10*len([]rune(q))+15*(len([]rune(q))-1)/2) {
 				out = append(out, l)
 			}
 		}
@@ -1176,7 +1181,7 @@ func (p *picker) view(w, h int, st output.Styles, color, focused bool) string {
 		p.filter.Blur()
 	}
 	var b strings.Builder
-	b.WriteString(p.filter.View() + "\n\n")
+	b.WriteString(inputView(p.filter, color) + "\n\n")
 	m := p.matches()
 	listH := max(1, h-2)
 	p.cursor = max(0, min(len(m)-1, p.cursor))

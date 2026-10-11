@@ -112,7 +112,7 @@ func (m *explorer) statusLine() string {
 	case m.purpose != inputNone:
 		// The caret where it is, also mid-text.
 		m.input.Width = max(10, m.w-len([]rune(m.input.Prompt))-2)
-		return truncate(m.input.View(), m.w)
+		return truncate(inputView(m.input, m.color), m.w)
 	case m.confirm != "":
 		return truncate(m.st.Warn.Render(m.confirm), m.w)
 	case m.exportAs:

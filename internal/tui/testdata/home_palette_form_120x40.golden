@@ -2,7 +2,7 @@ AudD  ·  profile default
                  │ Commands › audd streams add
  1 Recognize     > audd streams add  Add a stream to monitor
  2 Now playing   │ 
- 3 Streams       │ › url*                                                                                              
+ 3 Streams       │ › url*    |
  4 Recognitions  │   ID*     ·
  5 Account       │   [ ] Start
  6 Settings      │ 

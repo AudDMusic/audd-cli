@@ -1,7 +1,7 @@
 AudD  ·  profile default
                  │ Commands
  1 Recognize     > Run a command
- 2 Now playing   │ >                                                           
+ 2 Now playing   │ > |
  3 Streams       │ 
  4 Recognitions  │ › recognize       Identify music in files, URLs, and folders
  5 Account       │   streams add     Add a stream to monitor

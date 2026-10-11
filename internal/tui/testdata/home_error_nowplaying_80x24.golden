@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] q quit │ [ Add a stream ]  [ Refresh (r) ]
+ [ Keys ] esc ←  │ [ Add a stream ]  [ Refresh (r) ]
 
 enter add a stream  ←/esc back  r refresh  tab buttons  ? keys
 $ audd now-playing                                                        y copy

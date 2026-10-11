@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/textinput"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -54,4 +55,32 @@ func shortKeepName(p string, w int) string {
 	}
 	head := w - len(base) - 2
 	return string(r[:head]) + "…" + string(filepath.Separator) + string(base)
+}
+
+// inputView draws a text input. With color it is the input's own view
+// (the caret in reverse video); without color the caret is a "|" where
+// it is, so it shows also mid-text.
+func inputView(ti textinput.Model, color bool) string {
+	if color || !ti.Focused() {
+		return ti.View()
+	}
+	v := []rune(ti.Value())
+	if ti.EchoMode == textinput.EchoPassword {
+		for i := range v {
+			v[i] = '•'
+		}
+	}
+	pos := max(0, min(ti.Position(), len(v)))
+	if len(v) == 0 && ti.Placeholder != "" {
+		return ti.Prompt + "|" + ti.Placeholder
+	}
+	text := string(v[:pos]) + "|" + string(v[pos:])
+	// Keep the caret in view in a narrow field: the end of the text
+	// before it.
+	if w := ti.Width; w > 0 && len([]rune(text)) > w {
+		r := []rune(text)
+		start := max(0, min(pos+2-w, len(r)-w))
+		text = string(r[start : start+w])
+	}
+	return ti.Prompt + text
 }

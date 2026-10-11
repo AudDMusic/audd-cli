@@ -38,6 +38,7 @@ type settingsSection struct {
 	undo *settingUndo
 	// fresh: nothing typed in the editor yet.
 	fresh bool
+	off   int // scroll
 	// typed is the value last sent to be saved (the token too).
 	typed string
 }
@@ -454,6 +455,7 @@ func (s *settingsSection) view(w, h int) string {
 	for _, r := range s.rows {
 		keyW = max(keyW, len(settingLabel(r.key)))
 	}
+	curFrom, curTo := 0, 0
 	for i, r := range s.rows {
 		val := r.value
 		if r.key == "streams.background_recorder" {
@@ -464,7 +466,7 @@ func (s *settingsSection) view(w, h int) string {
 				val = st.Bold.Render("‹ " + s.edit.value() + " ›")
 			} else {
 				s.edit.input.Width = max(8, w-keyW-6)
-				val = s.edit.input.View()
+				val = inputView(s.edit.input, s.h.color)
 			}
 		}
 		line := padRight(settingLabel(r.key), keyW+2) + val
@@ -485,6 +487,10 @@ func (s *settingsSection) view(w, h int) string {
 		}
 		// The description wraps under the setting, never cut.
 		row := truncate(line, w) + "\n" + indent(styleLines(style, output.Wrap(desc, max(10, w-4))), "    ")
+		if i == s.cur {
+			curFrom = strings.Count(b.String(), "\n")
+			curTo = curFrom + strings.Count(row, "\n") + 1
+		}
 		b.WriteString(s.h.mark(row, func() tea.Cmd {
 			if s.edit != nil && s.cur == i {
 				return nil
@@ -508,7 +514,9 @@ func (s *settingsSection) view(w, h int) string {
 		}
 	}
 	b.WriteString("\n" + styleLines(st.Dim, output.Wrap(fmt.Sprintf("Settings apply to profile %s and are saved in %s. Environment variables (env) win over the file.", s.profile, s.path), w)))
-	return b.String()
+	// Taller than the page: it scrolls with the selected setting, the
+	// rest said by "↓ N more lines".
+	return windowLines(strings.Split(b.String(), "\n"), curFrom, curTo, h, &s.off, st)
 }
 
 func (s *settingsSection) keys() []keyHelp {

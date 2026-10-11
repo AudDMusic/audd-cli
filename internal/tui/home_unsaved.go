@@ -6,7 +6,8 @@ import "github.com/AudDMusic/audd-cli/internal/output"
 // lostOnQuit).
 
 func (s *recognizeSection) unsaved() string {
-	if s.phase == "form" && !s.mic() && s.form.value("input") != "" {
+	// What already ran is not lost: only a form set up and not run.
+	if s.phase == "form" && !s.mic() && s.form.value("input") != "" && displayCommand(s.args(false)) != s.ranCommand {
 		return "The recognition you set up (" + s.form.value("input") + ")"
 	}
 	return ""
@@ -148,3 +149,15 @@ func (s *settingsSection) inForm() bool { return s.edit != nil }
 func (s *signinSection) inForm() bool { return s.step == "paste" }
 
 func (s *accountSection) inForm() bool { return s.tokPasting || s.buying }
+
+// pageEntered: Getting started opens on its first step.
+func (s *helpSection) pageEntered() {
+	if s.ranStep {
+		// Back from a step: on that step.
+		s.ranStep = false
+		return
+	}
+	if s.page == 0 {
+		s.stepCur, s.startOff = 0, 0
+	}
+}

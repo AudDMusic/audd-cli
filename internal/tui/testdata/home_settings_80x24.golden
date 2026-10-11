@@ -16,9 +16,9 @@ AudD  ·  profile default
                  │     token · API token, kept in memory (for this session only)
                  │ 
                  │ Settings apply to profile default and are saved in
-                 │ config-dir/config.toml. Environment variables (env) win over
+                 │ ↓ 2 more lines
  [ Commands ]    │ 
- [ Keys ] q quit │ [ Edit (e) ]  [ Reload (r) ]
+ [ Keys ] esc ←  │ [ Edit (e) ]  [ Reload (r) ]
 
 ↑/↓ move  →/enter edit  ←/esc back  tab buttons  ? keys
 $ audd config get format                                                  y copy

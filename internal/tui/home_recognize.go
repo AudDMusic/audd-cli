@@ -50,6 +50,8 @@ type recognizeSection struct {
 	afterCount string
 	// rootOK is a whole disk the user agreed to scan.
 	rootOK string
+	// ranCommand is the last command run (it is not unsaved work).
+	ranCommand string
 }
 
 // fileCount is the count of the files of the input, made in the
@@ -171,6 +173,12 @@ func newRecognizeSection(h *home) section {
 	maxFiles.placeholder = "e.g. 100, or none"
 	at := textField("at", "Clip at", "Send 12 seconds from this time: 90, 1:30, or 1m30s (needs ffmpeg)")
 	at.placeholder = "e.g. 1:30"
+	at.validate = func(v string) string {
+		if !validClock(v) {
+			return "Clip at must be a time like 1:30 or 90"
+		}
+		return ""
+	}
 	fields = append(fields,
 		boolField("enterprise", "Enterprise: scan more of the file (needs a limit)", "Every match with its position. Billed per 12-second chunk; the limit is how many chunks per file."),
 		limit,
@@ -476,8 +484,9 @@ func (s *recognizeSection) actions() []button {
 	case s.panel.res != nil && s.panel.res.err != nil:
 		return nil // the sign-in or token buttons are added for the hint
 	case s.bs != nil:
-		// On the list too: the buttons act on the selected row.
-		link = batchLink(s.bs.selected())
+		// On the list too: the buttons act on the selected row; a retry
+		// for the failures it can fix.
+		return s.h.batchButtons(s.bs)
 	case s.rec.view != nil && !s.details:
 		b = append(b, button{label: "Details", key: "", do: func() tea.Cmd { s.details, s.dscroll.off = true, 0; return nil }})
 	case s.mic() && s.rec.view == nil:
@@ -557,11 +566,17 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 			return "limit", f.get("limit").need
 		}
 		if v != "" && !validLimit(v) {
-			return "limit", "The limit is a number of chunks, or the word none."
+			if n, err := strconv.Atoi(v); err == nil && n <= 0 {
+				return "limit", v + " isn't allowed: the limit is at least 1 chunk, or none"
+			}
+			return "limit", "The limit is a number of 12-second chunks (at least 1), or the word none"
 		}
 	}
 	if v := f.value("max-files"); v != "" && !validLimit(v) {
-		return "max-files", "Max files is a number, or the word none."
+		if n, err := strconv.Atoi(v); err == nil && n <= 0 {
+			return "max-files", v + " isn't allowed: Max files is at least 1, or none"
+		}
+		return "max-files", "Max files is a number of files (at least 1), or the word none"
 	}
 	if forRun && s.isBatch() && f.value("max-files") == "" {
 		return "max-files", f.get("max-files").need
@@ -678,6 +693,7 @@ func (s *recognizeSection) startPlan(run bool) tea.Cmd {
 
 func (s *recognizeSection) startRun() tea.Cmd {
 	s.runArgs = s.args(false)
+	s.ranCommand = displayCommand(s.runArgs)
 	s.phase = "running"
 	s.rec = recognition{}
 	s.bs = nil
@@ -1067,4 +1083,27 @@ func enterpriseMatches(doc map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+// validClock accepts what audd recognize --at takes: "90", "90.5",
+// "1:30", "1:02:03", or "1m30s".
+func validClock(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if d, err := time.ParseDuration(s); err == nil {
+		return d >= 0
+	}
+	parts := strings.Split(s, ":")
+	if len(parts) > 3 {
+		return false
+	}
+	for i, p := range parts {
+		v, err := strconv.ParseFloat(p, 64)
+		if err != nil || v < 0 || i > 0 && v >= 60 || i < len(parts)-1 && v != float64(int(v)) {
+			return false
+		}
+	}
+	return true
 }

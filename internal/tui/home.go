@@ -237,6 +237,8 @@ type home struct {
 	headRows int
 	// tip is the first-run line that states how to move around.
 	tip bool
+	// confirmedAt is when a dialog was last answered yes (see confirmed).
+	confirmedAt time.Time
 	// sideBtn is the button under the menu that has the keys: 1
 	// Commands, 2 Keys (0: none, a section has them).
 	sideBtn int

@@ -149,7 +149,8 @@ var letterKeys = []keyHelp{
 }
 
 type helpSection struct {
-	startOff int // the Getting started page's scroll
+	ranStep  bool // a step was opened from Getting started
+	startOff int  // the Getting started page's scroll
 	h        *home
 	page     int
 
@@ -389,6 +390,7 @@ func (s *helpSection) stepDone(i int) bool {
 
 // runStep jumps to the section a getting-started step is about.
 func (s *helpSection) runStep(i int) tea.Cmd {
+	s.ranStep = true
 	switch i {
 	case 0:
 		return s.h.jump("signin")

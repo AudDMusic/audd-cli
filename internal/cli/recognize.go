@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -732,8 +733,20 @@ func humanBytes(n int64) string {
 // folder or a glob, not every file found) and the flags set, without
 // the token or a run's own choices (--yes, --resume, --new, --dry-run).
 func typedCommand(cmd *cobra.Command, args []string) []string {
-	out := append([]string{"recognize"}, args...)
-	skip := map[string]bool{"token": true, "yes": true, "resume": true, "new": true, "dry-run": true, "browse": true}
+	out := []string{"recognize"}
+	for _, a := range args {
+		// A local path absolute, so the command works from anywhere.
+		if a != "-" && !strings.Contains(a, "://") {
+			if abs, err := filepath.Abs(a); err == nil {
+				a = abs
+			}
+		}
+		out = append(out, a)
+	}
+	// Not the token, a run's own choices, or how output looks (interactive
+	// mode adds --format).
+	skip := map[string]bool{"token": true, "yes": true, "resume": true, "new": true, "dry-run": true, "browse": true,
+		"format": true, "fields": true, "quiet": true, "no-color": true, "debug": true}
 	cmd.Flags().Visit(func(fl *pflag.Flag) {
 		if skip[fl.Name] {
 			return

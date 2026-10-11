@@ -61,7 +61,8 @@ func TestRetryOfferedOnlyWhenItCanWork(t *testing.T) {
 		t.Fatalf("after a failure a retry cannot fix:\n%s", v)
 	}
 	// Its details say so, in full.
-	press(h, key("esc"), key("enter"))
+	h.confirmedAt = time.Time{} // not right after the confirmation
+	press(h, key("enter"))
 	if v := strings.Join(strings.Fields(strings.ReplaceAll(contentText(h.View()), "│", " ")), " "); !strings.Contains(v, "Failed: The audio could not be decoded. Retrying won't help") {
 		t.Fatalf("file details:\n%s", h.View())
 	}
@@ -212,9 +213,9 @@ func TestSaveThisReport(t *testing.T) {
 	if save == nil {
 		t.Fatalf("no Save this report:\n%s", h.View())
 	}
-	drain(h, save.do(), 0)
-	press(h, key("right"), key("enter")) // CSV
-	path := filepath.Join(dir, "audd-streams-report-"+h.now().Format("20060102")+".csv")
+	drain(h, h.pressButton(*save), 0)
+	// The name the form suggests: by the grouping, and the date.
+	path := filepath.Join(dir, "audd-streams-report-by-song-"+h.now().Format("20060102")+".csv")
 	pump(h, func() bool { b, _ := os.ReadFile(path); return len(b) > 0 })
 	if b, _ := os.ReadFile(path); string(b) != "song,plays\nA — One,3\n" {
 		t.Fatalf("the saved report: %q", b)

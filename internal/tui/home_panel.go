@@ -170,7 +170,7 @@ func (p *cmdPanel) text(w int) string {
 	if p.running && p.pending != nil {
 		t := pendingText(st, p.pending, w)
 		if p.pasting {
-			t += "\n\n" + p.pasteIn.View()
+			t += "\n\n" + inputView(p.pasteIn, p.h.color)
 		}
 		return t
 	}
@@ -306,6 +306,8 @@ func humanHint(hint string) string {
 	switch {
 	case hint == "":
 		return ""
+	case strings.Contains(hint, "jobs resume") || strings.Contains(hint, "jobs show"):
+		return "" // the page's buttons do it (Retry, the job's files)
 	case strings.HasPrefix(hint, "audd "):
 		return "In a terminal: " + hint
 	}

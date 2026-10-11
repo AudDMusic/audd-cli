@@ -248,10 +248,15 @@ func (h *home) sidebar(rows int) string {
 			return "[ " + label + " ]"
 		}
 		lines[rows-2] = " " + h.mark(btn(1, "Commands"), func() tea.Cmd { return h.openPalette("") })
+		// q quits from the menu and the tab bars; on a page esc goes back.
+		quit := " q quit"
+		if h.focus == focusContent && !h.overlay() {
+			quit = " esc ←" // "esc back" does not fit the menu
+		}
 		lines[rows-1] = " " + h.mark(btn(2, "Keys"), func() tea.Cmd {
 			h.keysO, h.keysScroll.off = true, 0
 			return nil
-		}) + h.st.Dim.Render(" q quit")
+		}) + h.st.Dim.Render(quit)
 	}
 	return strings.Join(lines[:rows], "\n")
 }

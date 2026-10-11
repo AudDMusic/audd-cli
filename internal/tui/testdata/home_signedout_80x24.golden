@@ -18,7 +18,7 @@ AudD  ·  profile default  ·  signed out
                  │     endpoint only. Nothing is saved.
                  │ 
  [ Commands ]    │ You can look around first; recognizing needs a token.
- [ Keys ] q quit │ 
+ [ Keys ] esc ←  │ 
 
 ↑/↓ choose  enter go  ←/esc back  ? keys
 $ audd login --browser                                                    y copy

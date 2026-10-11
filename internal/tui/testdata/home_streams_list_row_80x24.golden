@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │ 
                  │ Streams · 3 streams · https://radio.example/b.mp3
  [ Commands ]    │ 
- [ Keys ] q quit │ [ Add a stream (a) ]  [ Refresh (r) ]  [ Export (x) ]
+ [ Keys ] esc ←  │ [ Add a stream (a) ]  [ Refresh (r) ]  [ Export (x) ]
 
 ↑/↓ move  → open  ←/esc back  / filter  tab buttons  ? keys
 $ audd streams list                                                       y copy

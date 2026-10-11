@@ -34,7 +34,7 @@ AudD  ·  profile default  ·  signed out
                  │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] q quit │ 
+ [ Keys ] esc ←  │ 
 
 ↑/↓ choose  enter go  ←/esc back  ? keys
 $ audd login --browser                                                                                            y copy

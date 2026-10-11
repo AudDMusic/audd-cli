@@ -448,16 +448,23 @@ func (h *home) batchButtons(bs *batchState) []button {
 	if bs == nil {
 		return nil
 	}
+	var retry []button
+	if n := retryableResults(bs.results); n > 0 && bs.jobID != "" {
+		// The failures a retry can fix, retried here (the same question as
+		// on the job's page).
+		id := bs.jobID
+		retry = []button{{label: "Retry " + output.Plural(n, "file"), do: func() tea.Cmd { return h.retryJob(id) }}}
+	}
 	link := batchLink(bs.selected())
 	if link == "" {
-		return nil
+		return retry
 	}
-	return []button{
+	return append(retry, []button{
 		{label: "Open the song link", key: "o", do: func() tea.Cmd {
 			return h.openLink(link)
 		}},
 		{label: "Copy the song link", key: "c", do: func() tea.Cmd { return h.copy(link, "the link "+link) }},
-	}
+	}...)
 }
 
 // failMessage is the error of a failed batch result.
@@ -465,9 +472,20 @@ func failMessage(m map[string]any) string {
 	if e, ok := m["error"].(map[string]any); ok {
 		msg := str(e["message"])
 		if RetryHelps(str(e["code"])) {
-			return msg
+			return strings.TrimSuffix(msg, ".") + ". A retry can work: the Retry button below"
 		}
 		return strings.TrimSuffix(msg, ".") + ". Retrying won't help"
 	}
 	return "failed"
+}
+
+// retryJob retries the failures of job id a retry can fix, from
+// Recognitions (asked first, with the plan).
+func (h *home) retryJob(id string) tea.Cmd {
+	hs, ok := h.subs["recognitions"].(*historySection)
+	if !ok {
+		return nil
+	}
+	cmd := h.jump("recognitions")
+	return tea.Batch(cmd, h.wrap("recognitions", hs.startResume(id, true)))
 }

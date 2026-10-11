@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] q quit │ [ Use the test token ]  [ Paste a token… ]  [ Sign in ]
+ [ Keys ] esc ←  │ [ Use the test token ]  [ Paste a token… ]  [ Sign in ]
 
 ←/esc back to the form  tab buttons  ? keys
 $ audd recognize song.mp3                                                 y copy

@@ -205,7 +205,7 @@ func TestReportNoteWrapsAndShowsGaps(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("streams report", "SONG  PLAYS  AIRTIME  STATIONS\nA — One  3  9m  1\n\nNote: Some periods weren't recorded: Oct 2 01:24 – Oct 9 01:24, Oct 9 13:00 – 14:30, so these totals miss plays from that time.\nSee the gaps with: audd streams history --since 7d\n", "", 0)
 	f.reply("streams history", "STARTED  STREAM  ARTIST — TITLE  LENGTH\n", "", 0)
-	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 80, 24)
+	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 80, 40)
 	drain(h, h.activate(), 0)
 	s := h.subs["streams"].(*streamsSection)
 	press(h, key("]"), key("]"), key("]"), key("down"))
