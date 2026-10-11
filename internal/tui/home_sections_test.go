@@ -54,7 +54,7 @@ func TestHistoryResumesJob(t *testing.T) {
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
 	f.reply("jobs resume k3x9 --retry-failed --dry-run", "Plan: 1 file, at most 1 request.\nNothing was sent (--dry-run).\n", "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("right"), key("enter"), "Job k3x9: 3 recognized")
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry 1 file", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("right"), key("enter"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -199,8 +199,25 @@ func TestErrorHintOpensCommand(t *testing.T) {
 	r := recognizeOf(h)
 	r.form.get("input").setValue("song.mp3")
 	r.form.focusName("recognize")
-	drive(t, h, 120, 40, "Recognize music", key("enter"), "Try: audd login", key("enter"), "Welcome to AudD")
+	// A hint to sign in is a Sign in button, not a command.
+	v := drive(t, h, 120, 40, "Recognize music", key("enter"), "Sign in first")
+	if strings.Contains(v, "audd login") || strings.Contains(v, "Press enter to open") || !strings.Contains(v, "[ Sign in ]") {
+		t.Fatalf("the sign-in hint:\n%s", v)
+	}
+	press(h, key("tab"), key("enter"))
 	if h.activeID() != "signin" {
-		t.Fatalf("audd login opens the sign-in screen: %s", h.activeID())
+		t.Fatalf("Sign in opens the sign-in page: %s", h.activeID())
+	}
+	// Another command hint: Enter opens it, as the page says.
+	f2 := &fakeRun{}
+	f2.reply("recognize song.mp3 --dry-run", "Plan: 1 file, 1 request.\n", "", 0)
+	f2.reply("recognize song.mp3", "", `{"schema_version":1,"error":{"code":"unknown_stream","message":"no such stream","hint":"audd streams list"}}`+"\n", 2)
+	h = newTestHome(t, f2, homeOpts{start: "recognize"})
+	r = recognizeOf(h)
+	r.form.get("input").setValue("song.mp3")
+	r.form.focusName("recognize")
+	drive(t, h, 120, 40, "Recognize music", key("enter"), "Press enter to open it in Commands.", key("enter"))
+	if h.activeID() != "streams" && !h.paletteO {
+		t.Fatalf("enter opens audd streams list: %s\n%s", h.activeID(), h.View())
 	}
 }

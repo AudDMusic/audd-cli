@@ -382,6 +382,14 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	if typing {
 		return h.send(h.activeID(), k)
 	}
+	switch {
+	case s == "q":
+		// Inside a page q never quits: the menu is one esc away.
+		return h.setFlash("Press esc to go back to the menu, then q to quit")
+	case len(s) == 1 && s >= "1" && s <= "7" && inForm(cur):
+		// In a form digits never switch sections.
+		return h.setFlash("Numbers switch sections from the menu, a tab bar, or a list")
+	}
 	if cmd, ok := h.globalKey(s); ok {
 		return cmd
 	}
@@ -577,10 +585,11 @@ func (h *home) lostOnQuit() []string {
 	if c := h.runningCommand(); c != "" {
 		lost = append(lost, "This is still running: $ "+h.withSession(c)+". Quitting stops it; a batch keeps the files it finished, and audd jobs resume continues the rest.")
 	}
-	if h.focus == focusContent || h.paletteO {
-		if u, ok := h.active().(unsaveder); ok {
+	for _, id := range append([]string{h.activeID()}, h.order...) {
+		if u, ok := h.subs[id].(unsaveder); ok {
 			if s := u.unsaved(); s != "" {
 				lost = append(lost, s+" is not saved.")
+				break
 			}
 		}
 	}
@@ -779,7 +788,7 @@ func (h *home) footer() []keyHelp {
 	case h.confirm != nil && h.confirm.choices != nil:
 		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"esc", "cancel"}}
 	case h.prompt():
-		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press the selected button"}, {"n/esc", "cancel"}, {"y", "copy the command"}}
+		return []keyHelp{{"←/→", "choose"}, {"enter", "press"}, {"esc", "cancel"}}
 	case h.keysO:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
@@ -967,8 +976,6 @@ func (h *home) confirmKey(s string) tea.Cmd {
 		return nil
 	case "enter":
 		return h.pressConfirm(c.cur)
-	case "y":
-		return h.copyCommand()
 	case "n", "N", "esc":
 		return h.pressConfirm(0)
 	case "ctrl+c":
@@ -978,7 +985,7 @@ func (h *home) confirmKey(s string) tea.Cmd {
 		h.confirm = nil
 		return h.quit(true)
 	case "?":
-		return h.setFlash("←/→ or tab choose · enter presses the selected button · n or esc cancels · y copies the command")
+		return h.setFlash("←/→ choose · enter press · esc cancel")
 	}
 	return h.setFlash(keyName(s) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
@@ -1052,4 +1059,13 @@ func (h *home) copyCommand() tea.Cmd {
 		return h.copy(c, "the command: "+c)
 	}
 	return h.setFlash("No command to copy here")
+}
+
+// former is a section that says whether its page is a form now (digits
+// do not switch sections there).
+type former interface{ inForm() bool }
+
+func inForm(s section) bool {
+	f, ok := s.(former)
+	return ok && f.inForm()
 }

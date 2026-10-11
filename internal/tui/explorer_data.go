@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"github.com/AudDMusic/audd-cli/internal/jobs"
 	"time"
 
 	"github.com/AudDMusic/audd-go"
@@ -35,7 +36,10 @@ type JobRow struct {
 	// failed (bad audio, an unsupported file).
 	RetryableFailed int    `json:"retryable_failed"`
 	FailReason      string `json:"fail_reason,omitempty"`
-	Status          string `json:"status"`
+	// Failures names each failed file and why ("c.mp3: the connection
+	// was reset"), with whether a retry can fix it.
+	Failures []JobFailure `json:"failures,omitempty"`
+	Status   string       `json:"status"`
 }
 
 // JobItem is one input of a batch job.
@@ -107,13 +111,11 @@ func DefaultExplorerData(a *app.App) (ExplorerData, error) {
 }
 
 // RetryHelps reports whether retrying a file that failed with this error
-// code can work: the connection, the server, a rate or quota limit (after
-// topping up), or the token (after fixing it). Bad audio or an unsupported
-// file fails the same way again.
-func RetryHelps(code string) bool {
-	switch code {
-	case "", "network", "server", "rate_limited", "interrupted", "quota_exceeded", "token_rejected", "no_token":
-		return true
-	}
-	return false
+// code can work (see jobs.RetryHelps).
+func RetryHelps(code string) bool { return jobs.RetryHelps(code) }
+
+// JobFailure is a failed file of a job.
+type JobFailure struct {
+	File, Reason string
+	CanRetry     bool
 }

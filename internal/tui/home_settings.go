@@ -429,7 +429,7 @@ func (s *settingsSection) actions() []button {
 	b = append(b, button{label: "Reload", key: "r", do: func() tea.Cmd { s.load(); return s.h.setFlash("Reloaded") }})
 	if s.undo != nil && s.undo.msg != "" {
 		// Until the next change, or until you leave Settings.
-		b = append(b, button{label: "Undo", key: "u", do: s.undoLast})
+		b = append(b, button{label: "Undo: " + settingLabel(s.undo.key), key: "u", do: s.undoLast})
 	}
 	return b
 }

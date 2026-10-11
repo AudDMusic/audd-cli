@@ -118,7 +118,8 @@ func gapRange(g streamstore.Gap) string {
 	if from.YearDay() != to.YearDay() || from.Year() != to.Year() {
 		end = to.Format("Jan 2 15:04")
 	}
-	return from.Format("Jan 2 15:04") + " – " + end
+	// No break inside a range when a note wraps.
+	return strings.ReplaceAll(from.Format("Jan 2 15:04")+" – "+end, " ", "\u00a0")
 }
 
 func fmtLength(sec int) string {
@@ -252,13 +253,13 @@ func printHistory(a *app.App, from time.Time, plays []streamstore.Play, gaps []s
 		pending := append([]streamstore.Gap(nil), gaps...)
 		for _, p := range plays {
 			for len(pending) > 0 && !pending[len(pending)-1].From.Before(p.Timestamp) {
-				fmt.Fprintf(tw, "-- %s --\n", gapLine(pending[len(pending)-1]))
+				fmt.Fprintf(tw, "--\t\t%s\t\n", gapLine(pending[len(pending)-1]))
 				pending = pending[:len(pending)-1]
 			}
 			fmt.Fprintf(tw, "%s\t%d\t%s — %s\t%s\n", p.Timestamp.Local().Format("2006-01-02 15:04"), p.RadioID, p.Artist, p.Title, fmtLength(p.PlayLength))
 		}
 		for i := len(pending) - 1; i >= 0; i-- {
-			fmt.Fprintf(tw, "-- %s --\n", gapLine(pending[i]))
+			fmt.Fprintf(tw, "--\t\t%s\t\n", gapLine(pending[i]))
 		}
 		tw.Flush()
 	})

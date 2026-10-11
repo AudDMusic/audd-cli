@@ -314,7 +314,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		s.typeText(filepath.Join(e.dir, "nope.mp3"))
 		s.press(kEnter)
 		s.wait("o such file or folder")
-		s.wait("check the path")
+		s.wait("nope.mp3: check")
 	})
 	t.Run("too many files", func(t *testing.T) {
 		e := uiEnv(t)
@@ -354,7 +354,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		}
 		s.press(kEnter) // enter in a text field runs
 		s.wait("--enterprise needs --limit")
-		s.wait("add --limit N")
+		s.wait("dd --limit N")
 		if n := e.api.Count(testutil.EndpointEnterprise); n != 0 {
 			t.Fatalf("%d requests", n)
 		}
@@ -369,6 +369,6 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		s.typeText(song)
 		s.press(kEnter)
 		s.wait("Wrong API token")
-		s.wait("check AUDD_API_TOKEN")
+		s.wait("Set an API token first")
 	})
 }

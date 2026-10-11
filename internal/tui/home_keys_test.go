@@ -221,8 +221,8 @@ func TestRecognizeFormKeys(t *testing.T) {
 		t.Fatal("a box is not typing")
 	}
 	press(h, key("3"))
-	if h.activeID() != "streams" {
-		t.Fatalf("a digit outside a text field jumps: %s", h.activeID())
+	if h.activeID() != "recognize" || !strings.Contains(statusText(h.View()), "Numbers switch sections from the menu") {
+		t.Fatalf("a digit in a form does not jump: %s", h.activeID())
 	}
 }
 

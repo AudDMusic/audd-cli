@@ -226,7 +226,17 @@ func jobRows(jobs []JobRow) []row {
 				field("Done", fmt.Sprintf("%d of %d files, %d failed", j.Done, j.Total, j.Failed)) +
 				field("Created", when(j.Created)) +
 				field("Command", jobCommand(j.Command))
-			if n := j.Failed - j.RetryableFailed; n > 0 && j.FailReason != "" {
+			if len(j.Failures) > 0 {
+				// Each failed file and why; whether a retry can fix it.
+				out += "\n" + st.key.Render("Failed") + "\n"
+				for _, f := range j.Failures {
+					note := "a retry can work"
+					if !f.CanRetry {
+						note = "retrying won't help"
+					}
+					out += "  " + f.File + ": " + strings.TrimSuffix(f.Reason, ".") + " " + st.dim.Render("("+note+")") + "\n"
+				}
+			} else if n := j.Failed - j.RetryableFailed; n > 0 && j.FailReason != "" {
 				// Say why, instead of offering a retry that fails again.
 				what := "These files failed"
 				if n == 1 {

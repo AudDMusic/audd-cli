@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,11 +259,17 @@ func newExplorerData(a *app.App) (tui.ExplorerData, error) {
 						if it.State != "failed" {
 							continue
 						}
-						if tui.RetryHelps(it.ErrCode) {
+						can := tui.RetryHelps(it.ErrCode)
+						if can {
 							row.RetryableFailed++
 						} else if row.FailReason == "" {
 							row.FailReason = it.Err
 						}
+						name := it.Input.Name()
+						if !strings.Contains(name, "://") {
+							name = filepath.Base(name)
+						}
+						row.Failures = append(row.Failures, tui.JobFailure{File: name, Reason: it.Err, CanRetry: can})
 					}
 				}
 			}

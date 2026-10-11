@@ -86,6 +86,8 @@ func (s *recognizeSection) watchInput(now bool) tea.Cmd {
 	}
 	s.cnt.of, s.cnt.done, s.cnt.c = in, false, media.Count{}
 	s.cnt.seq++
+	// A problem with the old path is gone with it.
+	s.form.get("input").problem = ""
 	if in == "" || strings.Contains(in, "://") || in == "-" {
 		s.cnt.done = true
 		return nil
@@ -154,7 +156,7 @@ func newRecognizeSection(h *home) section {
 	in.required = true
 	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
 	in.typeHint = "a path or URL"
-	in.placeholder = "a file, URL, or folder"
+	in.placeholder = "e.g. song.mp3"
 	sec := &field{kind: fInt, name: "seconds", label: "Seconds", help: "How long to record (at most 60). 10 to 12 seconds is enough.", input: newInput()}
 	sec.setValue("10")
 	dev := textField("device", "Device", "The microphone to record from; empty for the system default")
@@ -405,7 +407,7 @@ func (s *recognizeSection) keys() []keyHelp {
 	case s.phase == "result" && s.details:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "back to the result"}}
 	case s.phase == "result":
-		if res := s.panel.res; res != nil && res.err != nil && res.err.Code != "no_token" && strings.HasPrefix(res.err.Hint, "audd ") {
+		if res := s.panel.res; res != nil && res.err != nil && res.err.Code != "no_token" && hintKind(res.err.Hint) == "" && strings.HasPrefix(res.err.Hint, "audd ") {
 			return []keyHelp{{"enter", "open " + res.err.Hint}, {"esc", "back to the form"}}
 		}
 		if s.rec.view != nil {
@@ -472,7 +474,7 @@ func (s *recognizeSection) actions() []button {
 	case s.panel.res != nil && s.panel.res.err != nil && s.panel.res.err.Code == "no_token":
 		return s.h.tokenButtons(true, func() tea.Cmd { s.phase = "form"; return s.startPlan(true) })
 	case s.panel.res != nil && s.panel.res.err != nil:
-		return nil
+		return nil // the sign-in or token buttons are added for the hint
 	case s.bs != nil:
 		// On the list too: the buttons act on the selected row.
 		link = batchLink(s.bs.selected())
@@ -539,7 +541,10 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 	}
 	if s.counted() && s.cnt.c.Err != nil {
 		e := output.AsError(s.cnt.c.Err)
-		msg := capFirst(e.Message)
+		// The path as typed, its middle shortened when long (the file
+		// name, where typos are, stays).
+		in := f.value("input")
+		msg := capFirst(strings.Replace(e.Message, expandHome(in), shortKeepName(in, 50), 1))
 		if e.Hint != "" {
 			msg += ": " + e.Hint
 		}
@@ -631,7 +636,7 @@ func (s *recognizeSection) startPlan(run bool) tea.Cmd {
 			},
 		})
 	}
-	if n := s.tooMany(); n > 0 && run {
+	if n := s.tooMany(); n > 0 {
 		m := s.form.value("max-files")
 		want := strconv.Itoa(n)
 		if s.cnt.c.More {
@@ -785,8 +790,8 @@ func (s *recognizeSection) finished() tea.Cmd {
 	if s.panel.run.req.tag == "plan" {
 		if res.err != nil {
 			msg := capFirst(res.err.Message)
-			if res.err.Hint != "" {
-				msg += "\nTry: " + res.err.Hint
+			if h := humanHint(res.err.Hint); h != "" {
+				msg += "\n" + h
 			}
 			s.phase = "form"
 			if name := errorField(res.err.Message + " " + res.err.Hint); name != "" && s.form.get(name) != nil && !s.form.get(name).hidden {
@@ -872,9 +877,17 @@ func (s *recognizeSection) view(w, h int) string {
 		}
 		if res.err != nil {
 			if s.batch && s.bs != nil && len(s.bs.results) > 0 {
+				if s.bs.detail {
+					// A file's details: its own error, not the batch's.
+					return s.batchView(w, h)
+				}
 				b.WriteString(s.batchView(w, h-4) + "\n\n")
 			}
 			b.WriteString(errorText(st, res.err, w))
+			if hintKind(res.err.Hint) == "" && strings.HasPrefix(res.err.Hint, "audd ") {
+				// Enter does open it: the command's form, filled in.
+				b.WriteString("\n" + st.Dim.Render(output.Wrap("Press enter to open it in Commands.", w)))
+			}
 			return b.String()
 		}
 		if s.bs != nil {
@@ -977,7 +990,7 @@ func (s *recognizeSection) resultKey(ks string) tea.Cmd {
 		}
 		return nil
 	case "enter", "right":
-		if res := s.panel.res; ks == "enter" && res != nil && res.err != nil && res.err.Code != "no_token" && strings.HasPrefix(res.err.Hint, "audd ") {
+		if res := s.panel.res; ks == "enter" && res != nil && res.err != nil && res.err.Code != "no_token" && hintKind(res.err.Hint) == "" && strings.HasPrefix(res.err.Hint, "audd ") {
 			return s.h.openPaletteLine(res.err.Hint)
 		}
 		switch {

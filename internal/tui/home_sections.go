@@ -361,7 +361,7 @@ func (p *explorerPane) actions() []button {
 	}
 	if u := p.undo; u != nil {
 		// Undo, until the next change or until you leave the section.
-		return append(p.actionsFor(), button{label: "Undo", key: "u", do: func() tea.Cmd { p.undo = nil; return u.do() }})
+		return append(p.actionsFor(), button{label: "Undo: " + u.what, key: "u", do: func() tea.Cmd { p.undo = nil; return u.do() }})
 	}
 	return p.actionsFor()
 }
@@ -391,7 +391,7 @@ func (p *explorerPane) actionsFor() []button {
 			b = append(b, button{label: "Resume", key: "", do: func() tea.Cmd { return ex.resumeJob(jl, false) }})
 		}
 		if j.RetryableFailed > 0 {
-			b = append(b, button{label: "Retry failed files", key: "", do: func() tea.Cmd { return ex.resumeJob(jl, true) }})
+			b = append(b, button{label: "Retry " + output.Plural(j.RetryableFailed, "file"), key: "", do: func() tea.Cmd { return ex.resumeJob(jl, true) }})
 		}
 		return b
 	}
@@ -552,7 +552,7 @@ func (p *explorerPane) askSetURL(id int, url string) tea.Cmd {
 	// A stream's URL is easily changed back: saved right away, with undo.
 	ex := p.ex
 	msg := fmt.Sprintf("Stream %d now uses %s · u undo", id, url)
-	p.undo = &paneUndo{msg: msg, do: func() tea.Cmd {
+	p.undo = &paneUndo{msg: msg, what: fmt.Sprintf("stream %d URL", id), do: func() tea.Cmd {
 		return ex.streamAction(func(ctx context.Context) error { return ex.d.SetStreamURL(ctx, id, old) }, fmt.Sprintf("Stream %d uses %s again", id, old))
 	}}
 	return ex.streamAction(func(ctx context.Context) error { return ex.d.SetStreamURL(ctx, id, url) }, msg)
@@ -561,8 +561,9 @@ func (p *explorerPane) askSetURL(id int, url string) tea.Cmd {
 // paneUndo puts back the last change of a stream, while its message
 // shows.
 type paneUndo struct {
-	msg string
-	do  func() tea.Cmd
+	msg  string
+	what string // what it puts back, for the button: "stream 2 URL"
+	do   func() tea.Cmd
 }
 
 // validStreamURL accepts what audd streams add takes: a URL with a host,
@@ -717,14 +718,11 @@ func (s *historySection) actions() []button {
 		if s.bs.detail {
 			return s.h.batchButtons(s.bs)
 		}
-		// What the command's hint would say, as buttons.
+		// A retry, only for failures a retry can fix (the job page
+		// says the same).
 		var b []button
-		failed := s.bs.summary != nil && num(s.bs.summary["failed"]) > 0
-		if res := s.panel.res; res != nil && res.err != nil && strings.Contains(res.err.Hint, "--retry-failed") {
-			failed = true
-		}
-		if failed {
-			b = append(b, button{label: "Retry failed files again", key: "", do: func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
+		if n := retryableResults(s.bs.results); n > 0 {
+			b = append(b, button{label: "Retry " + output.Plural(n, "file"), key: "", do: func() tea.Cmd { return s.startResume(s.bs.jobID, true) }})
 		}
 		return append(b, button{label: "Back to the job", key: "", do: func() tea.Cmd { s.resume = false; return nil }})
 	}
@@ -742,6 +740,9 @@ func (s *historySection) upExits() bool { return !s.resume && s.pane.upExits() }
 
 func (s *historySection) crumbs() []string {
 	if s.resume && s.bs != nil {
+		if s.retry {
+			return []string{"Retry failed files of job " + s.bs.jobID}
+		}
 		return []string{"Resume job " + s.bs.jobID}
 	}
 	return s.pane.crumbs()
@@ -769,7 +770,7 @@ func (s *historySection) startResume(id string, retry bool) tea.Cmd {
 // askResume asks before resuming, with the plan.
 func (s *historySection) askResume(plan string) tea.Cmd {
 	id, retry := s.runArgs[2], s.retry
-	label := map[bool]string{true: "Retry failed files", false: "Resume"}[retry]
+	label := map[bool]string{true: "Retry", false: "Resume"}[retry]
 	question := "Resume job " + id + "?"
 	if retry {
 		question = "Retry the failed files of job " + id + "?"
@@ -788,10 +789,10 @@ func (s *historySection) askResume(plan string) tea.Cmd {
 		owner:    "recognitions",
 		question: question,
 		notes:    notes,
-		action:   label,
+		action:   map[bool]string{true: "Retry failed files", false: "Resume"}[retry],
 		command:  displayCommand(args),
 		cancel:   "Cancelled. Nothing was sent.",
-		onCancel: func() { s.h.focusButton(label) },
+		onCancel: func() { s.h.focusButtonPrefix(label) },
 		yes: func() tea.Cmd {
 			s.resume = true
 			s.bs = &batchState{jobID: id, selectable: true, inJobs: true}
@@ -817,7 +818,7 @@ func (s *historySection) update(msg tea.Msg) tea.Cmd {
 			// Cancelled at its question: back on the job's page, on the
 			// button that was pressed.
 			s.resume = false
-			s.h.focusButton(map[bool]string{true: "Retry failed files", false: "Resume"}[s.retry])
+			s.h.focusButtonPrefix(map[bool]string{true: "Retry", false: "Resume"}[s.retry])
 			return s.h.setFlash("Cancelled. Nothing was sent.")
 		}
 		if done {
@@ -855,7 +856,9 @@ func (s *historySection) view(w, h int) string {
 		if !s.panel.running {
 			out = s.h.batchPage(s.bs, w, h-3)
 		}
-		if !s.panel.running && s.panel.res != nil && s.panel.res.err != nil {
+		if !s.panel.running && s.panel.res != nil && s.panel.res.err != nil && !s.bs.detail {
+			// The run's error is about the batch: on the list, not on
+			// each file's details.
 			e := *s.panel.res.err
 			if strings.Contains(e.Hint, "jobs resume") {
 				e.Hint = "" // the buttons below do it
@@ -941,6 +944,9 @@ type streamsSection struct {
 	// history, reports, export
 	dataForm  *form
 	dataPanel *cmdPanel
+	// savePanel runs a report again in a file format, to save it.
+	savePanel *cmdPanel
+	savePath  string
 	exportTo  string
 	lastData  []string
 	addedID   string // the stream the last add was for
@@ -956,7 +962,7 @@ type streamsSection struct {
 
 func newStreamsSection(h *home) section {
 	s := &streamsSection{h: h, pane: newExplorerPane(h, tabStreams),
-		addPanel: newPanel(h), cbPanel: newPanel(h), recPanel: newPanel(h), dataPanel: newPanel(h)}
+		addPanel: newPanel(h), cbPanel: newPanel(h), recPanel: newPanel(h), dataPanel: newPanel(h), savePanel: newPanel(h)}
 	url := textField("url", "URL", "A stream URL, or twitch:<channel>, youtube:<video_id>, youtube-ch:<channel_id>")
 	url.required = true
 	url.need = "Enter the stream's URL"
@@ -971,11 +977,12 @@ func newStreamsSection(h *home) section {
 	cb.required = true
 	cb.need = "Enter the callback URL, or use the placeholder"
 	cb.placeholder = "e.g. https://your-server.example/audd"
+	cb.nextOnEnter = true // on to the data boxes; Save is at the end
 	cbFields := []*field{cb}
 	for _, p := range providers {
 		cbFields = append(cbFields, providerField(p.name, p.label, p.what))
 	}
-	cbFields = append(cbFields, buttonField("set", "Set"), buttonField("placeholder", "Use the placeholder"))
+	cbFields = append(cbFields, buttonField("set", "Save"), buttonField("placeholder", "Use the placeholder"))
 	s.cbForm = newForm(cbFields...)
 	kind := enumField("kind", "What", "Recent plays, a report of plays and airtime grouped, or plays written to a file", []string{"history", "report", "export"})
 	kind.optionLabels = []string{"recent plays", "a report", "plays to a file"}
@@ -1011,6 +1018,8 @@ func (s *streamsSection) syncData() {
 	// replaces it, and it follows the format.
 	s.autoFile = "audd-streams-export-" + s.h.now().Format("20060102") + "." + s.dataForm.value("format")
 	file.placeholder = s.autoFile
+	// The button says what it does.
+	s.dataForm.get("run").label = capFirst(s.dataPrimary())
 }
 
 func (s *streamsSection) title() string { return "Streams" }
@@ -1063,7 +1072,12 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 	if mine, done := s.addPanel.handle(msg); mine {
 		if done && s.addPanel.res.ok() && s.addPanel.run.req.tag == "replace" {
 			s.adding = false
-			return tea.Batch(s.pane.reload(tabStreams), s.h.setFlash(fmt.Sprintf("Stream %s now uses %s", s.add.value("id"), s.add.value("url"))))
+			msg := fmt.Sprintf("Stream %s now uses %s", s.add.value("id"), s.add.value("url"))
+			// The next Add a stream starts empty.
+			s.add.get("url").setValue("")
+			s.add.get("id").setValue("")
+			s.add.get("start").on = false
+			return tea.Batch(s.pane.reload(tabStreams), s.h.setFlash(msg))
 		}
 		if done && s.addPanel.res.ok() {
 			s.adding = false
@@ -1076,9 +1090,9 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 			return tea.Batch(s.pane.reload(tabStreams), s.h.setFlash("Added stream "+id))
 		}
 		if done && s.addPanel.res.err != nil {
-			s.add.err = s.addPanel.res.err.Message
-			if s.addPanel.res.err.Hint != "" {
-				s.add.err += "\nTry: " + s.addPanel.res.err.Hint
+			s.add.err = capFirst(s.addPanel.res.err.Message)
+			if h := humanHint(s.addPanel.res.err.Hint); h != "" {
+				s.add.err += "\n" + h
 			}
 		}
 		return nil
@@ -1141,6 +1155,31 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		s.exportTo = m.path
 		return nil
 	}
+	if m, ok := msg.(reportCheckMsg); ok {
+		return s.reportChecked(m)
+	}
+	if m, ok := msg.(reportSavedMsg); ok {
+		if m.err != nil {
+			return s.h.setFlash("Could not save the report: " + m.err.Error())
+		}
+		return s.h.setFlash("Saved the report to " + shortKeepName(m.path, 60))
+	}
+	if mine, done := s.savePanel.handle(msg); mine {
+		if done {
+			if res := s.savePanel.res; res.err != nil {
+				return s.h.setFlash("Could not save the report: " + capFirst(res.err.Message))
+			}
+			path, data := s.savePath, []byte(s.savePanel.res.stdout)
+			return func() tea.Msg {
+				err := os.WriteFile(path, data, 0o644)
+				if abs, e := filepath.Abs(path); e == nil {
+					path = abs
+				}
+				return reportSavedMsg{path: path, err: err}
+			}
+		}
+		return nil
+	}
 	if mine, done := s.dataPanel.handle(msg); mine {
 		if done && s.dataPanel.run.req.tag == "export" && s.dataPanel.res.ok() {
 			return s.writeExport()
@@ -1193,8 +1232,14 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		_, ht := s.h.contentSize()
 		return s.recPanel.key(k, ht)
 	case 3:
+		before := s.dataArgs()
+		beforeFile := s.exportPath()
 		act, cmd := s.dataForm.update(k)
 		s.syncData()
+		if s.exportTo != "" && (!slices.Equal(before, s.dataArgs()) || beforeFile != s.exportPath() || s.dataForm.value("kind") != "export") {
+			// The form changed: the last export's result is not about it.
+			s.exportTo, s.dataPanel.res = "", nil
+		}
 		if act == "run" {
 			s.dataForm.err = ""
 			s.exportTo = ""
@@ -1577,12 +1622,12 @@ func (s *streamsSection) view(w, h int) string {
 		}
 		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("AudD sends (POSTs) every stream result to your account's callback URL. If you don't have a server, "+streams.EmptyCallbackURL+" accepts the results and drops them; the recorder still saves them.", w)))
 		if s.callbackUnsaved() {
-			b.WriteString("\n" + st.Warn.Render("Unsaved changes · Set saves them, esc on the URL puts it back"))
+			b.WriteString("\n" + st.Warn.Render("Unsaved changes · Save saves them, Revert changes puts them back"))
 		}
 		b.WriteString("\n\n" + s.formView(s.cbForm, w))
 		return bar + b.String()
 	case 2:
-		intro := styleLines(st.Dim, output.Wrap("The background recorder saves every stream result on this computer, so Recognitions, reports, and Now playing stay complete while audd is closed. Settings can start it automatically with audd.", w))
+		intro := styleLines(st.Dim, output.Wrap("The background recorder saves every stream result on this computer, so the stream history, reports, and Now playing stay complete while audd is closed. Settings can start it automatically with audd.", w))
 		var state string
 		switch {
 		case s.recPanel.running:
@@ -1647,6 +1692,8 @@ func (s *streamsSection) actions() []button {
 			return nil
 		}
 		return s.pane.actions()
+	case 1:
+		return s.callbackActions()
 	case 2:
 		refresh := button{label: "Refresh", key: "r", do: func() tea.Cmd {
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "status"}})
@@ -1654,11 +1701,7 @@ func (s *streamsSection) actions() []button {
 
 		switch s.recRunning {
 		case "yes":
-			// One enter stops it: nothing is lost (Start starts it again).
-			return []button{{label: "Stop", key: "", do: func() tea.Cmd {
-				return tea.Batch(s.h.setFlash("Stopping the recorder · results are not saved until it starts again"),
-					s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"}))
-			}}, refresh}
+			return []button{{label: "Stop", key: "", do: s.askStopRecorder}, refresh}
 		case "no":
 			return []button{{label: "Start", key: "", token: true, do: func() tea.Cmd {
 				return s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})
@@ -1679,6 +1722,10 @@ func (s *streamsSection) actions() []button {
 				{label: "Copy path", key: "c", do: func() tea.Cmd { return s.h.copy(path, "the path "+shortPath(path, 50)) }},
 			}
 		}
+		var b []button
+		if res := s.dataPanel.res; res != nil && !s.dataPanel.running && res.err == nil && s.lastData != nil && s.lastData[1] == "report" {
+			b = append(b, button{label: "Save this report", do: s.askSaveReport})
+		}
 		if res := s.dataPanel.res; res != nil && !s.dataPanel.running && res.err == nil && strings.Contains(res.stdout+strings.Join(res.notes, "\n"), "weren't recorded") && s.lastData != nil && s.lastData[1] != "history" {
 			since := ""
 			for i, a := range s.lastData {
@@ -1686,7 +1733,7 @@ func (s *streamsSection) actions() []button {
 					since = s.lastData[i+1]
 				}
 			}
-			return []button{{label: "Show the gaps", do: func() tea.Cmd {
+			return append(b, button{label: "Show the gaps", do: func() tea.Cmd {
 				// The plays of the same range, with the gaps between them.
 				s.dataForm.get("kind").setValue("history")
 				s.syncData()
@@ -1696,10 +1743,62 @@ func (s *streamsSection) actions() []button {
 				}
 				s.lastData = args
 				return s.runData(args)
-			}}}
+			}})
 		}
+		return b
 	}
 	return nil
+}
+
+// reportCheckMsg: whether the report's file is there already;
+// reportSavedMsg: the report was written (or not).
+type (
+	reportCheckMsg struct {
+		path, format string
+		exists       bool
+	}
+	reportSavedMsg struct {
+		path string
+		err  error
+	}
+)
+
+// askSaveReport asks in which format to save the report shown.
+func (s *streamsSection) askSaveReport() tea.Cmd {
+	formats := []string{"csv", "json"}
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Save this report as…",
+		notes:    []string{"In " + shortPath(absPath(explorerExportDir), 60) + "."},
+		choices:  []string{"CSV (a spreadsheet)", "JSON"},
+		topic:    "Save the report",
+		cancel:   "Cancelled. Nothing was written.",
+		pick: func(i int) tea.Cmd {
+			format := formats[i]
+			path := filepath.Join(explorerExportDir, "audd-streams-report-"+s.h.now().Format("20060102")+"."+format)
+			return func() tea.Msg { return reportCheckMsg{path: path, format: format, exists: fileExists(path)} }
+		},
+	})
+}
+
+// reportChecked asks before writing over a file, else saves.
+func (s *streamsSection) reportChecked(m reportCheckMsg) tea.Cmd {
+	run := func() tea.Cmd {
+		s.savePath = m.path
+		return s.savePanel.start(runReq{args: s.lastData, format: m.format, tag: "save-report"})
+	}
+	if !m.exists {
+		return run()
+	}
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Replace " + filepath.Base(m.path) + "?",
+		action:   "Replace " + filepath.Base(m.path),
+		notes:    []string{"The file exists in " + shortPath(absPath(filepath.Dir(m.path)), 60) + "; the report is written over it."},
+		command:  displayCommand(append(slices.Clone(s.lastData), "--format", m.format)),
+		cancel:   "Cancelled. Nothing was written.",
+		yes:      run,
+	})
 }
 
 // runData runs a history or report; the result keeps the title of what
@@ -1838,22 +1937,14 @@ func (s *streamsSection) back() bool {
 		}
 		return s.pane.back()
 	case 1:
-		if s.cbForm.leaveField() {
+		// Esc puts back only the URL being edited; Revert changes puts
+		// back the boxes too.
+		if c := s.cbForm.current(); c != nil && c.name == "url" && c.input.Value() != c.orig && c.lockable {
+			s.cbForm.leaveField()
+			s.h.flash = "Callback URL put back: " + c.input.Value()
 			return true
 		}
-		if s.callbackUnsaved() {
-			// A saved value: esc puts it back, the boxes too.
-			base, ret := splitReturn(s.cbURL)
-			f := s.cbForm.get("url")
-			f.setValue(base)
-			f.lockable, f.locked = true, true
-			for _, p := range providers {
-				s.cbForm.get("return:" + p.name).on = slices.Contains(ret, p.name)
-			}
-			s.h.flash = "Callback URL put back: " + base
-			return true
-		}
-		return false
+		return s.cbForm.leaveField()
 	case 3:
 		return s.dataForm.leaveField()
 	}
@@ -2096,4 +2187,70 @@ func (h *home) startRecorderNow() tea.Cmd {
 	s.page = 2
 	h.focus = focusContent
 	return tea.Batch(cmd, h.wrap("streams", s.recPanel.start(runReq{args: []string{"streams", "recorder", "start"}, format: "table"})))
+}
+
+// retryableResults counts the failed files of a run that a retry can fix.
+func retryableResults(results []map[string]any) int {
+	n := 0
+	for _, r := range results {
+		if r["status"] != "failed" {
+			continue
+		}
+		code := ""
+		if e, ok := r["error"].(map[string]any); ok {
+			code = str(e["code"])
+		}
+		if RetryHelps(code) {
+			n++
+		}
+	}
+	return n
+}
+
+// revertCallback puts the Callback page back as it is saved, and says
+// what changed back.
+func (s *streamsSection) revertCallback() tea.Cmd {
+	base, ret := splitReturn(s.cbURL)
+	var what []string
+	f := s.cbForm.get("url")
+	if f.value() != base {
+		what = append(what, "the callback URL")
+	}
+	f.setValue(base)
+	f.lockable, f.locked = true, true
+	f.orig = base
+	for _, p := range providers {
+		box := s.cbForm.get("return:" + p.name)
+		if on := slices.Contains(ret, p.name); box.on != on {
+			what = append(what, p.label+" data")
+			box.on = on
+		}
+	}
+	if len(what) == 0 {
+		return s.h.setFlash("Nothing to revert")
+	}
+	return s.h.setFlash("Reverted " + strings.Join(what, ", ") + " to what is saved")
+}
+
+// callbackActions are the Callback page's buttons beyond its form.
+func (s *streamsSection) callbackActions() []button {
+	if s.callbackUnsaved() {
+		return []button{{label: "Revert changes", do: s.revertCallback}}
+	}
+	return nil
+}
+
+// askStopRecorder asks before stopping the recorder (Cancel first).
+func (s *streamsSection) askStopRecorder() tea.Cmd {
+	return s.h.askFirst(&confirmState{
+		owner:    "streams",
+		question: "Stop the background recorder?",
+		notes:    []string{"Stopping leaves gaps in the play history until it runs again."},
+		command:  "audd streams recorder stop",
+		action:   "Stop the recorder",
+		cancel:   "Cancelled. Recorder unchanged.",
+		yes: func() tea.Cmd {
+			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
+		},
+	})
 }

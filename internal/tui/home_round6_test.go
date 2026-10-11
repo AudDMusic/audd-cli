@@ -78,8 +78,12 @@ func TestRecorderPageState(t *testing.T) {
 	if v := h.View(); !strings.Contains(v, "Running. Press enter to stop it.") || strings.Contains(v, "4242") || strings.Contains(v, "[ Start ]") {
 		t.Fatalf("running:\n%s", v)
 	}
-	// One enter stops it.
+	// Stopping asks (gaps in the history), on Cancel.
 	press(h, key("enter"))
+	if v := h.View(); h.confirm == nil || !strings.Contains(v, "Stopping leaves gaps in the play history") || !strings.Contains(v, "[>Cancel<]") {
+		t.Fatalf("stop asks:\n%s", v)
+	}
+	press(h, key("right"), key("enter"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Start ]") })
 	if v := h.View(); !strings.Contains(v, "Stopped. Press enter to start it.") || strings.Contains(v, "[ Stop ]") {
 		t.Fatalf("stopped:\n%s", v)
@@ -199,16 +203,16 @@ func TestUndoSurvivesNavigation(t *testing.T) {
 	drain(h, h.activate(), 0)
 	press(h, key("enter"), key("right"), key("enter"))
 	f.waitFor(t, "config set format table")
-	pump(h, func() bool { return strings.Contains(h.View(), "[ Undo (u) ]") })
+	pump(h, func() bool { return strings.Contains(h.View(), "[ Undo: Output format (u) ]") })
 	press(h, key("down"), key("down"), key("up"), key("up"))
-	if !strings.Contains(h.View(), "[ Undo (u) ]") {
+	if !strings.Contains(h.View(), "[ Undo: Output format (u) ]") {
 		t.Fatalf("undo after moving:\n%s", h.View())
 	}
 	press(h, key("tab"))
-	for selectedButton(h) != "Undo" && h.btnCur < 5 {
+	for selectedButton(h) != "Undo: Output format" && h.btnCur < 5 {
 		press(h, key("right"))
 	}
-	if selectedButton(h) != "Undo" {
+	if selectedButton(h) != "Undo: Output format" {
 		t.Fatal("Undo is reachable with tab and arrows")
 	}
 	press(h, key("esc"))
@@ -219,7 +223,7 @@ func TestUndoSurvivesNavigation(t *testing.T) {
 	f.waitFor(t, "config set format json")
 	press(h, key("esc"), key("2"), key("6"), key("right"))
 	press(h, key("u"))
-	if strings.Contains(h.View(), "[ Undo (u) ]") || !strings.Contains(statusText(h.View()), "Nothing to undo") {
+	if strings.Contains(h.View(), "[ Undo: Output format (u) ]") || !strings.Contains(statusText(h.View()), "Nothing to undo") {
 		t.Fatalf("after leaving:\n%s", h.View())
 	}
 }

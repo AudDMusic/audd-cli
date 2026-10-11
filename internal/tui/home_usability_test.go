@@ -59,6 +59,12 @@ func TestCallbackChangeAsks(t *testing.T) {
 	s := h.subs["streams"].(*streamsSection)
 	press(h, key("down"), key("enter"), key("ctrl+u"))
 	press(h, typeText("https://hooks.example/audd")...)
+	// Enter goes on to the data boxes; Save at the end asks.
+	press(h, key("enter"))
+	if c := s.cbForm.current(); c.name != "return:apple_music" {
+		t.Fatalf("enter on the URL goes on: %s", c.name)
+	}
+	s.cbForm.focusName("set")
 	press(h, key("enter"))
 	v := h.View()
 	for _, want := range []string{"Change the callback URL?", "Now: https://audd.tech/empty/", "New: https://hooks.example/audd", "every result of every stream"} {
@@ -66,7 +72,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press the selected button") || strings.Contains(foot, "confirm") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL") || !strings.Contains(v, "[ Change the callback URL ]") {
+	if foot := footerText(v); !strings.HasPrefix(foot, "←/→ choose  enter press  esc cancel") || strings.Contains(foot, "confirm") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL") || !strings.Contains(v, "[ Change the callback URL ]") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -76,13 +82,14 @@ func TestCallbackChangeAsks(t *testing.T) {
 	if s.cbForm.value("url") != "https://hooks.example/audd" {
 		t.Fatal("the typed URL is kept after cancelling")
 	}
-	// enter edits the kept text, enter asks again, and a double enter
-	// lands on Cancel.
-	press(h, key("enter"), key("enter"), key("enter"))
+	// Save asks again, and a double enter lands on Cancel.
+	s.cbForm.focusName("set")
+	press(h, key("enter"), key("enter"))
 	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
 		t.Fatal("a double enter lands on Cancel")
 	}
-	press(h, key("enter"), key("enter"), key("right"), key("enter"))
+	s.cbForm.focusName("set")
+	press(h, key("enter"), key("right"), key("enter"))
 	f.waitFor(t, "streams callback set https://hooks.example/audd")
 }
 
@@ -333,7 +340,10 @@ func TestSettingsEditor(t *testing.T) {
 
 // A new stream with an ID in use offers to change that stream's URL.
 func TestAddStreamWithATakenID(t *testing.T) {
-	h := navHome(t, homeOpts{start: "streams"})
+	f := &fakeRun{}
+	f.reply("streams set-url", `{"schema_version":1}`, "", 0)
+	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 100, 30)
+	drain(h, h.activate(), 0)
 	s := h.subs["streams"].(*streamsSection)
 	press(h, key("down"), key("a"))
 	press(h, typeText("https://radio.example/new.mp3")...)
@@ -349,6 +359,9 @@ func TestAddStreamWithATakenID(t *testing.T) {
 	pump(h, func() bool {
 		return strings.Contains(statusText(h.View()), "Stream 1 now uses https://radio.example/new.mp3")
 	})
+	if !strings.Contains(statusText(h.View()), "Stream 1 now uses https://radio.example/new.mp3") {
+		t.Fatalf("the message:\n%s", h.View())
+	}
 }
 
 func TestTruncMiddle(t *testing.T) {

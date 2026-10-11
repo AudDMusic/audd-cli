@@ -474,12 +474,10 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 		return nil
 	case "enter":
 		return h.pressAsk(s.cur)
-	case "y":
-		return h.copyCommand()
 	case "n", "N":
 		return h.pressAsk(0)
 	case "?":
-		return h.setFlash("←/→ or tab choose · enter presses the selected button · n or esc cancels · y copies the command")
+		return h.setFlash("←/→ choose · enter press · esc cancel")
 	}
 	return h.setFlash(keyName(key) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }

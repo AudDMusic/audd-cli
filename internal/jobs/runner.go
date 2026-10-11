@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -172,15 +173,19 @@ type runner struct {
 
 func (r *runner) run(ctx context.Context) (app.BatchSummary, error) {
 	a := r.a
-	retry := r.opts.RetryFailed
 	for i, it := range r.items {
 		switch {
 		case it.State == StatePending,
-			it.State == StateFailed && (it.SafeRetry || retry):
+			it.State == StateFailed && r.retries(it):
 			r.todo = append(r.todo, i)
 		}
 	}
 
+	if r.job != nil {
+		if can, cant := RetrySplit(r.items); can+cant > 0 {
+			a.Out.Info("%s.", RetryLine(r.items))
+		}
+	}
 	plan := r.plan()
 	if r.opts.DryRun {
 		err := PrintDryRun(a.Out, "", r.jobID(), plan.Endpoint, plan,
@@ -278,11 +283,10 @@ func (r *runner) refresh() error {
 	if len(items) != len(r.items) {
 		return fmt.Errorf("job %s changed while starting", r.job.ID)
 	}
-	retry := r.opts.RetryFailed
 	var todo []int
 	for _, i := range r.todo {
 		it := items[i]
-		if it.State == StatePending || it.State == StateFailed && (it.SafeRetry || retry) && it.ErrCode != ErrCodeInFlight {
+		if it.State == StatePending || it.State == StateFailed && r.retries(it) && it.ErrCode != ErrCodeInFlight {
 			todo = append(todo, i)
 		} else if it.State == StateFailed && it.ErrCode == ErrCodeInFlight && r.items[i].State == StateFailed && r.items[i].ErrCode == ErrCodeInFlight {
 			// Already in flight when this run planned it: --retry-failed
@@ -789,7 +793,14 @@ func (r *runner) finish(ctx context.Context, status string) (app.BatchSummary, e
 			Message: fmt.Sprintf("stopped with %d of %d files done; nothing finished is lost", job.Done, job.Total),
 			Hint:    "audd jobs resume " + job.ID}
 	case job.Failed > 0:
-		hint := "see the failures with audd jobs show " + job.ID + ", retry them with audd jobs resume " + job.ID + " --retry-failed"
+		can, cant := RetrySplit(r.items)
+		hint := "see the failures with audd jobs show " + job.ID
+		if can > 0 {
+			hint += ", retry the " + output.Plural(can, "file") + " that can work with audd jobs resume " + job.ID + " --retry-failed"
+		}
+		if cant > 0 {
+			hint += "; " + output.Plural(cant, "file") + " failed in a way a retry does not fix (" + firstCant(r.items) + ")"
+		}
 		tooLarge := 0
 		for _, it := range r.items {
 			if it.State == StateFailed && it.ErrCode == "file_too_large" {
@@ -817,3 +828,72 @@ func (noProgress) Start(int, string) {}
 func (noProgress) Inc(int)           {}
 func (noProgress) SetLabel(string)   {}
 func (noProgress) Done()             {}
+
+// retries reports whether this run sends the failed item again: always
+// when nothing reached AudD, with --retry-failed when a retry can work,
+// with --retry-all-failed in any case.
+func (r *runner) retries(it Item) bool {
+	switch {
+	case it.SafeRetry, r.opts.RetryAllFailed:
+		return true
+	case r.opts.RetryFailed:
+		return RetryHelps(it.ErrCode)
+	}
+	return false
+}
+
+// RetryHelps reports whether sending a file that failed with this error
+// code again can work: the connection, the server, a rate or quota limit
+// (after topping up), the token (after fixing it), or a run that stopped.
+// Bad or unsupported audio fails the same way again.
+func RetryHelps(code string) bool {
+	switch code {
+	case "", "network", "server", "rate_limited", "interrupted", ErrCodeInFlight, "quota_exceeded", "token_rejected", "no_token":
+		return true
+	}
+	return false
+}
+
+// RetrySplit counts the failed items a retry can fix, and the others.
+func RetrySplit(items []Item) (can, cant int) {
+	for _, it := range items {
+		if it.State != StateFailed {
+			continue
+		}
+		if RetryHelps(it.ErrCode) {
+			can++
+		} else {
+			cant++
+		}
+	}
+	return can, cant
+}
+
+// firstCant names the first failure a retry does not fix: "corrupt.mp3:
+// the audio could not be decoded".
+func firstCant(items []Item) string {
+	for _, it := range items {
+		if it.State == StateFailed && !RetryHelps(it.ErrCode) {
+			name := it.Input.Name()
+			if !strings.Contains(name, "://") {
+				name = filepath.Base(name)
+			}
+			return name + ": " + strings.TrimSuffix(it.Err, ".")
+		}
+	}
+	return ""
+}
+
+// RetryLine says what the failures are: "2 failed: 1 can be retried, 1
+// can't (corrupt.mp3: the audio could not be decoded)".
+func RetryLine(items []Item) string {
+	can, cant := RetrySplit(items)
+	line := output.Plural(can+cant, "file") + " failed"
+	switch {
+	case cant == 0:
+		return line + ": a retry can work"
+	case can == 0:
+		return line + ", in a way a retry does not fix (" + firstCant(items) + ")"
+	}
+	return fmt.Sprintf("%s: %d can be retried, %d can't (%s)", line, can, cant, firstCant(items))
+}

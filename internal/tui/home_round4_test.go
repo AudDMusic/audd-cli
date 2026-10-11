@@ -114,12 +114,12 @@ func TestSpendingDialogStartsOnCancel(t *testing.T) {
 	press(h, key("enter"))
 	pump(h, func() bool { return h.ask != nil })
 	v := h.View()
-	if h.ask == nil || h.ask.cur != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Recognize 2 files ]") || !strings.Contains(footerText(v), "enter press the selected button") {
+	if h.ask == nil || h.ask.cur != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Recognize 2 files ]") || footerText(v) != "←/→ choose  enter press  esc cancel" {
 		t.Fatalf("the spending dialog:\n%s", v)
 	}
-	// y copies the command, also in a dialog; it never confirms.
+	// y does nothing in a dialog: it never confirms.
 	press(h, key("y"))
-	if h.ask == nil || sent.Load() != 0 || !strings.Contains(statusText(h.View()), "Copied the command") {
+	if h.ask == nil || sent.Load() != 0 || !strings.Contains(statusText(h.View()), "y does nothing here") {
 		t.Fatalf("y in a dialog:\n%s", h.View())
 	}
 	press(h, key("enter"))
@@ -190,8 +190,12 @@ func TestRecognizeOpensSelected(t *testing.T) {
 	}
 	press(h, key("right"), key("esc"))
 	press(h, key("3"))
+	if h.activeID() != "recognize" {
+		t.Fatal("in the form a digit never jumps")
+	}
+	press(h, key("esc"), key("3"))
 	if h.activeID() != "streams" {
-		t.Fatal("after esc a digit jumps")
+		t.Fatal("from the menu a digit jumps")
 	}
 	press(h, key("1"))
 	if !s.form.capturing() || s.form.current().name != "input" || s.form.value("input") != "a.mp3" {
@@ -357,7 +361,7 @@ func TestHumanErrorsParse(t *testing.T) {
 		if res.err == nil || res.err.Message != c.msg || res.err.Hint != c.hint {
 			t.Fatalf("%q: %+v", c.stderr, res.err)
 		}
-		if v := errorText(output.Styles{}, res.err, 100); !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg+"\nTry: "+c.hint)) && c.hint != "" || !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg)) {
+		if v := errorText(output.Styles{}, res.err, 100); !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg+"\n"+c.hint)) && c.hint != "" || !strings.Contains(strings.ToLower(v), strings.ToLower(c.msg)) || strings.Contains(v, "Try:") {
 			t.Fatalf("shown: %q", v)
 		}
 	}

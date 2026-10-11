@@ -33,7 +33,7 @@ AudD  ·  profile default
                  │                           │   macOS (Homebrew)        brew install auddmusic/tap/audd
                  │                           │   macOS, Linux (script)   curl -fsSL
                  │                           │                           https://github.com/AudDMusic/audd-cli/releases…
- [ Commands ]    │                           │ ↓ 406 more lines below
+ [ Commands ]    │                           │ ↓ 415 more lines below
  [ Keys ] q quit │ 7%
 
 ←/→ tabs  ↓ open  esc back  ? keys

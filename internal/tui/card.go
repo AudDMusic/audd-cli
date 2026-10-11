@@ -190,6 +190,9 @@ func providerLinks(extra map[string]any) [][2]string {
 	for _, k := range keys {
 		// Field names in words: "new_field" → "New field".
 		if s := str(extra[k]); s != "" {
+			if strings.HasSuffix(k, "_offset") {
+				s += " ms" // where the match is within the song
+			}
 			out = append(out, [2]string{plainName(k), s})
 		} else if b, ok := extra[k].(bool); ok {
 			out = append(out, [2]string{plainName(k), fmt.Sprint(b)})
@@ -202,16 +205,23 @@ func providerLinks(extra map[string]any) [][2]string {
 // Artist, Album, …), for the details pages of interactive mode.
 func detailFields(r app.ResultView, key lipgloss.Style) []string {
 	rows := [][2]string{{"Title", r.Title}, {"Artist", r.Artist}, {"Album", r.Album}, {"Label", r.Label},
-		{"Released", r.ReleaseDate}, {"ISRC", r.ISRC}, {"UPC", r.UPC}, {"Timecode", r.Timecode}}
+		{"Released", r.ReleaseDate}, {"ISRC", r.ISRC}, {"UPC", r.UPC}, {"Position in the song", r.Timecode}}
 	if r.Score > 0 {
 		rows = append(rows, [2]string{"Score", fmt.Sprint(r.Score)})
 	}
 	rows = append(rows, [2]string{"Link", r.SongLink})
 	rows = append(rows, providerLinks(r.Extra)...)
+	// The labels shown line up: as wide as the longest (at least 12).
+	lw := 12
+	for _, kv := range rows {
+		if kv[1] != "" {
+			lw = max(lw, len([]rune(kv[0])))
+		}
+	}
 	var lines []string
 	for _, kv := range rows {
 		if kv[1] != "" {
-			lines = append(lines, key.Render(fmt.Sprintf("%-12s ", kv[0]))+kv[1])
+			lines = append(lines, key.Render(fmt.Sprintf("%-*s ", lw, kv[0]))+kv[1])
 		}
 	}
 	if r.Cached {

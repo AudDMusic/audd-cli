@@ -40,3 +40,18 @@ func expandHome(p string) string {
 	}
 	return filepath.Join(home.(string), rest)
 }
+
+// shortKeepName shortens a long path in its middle and keeps its file
+// name whole (where a typo usually is): "/home/me/…/Musc/song.mp3".
+func shortKeepName(p string, w int) string {
+	r := []rune(p)
+	if len(r) <= w {
+		return p
+	}
+	base := []rune(filepath.Base(p))
+	if len(base)+6 >= w {
+		return truncMiddle(p, w)
+	}
+	head := w - len(base) - 2
+	return string(r[:head]) + "…" + string(filepath.Separator) + string(base)
+}

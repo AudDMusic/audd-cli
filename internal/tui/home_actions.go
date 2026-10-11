@@ -22,6 +22,9 @@ type button struct {
 	off   string // why it is off ("" when it works)
 }
 
+// errorShower is a section that can say which error its page shows.
+type errorShower interface{ shownError() *runError }
+
 // actioner is a section with buttons: the ones that apply right now.
 type actioner interface{ actions() []button }
 
@@ -36,6 +39,23 @@ func (h *home) pageActions() []button {
 	}
 	if a, ok := h.active().(actioner); ok {
 		acts := a.actions()
+		if er, ok := h.active().(errorShower); ok {
+			// The way out of an error on the page, as buttons (sign in,
+			// set a token), unless the page has them already.
+			if e := er.shownError(); e != nil {
+				have := map[string]bool{}
+				for _, b := range acts {
+					have[b.label] = true
+				}
+				// Streams need the account's own token.
+				test := h.activeID() != "streams" && h.activeID() != "now-playing"
+				for _, b := range h.hintButtons(e, func() tea.Cmd { return nil }, test) {
+					if !have[b.label] {
+						acts = append(acts, b)
+					}
+				}
+			}
+		}
 		if h.signedOut {
 			for i := range acts {
 				if acts[i].token {
@@ -180,7 +200,7 @@ func sameButtons(a, b []button, pressed string) bool {
 // accelerator presses the button whose letter is s.
 func (h *home) accelerator(s string, acts []button) (tea.Cmd, bool) {
 	for i, b := range acts {
-		if b.key != "" && b.key == s || s == "ctrl+z" && b.label == "Undo" {
+		if b.key != "" && b.key == s || s == "ctrl+z" && strings.HasPrefix(b.label, "Undo") {
 			h.btnCur = i
 			return h.pressButton(b), true
 		}
@@ -218,6 +238,17 @@ func (h *home) focusButton(label string) {
 		if b.label == label {
 			h.focus = focusContent
 			h.btnActive, h.btnCur = true, i
+		}
+	}
+}
+
+// focusButtonPrefix puts the keys on the first button whose label starts
+// with prefix ("Retry" finds "Retry 2 files").
+func (h *home) focusButtonPrefix(prefix string) {
+	for _, b := range h.pageActions() {
+		if strings.HasPrefix(b.label, prefix) {
+			h.focusButton(b.label)
+			return
 		}
 	}
 }

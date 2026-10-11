@@ -2,8 +2,8 @@ AudD  ·  profile default
                  │ Streams › Recorder
  1 Recognize     │  List  Callback >Recorder< History & reports 
  2 Now playing   │ Background recorder
-*3 Streams       > The background recorder saves every stream result on this computer, so Recognitions, reports, and Now
- 4 Recognitions  │ playing stay complete while audd is closed. Settings can start it automatically with audd.
+*3 Streams       > The background recorder saves every stream result on this computer, so the stream history, reports,
+ 4 Recognitions  │ and Now playing stay complete while audd is closed. Settings can start it automatically with audd.
  5 Account       │ 
  6 Settings      │ Running. Press enter to stop it.
  7 Help          │ 12 plays recorded

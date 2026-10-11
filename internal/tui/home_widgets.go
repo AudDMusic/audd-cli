@@ -615,8 +615,12 @@ func (f *form) rowKeys(primary string) []keyHelp {
 		k = append(k, keyHelp{"enter/e", "edit"})
 	case c.locked:
 		k = append(k, keyHelp{"enter", "type in " + c.label})
+	case c.lockable && c.nextOnEnter:
+		k = append(k, keyHelp{"enter", "next"}, keyHelp{"esc", "cancel"})
 	case c.lockable:
 		k = append(k, keyHelp{"enter", "save"}, keyHelp{"esc", "cancel"})
+	case c.nextOnEnter:
+		k = append(k, keyHelp{"enter", "next"})
 	case f.enterNext && f.laterField():
 		k = append(k, keyHelp{"enter", "next field"})
 	case c.typeHint != "":
@@ -1211,7 +1215,7 @@ func (p *picker) view(w, h int, st output.Styles, color, focused bool) string {
 		b.WriteString(line + "\n")
 	}
 	if len(m) == 0 {
-		b.WriteString(st.Dim.Render("Nothing matches."))
+		b.WriteString(st.Dim.Render(truncate("No command matches '"+p.filter.Value()+"'", w)))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

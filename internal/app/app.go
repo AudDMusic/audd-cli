@@ -203,7 +203,10 @@ type BatchOptions struct {
 	DryRun         bool
 	NoCache        bool
 	Yes            bool
+	// RetryFailed retries the failures a retry can fix (connection,
+	// server, rate limit, quota); RetryAllFailed every failure.
 	RetryFailed    bool
+	RetryAllFailed bool
 	ResumeID       string
 	// Resume and New answer "an identical earlier run did not finish":
 	// continue that job, or start a new one. Without a terminal one of

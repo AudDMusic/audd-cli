@@ -306,6 +306,10 @@ func (h *home) commandLine() string {
 		}
 		return ""
 	}
+	if h.prompt() {
+		// y does nothing in a dialog: no "y copy" here.
+		return truncate(h.st.Dim.Render("$ "+c), h.w)
+	}
 	right := h.st.Dim.Render("y copy")
 	left := "$ " + c
 	if h.color {
@@ -327,12 +331,12 @@ var moveKeys = []keyHelp{
 
 // globalKeys are the keys that work everywhere.
 var globalKeys = []keyHelp{
-	{"1-7", "jump to a section (not while typing in a text field)"},
+	{"1-7", "jump to a section from the menu, a tab bar, or a list (never in a form)"},
 	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
-	{"y", "copy the command shown at the bottom (in a dialog too)"},
+	{"y", "copy the command shown at the bottom (not in a dialog)"},
 	{"?", "keys for this screen"},
 	{"F1", "help"},
-	{"q", "quit; it asks first when something typed is not saved or a command runs (not while typing)"},
+	{"q", "quit, from the menu or a tab bar; it asks first when something is not saved or a command runs"},
 	{"ctrl+c", "quit, also while typing; asks like q, and a second ctrl+c quits"},
 	{"ctrl+u", "clear the field being typed in"},
 	{"click, wheel", "select or press; scroll"},

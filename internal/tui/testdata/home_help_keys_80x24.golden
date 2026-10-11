@@ -10,14 +10,14 @@ AudD  ·  profile default
                  │   When a text field is selected, you are typing in it:
                  │   letters, digits, and symbols go in, ←/→ move the cursor (←
                  │   at its start goes back), ctrl+u clears it, and esc stops
-                 │   typing but keeps the value and the form (enter types again;
-                 │   then 1-7 jump to a section). Recognize opens typing in its
-                 │   File, URL, or folder field; other pages open with no text
-                 │   field selected. After an error the cursor is back in the
-                 │   field it is about. A saved value, such as the callback URL,
-                 │   is changed only after enter or e, and esc puts the old
-                 │   value back. Enter in a form's last text field runs it (in
- [ Commands ]    │   Add a stream, enter in ID adds it; the box below is
- [ Keys ] q quit │ ↓ 122 more lines below
+                 │   typing but keeps the value and the form (enter types
+                 │   again). 1-7 jump to a section from the menu, a tab bar, or
+                 │   a list; in a form they never do, and q quits only from the
+                 │   menu or a tab bar. Recognize opens typing in its File, URL,
+                 │   or folder field; other pages open with no text field
+                 │   selected. After an error the cursor is back in the field it
+                 │   is about. A saved value, such as the callback URL, is
+ [ Commands ]    │   changed only after enter or e, and esc puts the old value
+ [ Keys ] q quit │ ↓ 124 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys

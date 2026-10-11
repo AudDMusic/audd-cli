@@ -71,6 +71,11 @@ func TestQuitAsksWhenSomethingIsLost(t *testing.T) {
 	h = navHome(t, homeOpts{start: "recognize"})
 	press(h, typeText("song.mp3")...)
 	press(h, key("esc"))
+	// Inside the page q says how to quit.
+	if _, cmd := h.Update(key("q")); cmd != nil || h.confirm != nil || !strings.Contains(statusText(h.View()), "Press esc to go back to the menu, then q to quit") {
+		t.Fatalf("q in a page:\n%s", h.View())
+	}
+	press(h, key("esc"))
 	_, cmd := h.Update(key("q"))
 	v := h.View()
 	if cmd != nil || h.confirm == nil || !h.confirm.quit || !strings.Contains(v, "The recognition you set up (song.mp3) is not saved.") || !strings.Contains(v, "[>Cancel<]  [ Quit ]") {
@@ -150,8 +155,8 @@ func TestJobRetryOnlyWhenItHelps(t *testing.T) {
 	drive(t, h, 100, 30, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), key("tab"), key("enter"), "c.mp3")
 	// Retry from the Files list: it is read again when the retry ends.
 	before := loads
-	h.focusButton("Retry failed files")
-	if selectedButton(h) != "Retry failed files" {
+	h.focusButton("Retry 1 file")
+	if selectedButton(h) != "Retry 1 file" {
 		t.Fatalf("buttons:\n%s", h.View())
 	}
 	press(h, key("enter"))
@@ -229,10 +234,30 @@ func TestCallbackEscAndPlaceholder(t *testing.T) {
 	press(h, key("down"), key("enter"))
 	press(h, key("ctrl+u"))
 	press(h, typeText("https://new.example/x")...)
-	press(h, key("down")) // leave the field with the change
+	// Esc on the URL puts back the URL only.
 	press(h, key("esc"))
-	if s.cbForm.value("url") != "https://audd.tech/empty/" || !strings.Contains(statusText(h.View()), "Callback URL put back") {
-		t.Fatalf("esc restores: %q\n%s", s.cbForm.value("url"), h.View())
+	if s.cbForm.value("url") != "https://audd.tech/empty/" {
+		t.Fatalf("esc restores the URL: %q\n%s", s.cbForm.value("url"), h.View())
+	}
+	// A box changed stays until Revert changes, which says what it put back.
+	s.cbForm.get("return:spotify").on = true
+	press(h, key("esc"))
+	if !s.cbForm.get("return:spotify").on {
+		t.Fatal("esc does not revert the boxes")
+	}
+	var revert *button
+	for _, b := range h.pageActions() {
+		if b.label == "Revert changes" {
+			b := b
+			revert = &b
+		}
+	}
+	if revert == nil {
+		t.Fatalf("no Revert changes:\n%s", h.View())
+	}
+	drain(h, revert.do(), 0)
+	if s.cbForm.get("return:spotify").on || !strings.Contains(statusText(h.View()), "Reverted Spotify data to what is saved") {
+		t.Fatalf("revert:\n%s", h.View())
 	}
 	f := textField("x", "X", "")
 	f.placeholder = "e.g. https://your-server.example/audd"

@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/AudDMusic/audd-cli/internal/output"
+
 // What each section has typed and not saved, for quitting (see
 // lostOnQuit).
 
@@ -66,3 +68,83 @@ func (s *historySection) left() {
 		}
 	}
 }
+
+// shownError is the error on the page (for its sign-in or token
+// buttons), nil when none.
+func (s *recognizeSection) shownError() *runError {
+	if s.phase == "result" && s.panel.res != nil {
+		return s.panel.res.err
+	}
+	return nil
+}
+
+func (s *nowPlayingSection) shownError() *runError {
+	if s.err == nil {
+		return nil
+	}
+	e := output.AsError(s.err)
+	return &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}
+}
+
+func (s *accountSection) shownError() *runError {
+	for _, p := range []*cmdPanel{s.token, s.pay, s.billing, s.prof} {
+		if p != nil && p.res != nil && p.res.err != nil {
+			return p.res.err
+		}
+	}
+	return nil
+}
+
+func (s *streamsSection) shownError() *runError {
+	switch s.page {
+	case 0:
+		if s.pane.err != nil {
+			e := output.AsError(s.pane.err)
+			return &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}
+		}
+		if e := s.pane.listError(); e != nil {
+			if e.Code == "token_rejected" {
+				e.Hint = "set an API token" // the ways in, as buttons
+			}
+			return e
+		}
+	case 1:
+		if s.cbPanel.res != nil {
+			return s.cbPanel.res.err
+		}
+	case 2:
+		if s.recPanel.res != nil {
+			return s.recPanel.res.err
+		}
+	case 3:
+		if s.dataPanel.res != nil {
+			return s.dataPanel.res.err
+		}
+	}
+	return nil
+}
+
+// listError is the error of the list the pane shows, if any.
+func (p *explorerPane) listError() *runError {
+	if p.ex == nil {
+		return nil
+	}
+	if l := p.ex.top(); l != nil && l.err != nil && len(l.rows) == 0 {
+		e := output.AsError(l.err)
+		return &runError{Code: e.Code, Message: e.Message, Hint: e.Hint}
+	}
+	return nil
+}
+
+// inForm: the pages that are forms (see former).
+func (s *recognizeSection) inForm() bool { return s.phase == "form" && s.browser == nil }
+
+func (s *streamsSection) inForm() bool {
+	return s.page == 0 && s.adding || s.page == 1 || s.page == 3
+}
+
+func (s *settingsSection) inForm() bool { return s.edit != nil }
+
+func (s *signinSection) inForm() bool { return s.step == "paste" }
+
+func (s *accountSection) inForm() bool { return s.tokPasting || s.buying }

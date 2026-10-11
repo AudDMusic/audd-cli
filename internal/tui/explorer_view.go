@@ -260,8 +260,20 @@ func (m *explorer) levelView(l *level, h int) string {
 		}
 	}
 	if l.err != nil && len(l.rows) == 0 {
-		msg := "Could not load: " + output.AsError(l.err).Message
-		if hint := output.AsError(l.err).Hint; hint != "" {
+		e := output.AsError(l.err)
+		if m.embedded {
+			// In interactive mode: what to do, with the page's buttons.
+			if l.kind == "streams" && (e.Code == "no_token" || e.Code == "token_rejected" || hintKind(e.Hint) != "") {
+				return "Sign in or add a token to monitor streams.\n" + m.st.Dim.Render(output.Wrap(noTokenChoicesReal, max(20, m.w)))
+			}
+			msg := "Could not load: " + e.Message
+			if hint := humanHint(e.Hint); hint != "" {
+				msg += "\n" + hint
+			}
+			return m.st.Warn.Render(output.Wrap(msg, max(20, m.w)))
+		}
+		msg := "Could not load: " + e.Message
+		if hint := e.Hint; hint != "" {
 			msg += "\nTry: " + hint
 		}
 		return m.st.Warn.Render(msg)

@@ -1248,3 +1248,27 @@ func TestPlanSaysWhereMaxRequestsStops(t *testing.T) {
 		t.Fatalf("plan: %s", ta.stderr.String())
 	}
 }
+
+// --retry-failed sends again only what a retry can fix: a connection
+// that dropped, not audio that could not be decoded; --retry-all-failed
+// sends both. The summary says which is which.
+func TestRetryFailedOnlyRetriesWhatCanWork(t *testing.T) {
+	f := newFakeAPI(t)
+	ta := newTestApp(t, f, output.FormatJSONL)
+	paths := mkfiles(t, "drop-1.mp3", "bad-2.mp3", "match-3.mp3")
+	sum, err := RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(paths), MaxFiles: intp(3)})
+	if exitOf(err) != output.ExitPartial {
+		t.Fatalf("got %v", err)
+	}
+	if e := output.AsError(err); !strings.Contains(e.Hint, "retry the 1 file that can work") || !strings.Contains(e.Hint, "1 file failed in a way a retry does not fix (bad-2.mp3: ") {
+		t.Fatalf("hint: %q", e.Hint)
+	}
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, RetryFailed: true})
+	if f.count("drop-1.mp3") != 2 || f.count("bad-2.mp3") != 1 {
+		t.Fatalf("retry-failed: drop %d, bad %d", f.count("drop-1.mp3"), f.count("bad-2.mp3"))
+	}
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, RetryAllFailed: true})
+	if f.count("bad-2.mp3") != 2 {
+		t.Fatalf("retry-all-failed: bad %d", f.count("bad-2.mp3"))
+	}
+}

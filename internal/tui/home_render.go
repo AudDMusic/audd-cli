@@ -422,11 +422,16 @@ func (h *home) batchPage(bs *batchState, w, ht int) string {
 				if e := str(m["end"]); e != "" {
 					where += ", ends at " + e
 				}
+				where += " (in the file)"
 				out = where + "\n\n"
 			}
 			if m["result"] != nil && m["status"] != "no_match" {
 				raw, _ := json.Marshal(m["result"])
 				return out + resultDetail(raw, ds)
+			}
+			if m["status"] == "failed" {
+				// The file's own error, in full.
+				return out + styleLines(st.Warn, output.Wrap("Failed: "+capFirst(failMessage(m)), w))
 			}
 			return out + resultSong(m)
 		}
@@ -449,4 +454,16 @@ func (h *home) batchButtons(bs *batchState) []button {
 		}},
 		{label: "Copy the song link", key: "c", do: func() tea.Cmd { return h.copy(link, "the link "+link) }},
 	}
+}
+
+// failMessage is the error of a failed batch result.
+func failMessage(m map[string]any) string {
+	if e, ok := m["error"].(map[string]any); ok {
+		msg := str(e["message"])
+		if RetryHelps(str(e["code"])) {
+			return msg
+		}
+		return strings.TrimSuffix(msg, ".") + ". Retrying won't help"
+	}
+	return "failed"
 }

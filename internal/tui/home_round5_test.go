@@ -47,7 +47,7 @@ func TestJobPage(t *testing.T) {
 		return 0
 	})
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	drive(t, h, 100, 30, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files")
+	drive(t, h, 100, 30, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry 1 file")
 	if c := h.command(); c != "audd jobs show k3x9" {
 		t.Fatalf("the job page's command: %q", c)
 	}
@@ -62,11 +62,11 @@ func TestJobPage(t *testing.T) {
 	}
 	// Only failed files left: no Resume, Retry failed files instead.
 	press(h, key("tab"))
-	if v := h.View(); strings.Contains(v, "[ Resume ]") || !strings.Contains(v, "Retry failed files") {
+	if v := h.View(); strings.Contains(v, "[ Resume ]") || !strings.Contains(v, "Retry 1 file") {
 		t.Fatalf("buttons:\n%s", v)
 	}
 	press(h, key("right"))
-	if b := selectedButton(h); b != "Retry failed files" {
+	if b := selectedButton(h); b != "Retry 1 file" {
 		t.Fatalf("on %q", b)
 	}
 	// It asks with its cost, on Cancel; a double enter sends nothing.
@@ -76,7 +76,7 @@ func TestJobPage(t *testing.T) {
 		t.Fatalf("the question:\n%s", v)
 	}
 	press(h, key("enter"))
-	if asked.Load() != 0 || selectedButton(h) != "Retry failed files" || !strings.Contains(statusText(h.View()), "Cancelled") {
+	if asked.Load() != 0 || selectedButton(h) != "Retry 1 file" || !strings.Contains(statusText(h.View()), "Cancelled") {
 		t.Fatalf("cancelled: sent %d, on %q\n%s", asked.Load(), selectedButton(h), h.View())
 	}
 	// Retry and finish: the next steps are buttons, not a Try line.
@@ -85,7 +85,7 @@ func TestJobPage(t *testing.T) {
 	press(h, key("right"), key("enter"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Back to the job ]") })
 	v := h.View()
-	if !strings.Contains(v, "[ Retry failed files again ]") || strings.Contains(v, "Try: audd jobs resume") {
+	if !strings.Contains(v, "[ Retry 1 file ]") || strings.Contains(v, "Try: audd jobs resume") {
 		t.Fatalf("after a retry:\n%s", v)
 	}
 }

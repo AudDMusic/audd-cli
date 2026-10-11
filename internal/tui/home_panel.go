@@ -227,11 +227,8 @@ func errorText(st output.Styles, e *runError, w int) string {
 	}
 	var b strings.Builder
 	b.WriteString(styleLines(st.Warn, output.Wrap("Error: "+capFirst(e.Message), w)))
-	if e.Hint != "" {
-		b.WriteString("\n" + output.Wrap("Try: "+e.Hint, w))
-		if strings.HasPrefix(e.Hint, "audd ") {
-			b.WriteString("\n" + st.Dim.Render(output.Wrap("Press enter to open "+e.Hint+" in Commands.", w)))
-		}
+	if h := humanHint(e.Hint); h != "" {
+		b.WriteString("\n" + output.Wrap(h, w))
 	}
 	return b.String()
 }
@@ -281,4 +278,54 @@ func capFirst(s string) string {
 	}
 	r := []rune(s)
 	return strings.ToUpper(string(r[0])) + string(r[1:])
+}
+
+// hintKind sorts a command's hint into what the page can do about it:
+// "signin" (sign in), "token" (set an API token), or "" (say it).
+func hintKind(hint string) string {
+	h := strings.ToLower(hint)
+	switch {
+	case strings.Contains(h, "audd login"), strings.Contains(h, "sign in"):
+		return "signin"
+	case strings.Contains(h, "--token"), strings.Contains(h, "audd_api_token"), strings.Contains(h, "config set token"), strings.Contains(h, "api token"):
+		return "token"
+	}
+	return ""
+}
+
+// humanHint says a command's hint in the page's words: what to do, not
+// the command line (a command with no button here is named as one to
+// run in a terminal).
+func humanHint(hint string) string {
+	switch hintKind(hint) {
+	case "signin":
+		return "Sign in first: the Sign in button is below."
+	case "token":
+		return "Set an API token first: the buttons below offer the ways."
+	}
+	switch {
+	case hint == "":
+		return ""
+	case strings.HasPrefix(hint, "audd "):
+		return "In a terminal: " + hint
+	}
+	return capFirst(strings.TrimSuffix(hint, ".")) + "."
+}
+
+// hintButtons are the buttons for an error's hint (see hintKind).
+func (h *home) hintButtons(e *runError, next func() tea.Cmd, test bool) []button {
+	if e == nil {
+		return nil
+	}
+	if e.Code == "no_token" {
+		return h.tokenWays(test, next)
+	}
+	switch hintKind(e.Hint) {
+	case "signin":
+		ways := h.tokenWays(false, next)
+		return ways[len(ways)-1:]
+	case "token":
+		return h.tokenWays(test, next)
+	}
+	return nil
 }
