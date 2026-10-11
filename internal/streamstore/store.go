@@ -496,7 +496,16 @@ func (s *Store) Gaps(since time.Time, radioIDs ...int) ([]Gap, error) {
 		}
 		since = e
 	}
+	// Before recording started (the earliest recorded period or play)
+	// nothing was missed: that is not a gap.
+	if e, err := s.Earliest(); err == nil && !e.IsZero() && e.After(since) {
+		since = e
+	}
 	since = since.UTC()
+	var firstAll sql.NullInt64
+	if err := s.db.QueryRow(`SELECT min(first_seen) FROM streams`).Scan(&firstAll); err != nil {
+		return nil, err
+	}
 	ids := radioIDs
 	if len(ids) == 0 {
 		var err error
@@ -521,19 +530,9 @@ func (s *Store) Gaps(since time.Time, radioIDs ...int) ([]Gap, error) {
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		// Before a stream was first known (listed, played, or recorded)
-		// nothing was missed: that is before recording started, not a gap.
-		var firstPlay, firstRec sql.NullInt64
-		_ = s.db.QueryRow(`SELECT min(ts) FROM plays WHERE radio_id = ?`, id).Scan(&firstPlay)
-		_ = s.db.QueryRow(`SELECT min(from_ts) FROM recorded WHERE radio_id = ?`, id).Scan(&firstRec)
-		start := int64(0)
-		for _, v := range []sql.NullInt64{first, firstPlay, firstRec} {
-			if v.Valid && (start == 0 || v.Int64 < start) {
-				start = v.Int64
-			}
-		}
-		if start > 0 {
-			if t := time.Unix(start, 0).UTC(); t.After(from) {
+		if first.Valid && firstAll.Valid && first.Int64 > firstAll.Int64+int64(heartbeatSlack/time.Second) {
+			// A stream added later: its time before that is not a gap.
+			if t := time.Unix(first.Int64, 0).UTC(); t.After(from) {
 				from = t
 			}
 		}

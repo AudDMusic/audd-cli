@@ -387,7 +387,9 @@ func TestGapsLeaveOutPeriodsWithPlays(t *testing.T) {
 	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(time.Hour), Artist: "A", Title: "One", PlayLength: 180})
 	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(2 * time.Hour), Artist: "B", Title: "Two", PlayLength: 180})
 	gaps, err := s.Gaps(t0)
-	if err != nil || len(gaps) != 2 || !gaps[0].To.Equal(t0.Add(time.Hour)) || !gaps[1].From.Equal(t0.Add(2*time.Hour+180*time.Second)) {
+	// Before the first play nothing was recorded yet: not a gap. After
+	// the last one, it is.
+	if err != nil || len(gaps) != 1 || !gaps[0].From.Equal(t0.Add(2*time.Hour+180*time.Second)) {
 		t.Fatalf("gaps around the plays: %+v %v", gaps, err)
 	}
 }
