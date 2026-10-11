@@ -102,7 +102,7 @@ func RunHome(ctx context.Context, a *app.App, section string) error {
 	defer cancel()
 	m := newHome(ctx, sessionApp(a), idx)
 	if isListen(section) {
-		m.useMic()
+		m.startListen()
 	}
 	popts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(a.In), tea.WithOutput(m.arts.out)}
 	if mouseEnabled() {
@@ -475,6 +475,14 @@ func (h *home) profileName() string {
 		return h.a.Profile.Name
 	}
 	return "default"
+}
+
+// startListen is audd ui listen: Recognize on the microphone, with the
+// keys on its Listen button.
+func (h *home) startListen() {
+	h.useMic()
+	h.focus = focusContent
+	h.pageEntered()
 }
 
 // useMic switches Recognize to the microphone.

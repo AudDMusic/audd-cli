@@ -277,12 +277,12 @@ func TestUpLeavesAndRecognitionsReopensAtList(t *testing.T) {
 	h := navHome(t, homeOpts{start: "recognize"})
 	s := recognizeOf(h)
 	press(h, key("up"))
-	if s.form.current().name != "source" {
-		t.Fatal("↑ goes to Source")
+	if h.focus != focusTabs || s.form.current().name != "input" {
+		t.Fatalf("↑ on the first field goes to the tab bar: %v %s", h.focus, s.form.current().name)
 	}
 	press(h, key("up"))
-	if h.focus != focusSidebar || s.form.current().name != "source" {
-		t.Fatalf("↑ on the first field goes back, no wrap: %v %s", h.focus, s.form.current().name)
+	if h.focus != focusTabs || s.form.current().name != "input" {
+		t.Fatalf("↑ on the tab bar stays, no wrap: %v %s", h.focus, s.form.current().name)
 	}
 	h = navHome(t, homeOpts{start: "recognitions"})
 	press(h, key("down"), key("enter"))

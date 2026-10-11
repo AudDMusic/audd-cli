@@ -31,26 +31,25 @@ func TestMicSnapshots(t *testing.T) {
 	}
 }
 
-// Source switches the form between a file and the microphone, with the
-// fields and the command of each.
+// The tab bar switches the form between a file and the microphone, with
+// the fields and the command of each. Both choices are always on screen.
 func TestRecognizeSourceSwitch(t *testing.T) {
 	useListenTools(t, media.Tools{FFmpeg: "/usr/bin/ffmpeg"}, media.Device{Value: "hw:0", Label: "Built-in"})
-	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognize"}), 120, 40)
+	h := sized(newTestHome(t, &fakeRun{}, homeOpts{start: "recognize", tabs: true}), 120, 40)
 	drain(h, h.activate(), 0)
 	s := recognizeOf(h)
-	if s.mic() || s.form.current().name != "input" {
-		t.Fatalf("Recognize opens on a file, at the input: %s", s.form.current().name)
+	if s.mic() || h.focus != focusTabs || s.form.current().name != "input" {
+		t.Fatalf("Recognize opens on its tab bar, on a file: %v %s", h.focus, s.form.current().name)
+	}
+	if v := h.View(); !strings.Contains(v, "File, URL, or folder") || !strings.Contains(v, "Microphone") || strings.Contains(v, "Source") {
+		t.Fatalf("both sources show on the tab bar, with no Source row:\n%s", v)
 	}
 	if s.m.asked {
 		t.Fatal("the devices are looked up only for the microphone")
 	}
-	press(h, key("up"))
-	if s.form.current().name != "source" {
-		t.Fatalf("Source is the first field: %s", s.form.current().name)
-	}
 	press(h, key("right"))
-	if !s.mic() {
-		t.Fatal("right switches to the microphone")
+	if !s.mic() || h.focus != focusTabs {
+		t.Fatal("right on the tab bar switches to the microphone")
 	}
 	if got := h.command(); got != "audd listen" {
 		t.Fatalf("command: %s", got)
@@ -66,14 +65,19 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 			t.Fatalf("%q shows with the microphone:\n%s", gone, v)
 		}
 	}
+	// Into the page: the cursor is on Listen.
+	press(h, key("enter"))
+	if h.focus != focusContent || s.form.current().name != "listen" {
+		t.Fatalf("enter opens the microphone page at Listen: %v %s", h.focus, s.form.current().name)
+	}
+	press(h, key("esc"))
 	// The providers are kept across both sources.
 	s.form.get("return:spotify").on = true
 	if got := h.command(); got != "audd listen --return spotify" {
 		t.Fatalf("command: %s", got)
 	}
-	// Left goes back to a file; on the first option it goes back.
 	press(h, key("left"))
-	if s.mic() || h.focus != focusContent {
+	if s.mic() || h.focus != focusTabs {
 		t.Fatal("left switches back to a file")
 	}
 	if got := h.command(); got != "audd recognize '<file>' --return spotify" {
@@ -82,9 +86,17 @@ func TestRecognizeSourceSwitch(t *testing.T) {
 	if v := h.View(); !strings.Contains(v, "Max files") || strings.Contains(v, "Seconds") {
 		t.Fatalf("file fields:\n%s", v)
 	}
+	press(h, key("down"))
+	if h.focus != focusContent || s.form.current().name != "input" {
+		t.Fatal("↓ opens the file page at its input")
+	}
+	press(h, key("esc"), key("up"))
+	if h.focus != focusTabs {
+		t.Fatalf("↑ from the input goes to the tab bar: %v", h.focus)
+	}
 	press(h, key("left"))
 	if h.focus != focusSidebar || s.mic() {
-		t.Fatal("left on the first option goes back to the sidebar")
+		t.Fatal("left on the first tab goes back to the sidebar")
 	}
 }
 

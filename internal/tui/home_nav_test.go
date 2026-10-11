@@ -217,7 +217,11 @@ func TestHierarchy(t *testing.T) {
 				if c := crumbText(h.View()); !strings.HasPrefix(c, title+" › "+name) {
 					t.Fatalf("%s: page crumb %q", what, c)
 				}
-				press(h, key("up"))
+				// A page may open below its top (the Microphone tab opens at
+				// Listen); ↑ climbs to the tab bar.
+				for i := 0; i < 12 && h.focus == focusContent; i++ {
+					press(h, key("up"))
+				}
 				if h.focus != focusTabs {
 					t.Fatalf("%s: ↑ at the top of the page goes to the tab bar", what)
 				}
@@ -273,7 +277,7 @@ func TestEscClimbsFromDeepLevels(t *testing.T) {
 		{"recognitions job", homeOpts{start: "recognitions"}, []string{"]", "down", "right"}, "Recognitions › Jobs › Job k3x9"},
 		{"recognitions job files", homeOpts{start: "recognitions"}, []string{"]", "down", "right", "tab", "enter"}, "Recognitions › Jobs › Job k3x9 › Files"},
 		{"settings edit", homeOpts{start: "settings"}, []string{"right"}, "Settings › Output format"},
-		{"recognize file picker", homeOpts{start: "recognize"}, []string{"ctrl+o"}, "Recognize › File › Pick a file"},
+		{"recognize file picker", homeOpts{start: "recognize", tabs: true}, []string{"down", "ctrl+o"}, "Recognize › File, URL, or folder › Pick a file"},
 		{"recognize microphone", homeOpts{start: "listen"}, nil, "Recognize › Microphone"},
 		{"now playing history", homeOpts{start: "now-playing"}, []string{"enter", "tab", "enter"}, "Now playing › Stream 1 › History"},
 		{"sign-in paste", homeOpts{signedOut: true}, []string{"down", "enter"}, "Sign in › Paste an API token"},
@@ -505,7 +509,7 @@ func TestMouse(t *testing.T) {
 		t.Fatalf("click on a tab: %d %v", st.page, h.focus)
 	}
 
-	// Form fields: a checkbox, the Source choice, a button.
+	// Form fields: a checkbox, the source tabs, a button.
 	click(t, h, "1 Recognize")
 	s := recognizeOf(h)
 	s.form.get("input").setValue("song.mp3")
@@ -513,21 +517,13 @@ func TestMouse(t *testing.T) {
 	if !s.form.get("return:spotify").on || h.focus != focusContent {
 		t.Fatal("click ticks a box")
 	}
+	click(t, h, "Microphone")
+	if !s.mic() || h.focus != focusTabs {
+		t.Fatal("click on the Microphone tab switches to the microphone")
+	}
 	click(t, h, "File, URL, or folder")
-	if s.mic() || s.form.current().name != "source" {
-		t.Fatal("click on a choice selects it without changing it")
-	}
-	x, y := at(t, h.View(), "folder ›")
-	_, cmd := h.Update(tea.MouseMsg{X: x + len("folder "), Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
-	drain(h, cmd, 0)
-	if !s.mic() {
-		t.Fatal("click on › changes the choice")
-	}
-	x, y = at(t, h.View(), "‹ Microphone")
-	_, cmd = h.Update(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
-	drain(h, cmd, 0)
-	if s.mic() {
-		t.Fatal("click on ‹ changes the choice back")
+	if s.mic() || h.focus != focusTabs {
+		t.Fatal("click on the File, URL, or folder tab switches back")
 	}
 	click(t, h, "Show the plan")
 	f.waitFor(t, "recognize song.mp3 --return spotify --dry-run")
@@ -568,7 +564,7 @@ func TestMouse(t *testing.T) {
 	}
 	click(t, h, "Guide")
 	h.View()
-	_, cmd = h.Update(tea.MouseMsg{X: 40, Y: 10, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	_, cmd := h.Update(tea.MouseMsg{X: 40, Y: 10, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
 	drain(h, cmd, 0)
 	if hs.page != 1 || hs.scroll.off != 3 {
 		t.Fatalf("the wheel scrolls the guide: page %d off %d", hs.page, hs.scroll.off)

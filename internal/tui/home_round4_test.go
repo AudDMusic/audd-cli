@@ -152,12 +152,17 @@ func TestRecognizeWithoutToken(t *testing.T) {
 	}
 }
 
-// Recognize opens typing in Input: every printable key goes in, digits
-// and [ ] : too; esc stops typing and stays on the form (the value
-// stays), and then digits jump; a second esc goes back.
+// Recognize opens on its tab bar; ↓ opens typing in Input: every
+// printable key goes in, digits and [ ] : too; esc stops typing and stays
+// on the form (the value stays), and then digits jump; a second esc goes
+// back.
 func TestRecognizeOpensSelected(t *testing.T) {
 	h := navHome(t, homeOpts{})
 	press(h, key("1"))
+	if h.focus != focusTabs {
+		t.Fatalf("1 opens Recognize on its tab bar: %v", h.focus)
+	}
+	press(h, key("down"))
 	s := recognizeOf(h)
 	foot := footerText(h.View())
 	if h.activeID() != "recognize" || !s.form.capturing() || s.form.current().name != "input" ||
@@ -185,10 +190,14 @@ func TestRecognizeOpensSelected(t *testing.T) {
 		t.Fatal("enter types in the field again")
 	}
 	press(h, key("esc"), key("esc"))
-	if h.focus != focusSidebar {
-		t.Fatal("the second esc goes back")
+	if h.focus != focusTabs {
+		t.Fatal("the second esc goes back to the tab bar")
 	}
-	press(h, key("right"), key("esc"))
+	press(h, key("esc"))
+	if h.focus != focusSidebar {
+		t.Fatal("the third esc goes back to the menu")
+	}
+	press(h, key("right"), key("down"))
 	press(h, key("3"))
 	if h.activeID() != "recognize" || s.form.value("input") != "a.mp33" {
 		t.Fatalf("on a text field a digit types: %q", s.form.value("input"))
@@ -200,7 +209,7 @@ func TestRecognizeOpensSelected(t *testing.T) {
 	if h.activeID() != "streams" {
 		t.Fatal("from the menu a digit jumps")
 	}
-	press(h, key("1"))
+	press(h, key("1"), key("down"))
 	if !s.form.capturing() || s.form.current().name != "input" || s.form.value("input") != "a.mp33" {
 		t.Fatal("back on Recognize: typing in Input again, value kept")
 	}

@@ -115,7 +115,7 @@ var helpLinks = []struct{ label, url string }{
 var gettingStarted = []struct{ title, text, cmd string }{
 	{"Sign in", "Sign in to your AudD account (or paste an API token) so audd can recognize music and show your account.", "audd login"},
 	{"Recognize a file", "Pick a file, URL, or folder and recognize it. Enter here fills in AudD's example song so you can try a recognition.", "audd recognize https://audd.tech/example.mp3"},
-	{"Use the microphone", "In Recognize, set Source to Microphone to record a few seconds and identify the song.", "audd listen"},
+	{"Use the microphone", "In Recognize, open the Microphone tab to record a few seconds and identify the song.", "audd listen"},
 	{"Add a stream", "Have AudD monitor a radio or other live stream, then watch it in Now playing.", "audd streams add <url> --id 1"},
 	{"Run any command", "Press ctrl+k to search every command and run it from a form.", "audd commands"},
 }
@@ -129,7 +129,7 @@ var sectionKeyDocs = []struct {
 	section string
 	keys    []keyHelp
 }{
-	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the hint says what); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice such as Source"}, {"space", "tick a box"}, {"esc", "done typing (the value stays); again: back"}, {"ctrl+o", "in File, URL, or folder: pick a file or folder"}, {"→ or enter", "result: details"}}},
+	{"Recognize", []keyHelp{{"↑/↓", "move between fields"}, {"enter", "in a text field: recognize (the hint says what); on a box: tick it; on a choice: next field; on a button: press it"}, {"←/→", "change a choice; on the tab bar: File, URL, or folder or Microphone"}, {"space", "tick a box"}, {"esc", "done typing (the value stays); again: back"}, {"ctrl+o", "in File, URL, or folder: pick a file or folder"}, {"→ or enter", "result: details"}}},
 	{"Now playing", []keyHelp{{"←/→/↑/↓", "move between streams; ← from the left-most one goes back"}, {"enter", "zoom in, or back to all streams"}, {"tab", "the buttons: History, Open link, Copy link, Refresh"}}},
 	{"Streams", []keyHelp{{"→ or enter", "a stream's page: History, Edit URL, Remove"}, {"/", "filter"}, {"tab", "the page's buttons: Add a stream, Refresh, Export"}, {"enter", "Recorder: Start or Stop"}}},
 	{"Recognitions", []keyHelp{{"→ or enter", "details; a job's page: Files, Resume, Retry failed files, Copy the batch command"}, {"/", "filter"}, {"tab", "the page's buttons"}}},

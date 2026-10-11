@@ -1,8 +1,8 @@
 AudD  ·  profile default
                  │ Recognize › Microphone
-*1 Recognize     > Identify the music playing near you
- 2 Now playing   │ 
- 3 Streams       │   Source   ‹ Microphone ›
+*1 Recognize     >  File, URL, or folder [Microphone]
+ 2 Now playing   │ Identify the music playing near you
+ 3 Streams       │ 
  4 Recognitions  │   Seconds  10
  5 Account       │   Device   ‹ default ›
  6 Settings      │   [ ] Add Apple Music data (link, artwork, track length)

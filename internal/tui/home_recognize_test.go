@@ -99,7 +99,7 @@ func keyFocus(h *home, name string) []tea.KeyMsg {
 
 func TestRecognizeEmpty(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {120, 40}} {
-		h := newTestHome(t, &fakeRun{}, homeOpts{start: "recognize"})
+		h := newTestHome(t, &fakeRun{}, homeOpts{start: "recognize", tabs: true})
 		v := runHome(t, h, size[0], size[1], "Recognize music", "")
 		testutil.Golden(t, "home_recognize_empty_"+itoa(size[0])+"x"+itoa(size[1]), []byte(v))
 	}

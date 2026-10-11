@@ -14,7 +14,7 @@ AudD  ·  profile default
                  │      $ audd recognize https://audd.tech/example.mp3
                  │ 
                  │   3. Use the microphone
-                 │      In Recognize, set Source to Microphone to record a few seconds and identify the song.
+                 │      In Recognize, open the Microphone tab to record a few seconds and identify the song.
                  │      $ audd listen
                  │ 
                  │   4. Add a stream

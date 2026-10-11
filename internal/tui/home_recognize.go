@@ -153,7 +153,9 @@ func (s *recognizeSection) countWords() string {
 
 func newRecognizeSection(h *home) section {
 	s := &recognizeSection{h: h, panel: newPanel(h), phase: "form"}
-	src := enumField("source", "Source", "←/→ switch between a file and the microphone", []string{sourceFile, sourceMic})
+	// Source is the tab bar (File, URL, or folder | Microphone), not a row.
+	src := enumField("source", "Source", "", []string{sourceFile, sourceMic})
+	src.hidden = true
 	in := textField("input", "File, URL, or folder", "A file, a URL, a folder, or a glob such as *.mp3")
 	in.required = true
 	in.need = "Enter a file, URL, or folder (ctrl+o picks a file)"
@@ -304,19 +306,10 @@ func (s *recognizeSection) back() bool {
 	return false
 }
 
-// crumbs: the source, then what is open (the file picker, the run, the
-// result).
+// crumbs: what is open (the file picker, the run, the result) under the
+// tab, which names the source.
 func (s *recognizeSection) crumbs() []string {
-	out := []string{"File"}
-	in := s.form.value("input")
-	switch {
-	case s.mic():
-		out[0] = "Microphone"
-	case strings.Contains(in, "://"):
-		out[0] = "URL"
-	case s.form.get("max-files").required:
-		out[0] = "Folder"
-	}
+	var out []string
 	switch {
 	case s.browser != nil:
 		out = append(out, "Pick a file")

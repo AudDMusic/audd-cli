@@ -193,19 +193,20 @@ func TestPlanGoesWhenOptionsChange(t *testing.T) {
 	}
 }
 
-// Choices change with ←/→ without wrapping; ← on the first option goes
-// back. Buttons in a row are walked with ←/→.
+// Tabs change with ←/→ without wrapping. Buttons in a row are walked
+// with ←/→.
 func TestChoicesAndButtons(t *testing.T) {
 	h := navHome(t, homeOpts{start: "recognize"})
 	s := recognizeOf(h)
 	press(h, key("up"), key("right"), key("right"))
-	if !s.mic() || h.focus != focusContent {
-		t.Fatal("→ stops on the last option")
+	if !s.mic() || h.focus != focusTabs {
+		t.Fatal("→ stops on the last tab")
 	}
 	press(h, key("left"))
-	if s.mic() || h.focus != focusContent {
-		t.Fatal("← changes the choice back")
+	if s.mic() || h.focus != focusTabs {
+		t.Fatal("← changes the tab back")
 	}
+	press(h, key("down"))
 	s.form.get("input").setValue("song.mp3")
 	s.form.focusName("recognize")
 	press(h, key("right"))
@@ -213,8 +214,8 @@ func TestChoicesAndButtons(t *testing.T) {
 		t.Fatalf("→ moves to the next button: %s", s.form.current().name)
 	}
 	press(h, key("left"), key("left"))
-	if h.focus != focusSidebar {
-		t.Fatal("← from the first button goes back")
+	if h.focus != focusTabs {
+		t.Fatal("← from the first button goes back to the tab bar")
 	}
 }
 

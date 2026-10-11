@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Recognize › File › Result
-*1 Recognize     > No API token yet.
- 2 Now playing   │ Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io,
- 3 Streams       │ or sign in.
- 4 Recognitions  │ 
+                 │ Recognize › File, URL, or folder › Result
+*1 Recognize     > [File, URL, or folder] Microphone 
+ 2 Now playing   │ No API token yet.
+ 3 Streams       │ Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io,
+ 4 Recognitions  │ or sign in.
  5 Account       │ 
  6 Settings      │ 
  7 Help          │ 

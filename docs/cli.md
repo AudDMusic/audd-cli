@@ -64,7 +64,7 @@ permissions; `audd auth status` shows what was approved.
 
 On a terminal, `audd` with no arguments (or `audd ui`) opens a full-screen
 interface: Recognize, Now playing, Streams, Recognitions, Account, Settings,
-and Help. Recognize takes a file, URL, or folder, or switches its Source to the
+and Help. Recognize has two tabs: a file, URL, or folder, and the
 microphone (`audd listen`). The bottom line shows the command each action
 runs, and `y` copies it. `ctrl+k` opens a palette of every command with a form for its
 arguments and flags; `?` lists the keys of the screen, and `q` quits.

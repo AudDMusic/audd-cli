@@ -18,6 +18,6 @@ AudD  ·  profile default
                  │   selected. After an error the cursor is back in the field it
                  │   is about. On a saved value, such as the callback URL,
  [ Commands ]    │   typing replaces it (as if it was all selected), enter or e
- [ Keys ] q quit │ ↓ 125 more lines below
+ [ Keys ] q quit │ ↓ 126 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys

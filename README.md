@@ -69,7 +69,7 @@ audd recognize song.mp3 --return apple_music,spotify --format json | jq .result.
 
 Run `audd` with no arguments on a terminal, or `audd ui`, for a full-screen interface to everything audd does:
 
-- **Recognize**: files, URLs, and folders, with the plan shown before any requests are spent; switch Source to Microphone to identify the music playing near you.
+- **Recognize**: files, URLs, and folders, with the plan shown before any requests are spent; the Microphone tab identifies the music playing near you.
 - **Now playing**, **Streams**, and **Recognitions**: live results, stream setup, recorded plays, past recognitions, and batch jobs.
 - **Account** and **Settings**: plan, usage, payment links, the API token, profiles, and every `audd config` key.
 - **Help**: getting started, the CLI guide, every command, and every key.

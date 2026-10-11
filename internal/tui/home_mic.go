@@ -66,6 +66,26 @@ func (s *recognizeSection) setSource(mic bool) {
 	}
 }
 
+// The tab bar picks the source.
+func (s *recognizeSection) tabNames() []string { return []string{sourceFile, sourceMic} }
+
+func (s *recognizeSection) tabIndex() int {
+	if s.mic() {
+		return 1
+	}
+	return 0
+}
+
+// selectTab switches the source. A recognition or recording that is
+// running keeps the page until it ends or is stopped.
+func (s *recognizeSection) selectTab(i int) tea.Cmd {
+	if s.phase == "running" {
+		return s.h.setFlash("Stop it first, or wait for it to finish")
+	}
+	s.setSource(i == 1)
+	return s.findDevices()
+}
+
 // findDevices looks up the audio tools and input devices, once, the
 // first time the microphone is chosen.
 func (s *recognizeSection) findDevices() tea.Cmd {

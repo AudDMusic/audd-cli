@@ -152,6 +152,9 @@ type homeOpts struct {
 	loggedIn  bool // signed in to the account
 	start     string
 	tip       bool // show the first-run tip (hidden in other tests)
+	// tabs starts Recognize on its tab bar, where opening it puts the
+	// keys. Without it, Recognize tests start in the form, as after ↓.
+	tabs bool
 }
 
 // newTestHome is interactive mode over fakes: f answers the runs.
@@ -215,7 +218,11 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	}
 	h := newHome(context.Background(), sessionApp(a), idx)
 	if isListen(o.start) {
-		h.useMic()
+		h.startListen()
+	}
+	if o.start == "recognize" && !o.tabs && h.focus == focusTabs {
+		h.focus = focusContent
+		h.pageEntered()
 	}
 	// Runs still going (a recorder status read) end before the fakes are
 	// put back.
@@ -498,7 +505,11 @@ func TestLeftReturnsToSidebar(t *testing.T) {
 		t.Fatal("left inside typed text stays in the field")
 	}
 	press(h, key("left"), key("left"), key("left"))
+	if h.focus != focusTabs {
+		t.Fatal("left at the start of the field leaves it, then goes to the tab bar")
+	}
+	press(h, key("left"))
 	if h.focus != focusSidebar {
-		t.Fatal("left at the start of the field leaves it, then goes back to the sidebar")
+		t.Fatal("left on the first tab goes back to the sidebar")
 	}
 }

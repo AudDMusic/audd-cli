@@ -1,9 +1,9 @@
 AudD  ·  profile default
-                 │ Recognize › File
-*1 Recognize     > Recognize music in a file, URL, or folder
- 2 Now playing   │ 
- 3 Streams       │   Source                ‹ File, URL, or folder ›
- 4 Recognitions  │ › File, URL, or folder* |(e.g. song.mp3)
+                 │ Recognize › File, URL, or folder
+*1 Recognize     > >File, URL, or folder< Microphone 
+ 2 Now playing   │ Recognize music in a file, URL, or folder
+ 3 Streams       │ 
+ 4 Recognitions  │   File, URL, or folder* (e.g. song.mp3)
  5 Account       │   [ ] Add Apple Music data (link, artwork, track length)
  6 Settings      │   [ ] Add Spotify data (link, artwork, popularity)
  7 Help          │   [ ] Add Deezer data (link, artwork)
@@ -15,10 +15,10 @@ AudD  ·  profile default
                  │ 
                  │   [ Recognize ]  [ Show the plan ]
                  │ 
-                 │   A file, a URL, a folder, or a glob such as *.mp3
+                 │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] esc ←  │ 
+ [ Keys ] q quit │ 
 
-↑/↓ field  type a path or URL  esc done  ctrl+u clear  ctrl+o pick a file
+←/→ tabs  ↓ open  esc back  ? keys
 $ audd recognize '<file>'                                                 y copy

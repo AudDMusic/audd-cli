@@ -169,6 +169,7 @@ func TestUIRecognizeFile(t *testing.T) {
 	song := e.file("song.mp3", "song audio")
 	s := e.ui("ui", "--section", "recognize")
 	s.wait("Recognize music")
+	s.press(kDown) // from the tab bar into the form
 	s.typeText(song)
 	s.press(down(9)...) // to the Recognize button
 	s.press(kEnter)
@@ -197,6 +198,7 @@ func TestUIBatchWithConfirmation(t *testing.T) {
 	e.file("music/b.mp3", "second")
 	s := e.ui("ui", "--section", "recognize")
 	s.wait("Recognize music")
+	s.press(kDown) // from the tab bar into the form
 	s.typeText(filepath.Join(e.dir, "music"))
 	s.press(down(6)...) // Max files
 	s.typeText("2")
@@ -311,6 +313,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
 		s := e.ui("ui", "--section", "recognize")
 		s.wait("Recognize music")
+		s.press(kDown) // from the tab bar into the form
 		s.typeText(filepath.Join(e.dir, "nope.mp3"))
 		s.press(kEnter)
 		s.wait("o such file or folder")
@@ -324,6 +327,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		}
 		s := e.ui("ui", "--section", "recognize")
 		s.wait("Recognize music")
+		s.press(kDown) // from the tab bar into the form
 		s.typeText(filepath.Join(e.dir, "music"))
 		s.wait("fill in Max files")
 		s.press(kEnter) // enter goes to what is missing
@@ -366,6 +370,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		song := e.file("song.mp3", "song audio")
 		s := e.ui("ui", "--section", "recognize")
 		s.wait("Recognize music")
+		s.press(kDown) // from the tab bar into the form
 		s.typeText(song)
 		s.press(kEnter)
 		s.wait("Wrong API token")
