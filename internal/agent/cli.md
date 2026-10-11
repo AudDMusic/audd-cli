@@ -96,17 +96,25 @@ works only where it is listed; any other key says it does nothing.
 
 When a text field is selected, you are typing in it: letters, digits, and
 symbols go in, left and right move the cursor (left at its start goes back),
-ctrl+u clears it, and Esc stops typing. Recognize opens typing in its Input
-field; the other pages open with no text field selected, so `1`-`7` jump to a
-section. Enter in a form's last text field runs the form; in Add a stream,
-Enter in the ID field adds the stream, and the box below it is optional.
+and ctrl+u clears it. Esc stops typing and keeps what you typed; the cursor
+stays on the form (Enter types again, and `1`-`7` jump to a section). Recognize
+opens typing in its File, URL, or folder field; the other pages open with no
+text field selected. While you type a path, audd counts its files in the
+background and never looks through a whole disk without asking. Enter in a
+form's last text field runs the form; in Add a stream, Enter in the ID field
+adds the stream, and the box below it is optional. After an error, the
+cursor is back in the field the error is about.
+
 Saved values (a setting, the callback URL, a stream's URL, the token) change
-only after Enter or Edit; Esc puts the old value back. Settings of audd and a
-stream's URL save right away, and `u` undoes the last change. Spending more than one request,
-removing a stream, signing out, and replacing the token or the callback URL
-ask first in a dialog with a button named for the action: after a plan the
-action is focused, otherwise Cancel. In a dialog `y` confirms and `n` or Esc
-cancels. `q` asks first while a command is running.
+only after Enter or Edit; Esc cancels and puts the old value back. Settings
+of audd and a stream's URL save right away; `u` (or ctrl+z) undoes the last
+change until you make another or leave the section. Spending requests
+(including resuming a job), removing a stream, signing out, and replacing the
+token or the callback URL ask first in a dialog with a button named for the
+action. Every dialog opens on Cancel, so Enter twice never spends anything;
+`y` confirms and `n` or Esc cancels. Without an API token, buttons that need
+one are dimmed and offer the test token, pasting a token, or signing in. `q`
+asks first while a command is running.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
