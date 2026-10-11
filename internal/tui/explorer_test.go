@@ -33,12 +33,12 @@ func fakeExplorerData(api *fakeStreamsAPI) ExplorerData {
 		{Source: "/music/mix.mp3", At: testNow.Add(-3 * time.Hour), Result: json.RawMessage(`[{"offset":"00:00","songs":[{"artist":"Daft Punk","title":"One More Time","timecode":"00:05"}]},{"offset":"00:12","songs":[{"artist":"Daft Punk","title":"Aerodynamic","timecode":"00:01"}]}]`)},
 	}
 	jobs := []JobRow{
-		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, Status: "partial"},
+		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, RetryableFailed: 1, Status: "partial"},
 	}
 	items := []JobItem{
 		{Index: 0, Input: "/music/a.mp3", State: "done", Result: json.RawMessage(`{"artist":"Massive Attack","title":"Teardrop","song_link":"https://lis.tn/Teardrop"}`)},
 		{Index: 1, Input: "/music/mix.mp3", State: "done", Result: json.RawMessage(`[{"artist":"Daft Punk","title":"One More Time","start_seconds":0,"end_seconds":36},{"artist":"Daft Punk","title":"Aerodynamic","start_seconds":36,"end_seconds":72}]`)},
-		{Index: 2, Input: "/music/c.mp3", State: "failed", Err: "the connection was reset after upload"},
+		{Index: 2, Input: "/music/c.mp3", State: "failed", Err: "the connection was reset after upload", ErrCode: "network"},
 	}
 	return ExplorerData{
 		Recent:   func(ctx context.Context, limit int) ([]RecentItem, error) { return recent, nil },

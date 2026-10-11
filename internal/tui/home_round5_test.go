@@ -82,7 +82,7 @@ func TestJobPage(t *testing.T) {
 	// Retry and finish: the next steps are buttons, not a Try line.
 	press(h, key("enter"))
 	pump(h, func() bool { return h.confirm != nil })
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Back to the job ]") })
 	v := h.View()
 	if !strings.Contains(v, "[ Retry failed files again ]") || strings.Contains(v, "Try: audd jobs resume") {
@@ -197,7 +197,7 @@ func TestEnterpriseResultList(t *testing.T) {
 	press(h, key("enter"))
 	pump(h, func() bool { return s.phase == "result" || h.ask != nil })
 	if h.ask != nil {
-		press(h, key("y"))
+		press(h, key("right"), key("enter"))
 		pump(h, func() bool { return s.phase == "result" })
 	}
 	v := h.View()

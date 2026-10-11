@@ -117,7 +117,7 @@ func TestPaletteRunsWithConfirmation(t *testing.T) {
 	})
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
 	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("streams remove"), key("enter"), "Stop monitoring a stream",
-		typeText("3"), key("enter"), "Stop monitoring stream 3?", key("y"), "removed")
+		typeText("3"), key("enter"), "Stop monitoring stream 3?", key("right"), key("enter"), "removed")
 	if !strings.Contains(v, "radio_id: 3") || !strings.Contains(v, "$ audd streams remove 3") {
 		t.Fatalf("result:\n%s", v)
 	}
@@ -128,7 +128,7 @@ func TestPaletteRecognitionAndInteractive(t *testing.T) {
 	f := &fakeRun{}
 	f.reply("recognize song.mp3", warriorsDoc, "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognize"})
-	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("recognize"), key("enter"), "scan the whole file",
+	v := drive(t, h, 120, 40, "Recognize music", ctrlK(), typeText("recognize"), key("enter"), "scan more of the file",
 		typeText("song.mp3"), keys("up"), key("enter"), "USUM71409990")
 	if !strings.Contains(v, "Imagine Dragons") {
 		t.Fatalf("card:\n%s", v)

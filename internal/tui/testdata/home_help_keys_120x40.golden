@@ -16,9 +16,9 @@ AudD  ·  profile default
                  │   presses it from anywhere on the page. A key works only where it is listed; any other key says it
                  │   does nothing. Settings of audd and a stream's URL save right away; u or ctrl+z undoes the last
                  │   change until you make another or leave the section. Spending requests, removing, signing out, or
-                 │   replacing the token asks in a dialog: every dialog opens on Cancel, so enter presses Cancel until
-                 │   you move; y confirms, n or esc cancels. In a dialog y confirms; everywhere else y copies the
-                 │   command at the bottom.
+                 │   replacing the token asks in a dialog: every dialog opens on Cancel; ←/→ or tab move to the action
+                 │   and enter presses it (or click it); n or esc cancels. y copies the command at the bottom
+                 │   everywhere, in a dialog too.
                  │ 
                  │   ↑/↓            move in the menu, a list, or a form
                  │   → or enter     go in: open the section, the page, the selected item
@@ -30,10 +30,10 @@ AudD  ·  profile default
                  │ Everywhere
                  │   1-7            jump to a section (not while typing in a text field)
                  │   ctrl+k or :    run any command; ctrl+k again closes it
-                 │   y              copy the command shown at the bottom (in a dialog: confirm)
+                 │   y              copy the command shown at the bottom (in a dialog too)
                  │   ?              keys for this screen
                  │   F1             help
- [ Commands ]    │   q              quit; not while typing, and it asks while a command runs
- [ Keys ] q quit │ ↓ 72 more lines below
+ [ Commands ]    │   q              quit; it asks first when something typed is not saved or a command runs (not while
+ [ Keys ] q quit │ ↓ 73 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys

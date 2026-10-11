@@ -30,13 +30,16 @@ const (
 
 // field is one row of a form.
 type field struct {
-	kind     fieldKind
-	name     string // flag or argument name, or the button's action
-	label    string
-	help     string
-	required bool
-	masked   bool
-	hidden   bool // left out of the form for now (see form.visible)
+	// nextOnEnter: enter goes on to the next field (the button) instead
+	// of running the form.
+	nextOnEnter bool
+	kind        fieldKind
+	name        string // flag or argument name, or the button's action
+	label       string
+	help        string
+	required    bool
+	masked      bool
+	hidden      bool // left out of the form for now (see form.visible)
 
 	input   textinput.Model
 	on      bool
@@ -142,9 +145,13 @@ func (f *field) setValue(v string) {
 	}
 }
 
-// placeholderText is what an empty field shows.
-func (f *field) placeholderText() string {
+// placeholderText is what an empty field shows. Without color it is in
+// parentheses, so it never looks like a value.
+func (f *field) placeholderText(color bool) string {
 	if f.placeholder != "" {
+		if !color {
+			return "(" + f.placeholder + ")"
+		}
 		return f.placeholder
 	}
 	return "·"
@@ -331,7 +338,9 @@ func (f *form) move(d int) {
 		// takes typing again when the cursor comes back.
 		c.locked = c.lockable
 	}
-	f.cursor = (f.cursor + d + n) % n
+	// No wrapping: ↑ on the first field leaves the form (the page says
+	// where to), ↓ on the last stays.
+	f.cursor = max(0, min(n-1, f.cursor+d))
 	f.focus()
 }
 
@@ -557,7 +566,7 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 	switch s {
 	case "enter":
 		c.problem = c.formatProblem()
-		if f.enterNext && f.laterField() {
+		if f.enterNext && f.laterField() || c.nextOnEnter {
 			f.move(1)
 			return "", nil
 		}
@@ -715,6 +724,9 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 				x.input.EchoCharacter = '•'
 			}
 			x.input.Placeholder = x.placeholder
+			if x.placeholder != "" {
+				x.input.Placeholder = x.placeholderText(color)
+			}
 			val := x.input.View()
 			label := padRight(x.label+req, lw)
 			if cur && color && !x.locked {
@@ -728,7 +740,7 @@ func (f *form) view(w int, st output.Styles, color bool) string {
 					val = strings.Repeat("•", min(len(val), 12))
 				}
 				if val == "" {
-					val = st.Dim.Render(x.placeholderText())
+					val = st.Dim.Render(x.placeholderText(color))
 				}
 				if x.describe != nil && val != "" {
 					if d := x.describe(x.input.Value()); d != "" {
@@ -845,7 +857,7 @@ func (s *scrollView) view(w, h int) string {
 		case below > 0:
 			ind = fmt.Sprintf("↓ %d more lines below", below)
 		default:
-			ind = "↑ end"
+			ind = "End · ↑ back to the top"
 		}
 		out = append(out, ind)
 	}
@@ -1070,12 +1082,28 @@ func (p *picker) matches() []pickItem {
 		score int
 		i     int
 	}
-	var out []scored
+	var out, loose []scored
+	lq := strings.ToLower(q)
 	for i, it := range p.items {
 		if s, ok := fuzzyScore(q, it.title); ok {
-			out = append(out, scored{it, s, i})
-		} else if s, ok := fuzzyScore(q, it.desc); ok && len(q) > 2 {
-			out = append(out, scored{it, s - 50, i})
+			// The text itself (a prefix or a word start ranks first)
+			// beats letters spread out.
+			if strings.Contains(strings.ToLower(it.title), lq) {
+				out = append(out, scored{it, s, i})
+			} else {
+				loose = append(loose, scored{it, s, i})
+			}
+		} else if s, ok := fuzzyScore(q, it.desc); ok && len(q) > 2 && strings.Contains(strings.ToLower(it.desc), lq) {
+			loose = append(loose, scored{it, s - 50, i})
+		}
+	}
+	if len(out) == 0 {
+		// Only when nothing has the text: the closest spread-out
+		// matches, the weak ones left out.
+		for _, l := range loose {
+			if l.score >= 10*len([]rune(q))+15*(len([]rune(q))-1)/2 {
+				out = append(out, l)
+			}
 		}
 	}
 	sort.SliceStable(out, func(a, b int) bool {

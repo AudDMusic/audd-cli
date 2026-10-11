@@ -102,7 +102,7 @@ func (s *recognizeSection) watchInput(now bool) tea.Cmd {
 func (s *recognizeSection) countNow(seq int) tea.Cmd {
 	ctx, cancel := context.WithCancel(s.h.ctx)
 	s.cnt.cancel = cancel
-	in := s.cnt.of
+	in := expandHome(s.cnt.of)
 	limit := 1000
 	if m, err := strconv.Atoi(s.form.value("max-files")); err == nil {
 		limit = max(limit, m+1)
@@ -119,8 +119,10 @@ func (s *recognizeSection) inputNote() string {
 	switch {
 	case in == "" || strings.Contains(in, "://"):
 		return ""
-	case !s.counted():
+	case !s.counted() && s.h.confirm == nil && s.h.ask == nil:
 		return "Counting files…"
+	case !s.counted():
+		return ""
 	case s.cnt.c.Err != nil:
 		return ""
 	case s.cnt.c.Root:
@@ -140,7 +142,7 @@ func (s *recognizeSection) counted() bool {
 func (s *recognizeSection) countWords() string {
 	n := s.cnt.c.Files
 	if s.cnt.c.More {
-		return fmt.Sprintf("%d+ files", n)
+		return fmtInt(n) + "+ files"
 	}
 	return output.Plural(n, "file")
 }
@@ -168,7 +170,7 @@ func newRecognizeSection(h *home) section {
 	at := textField("at", "Clip at", "Send 12 seconds from this time: 90, 1:30, or 1m30s (needs ffmpeg)")
 	at.placeholder = "e.g. 1:30"
 	fields = append(fields,
-		boolField("enterprise", "Enterprise: scan the whole file", "Every match with its position. Billed per 12-second chunk; needs a limit."),
+		boolField("enterprise", "Enterprise: scan more of the file (needs a limit)", "Every match with its position. Billed per 12-second chunk; the limit is how many chunks per file."),
 		limit,
 		boolField("tracklist", "Tracklist", "Merge consecutive matches into tracks with start and end times"),
 		maxFiles,
@@ -310,6 +312,8 @@ func (s *recognizeSection) crumbs() []string {
 		out = append(out, "Pick a file")
 	case s.phase == "running" && s.mic():
 		out = append(out, "Listening")
+	case s.phase == "running" && s.h.ask != nil:
+		// Asking before it starts: nothing runs yet.
 	case s.phase == "running":
 		out = append(out, "Running")
 	case s.phase == "result":
@@ -336,7 +340,7 @@ func (s *recognizeSection) args(dry bool) []string { return s.argsFor(dry, false
 func (s *recognizeSection) argsFor(dry, shown bool) []string {
 	f := s.form
 	args := []string{"recognize"}
-	in := f.value("input")
+	in := expandHome(f.value("input"))
 	if in == "" {
 		in = "<file>"
 	}
@@ -355,7 +359,10 @@ func (s *recognizeSection) argsFor(dry, shown bool) []string {
 	} else if ret := s.providers(); len(ret) > 0 {
 		args = append(args, "--return", strings.Join(ret, ","))
 	}
-	if v := f.value("max-files"); v != "" {
+	// Max files is for folders and globs: a single file or a URL does
+	// not carry it.
+	single := s.counted() && !s.cnt.c.Batch && s.cnt.c.Err == nil || strings.Contains(in, "://")
+	if v := f.value("max-files"); v != "" && !single {
 		args = append(args, "--max-files", v)
 	} else if shown && f.get("max-files").required {
 		args = append(args, "--max-files", "<max files>")
@@ -434,6 +441,8 @@ func (s *recognizeSection) primary() string {
 	switch {
 	case !s.counted():
 		return "recognize (counting files…)"
+	case s.tooMany() > 0:
+		return fmt.Sprintf("%s found, Max files is %s: set it to %d?", s.countWords(), s.form.value("max-files"), s.cnt.c.Files)
 	case s.cnt.c.Root:
 		return "recognize the whole disk"
 	case s.isBatch():
@@ -461,7 +470,7 @@ func (s *recognizeSection) actions() []button {
 	var b []button
 	switch {
 	case s.panel.res != nil && s.panel.res.err != nil && s.panel.res.err.Code == "no_token":
-		return s.h.tokenButtons(func() tea.Cmd { s.phase = "form"; return s.startPlan(true) })
+		return s.h.tokenButtons(true, func() tea.Cmd { s.phase = "form"; return s.startPlan(true) })
 	case s.panel.res != nil && s.panel.res.err != nil:
 		return nil
 	case s.bs != nil:
@@ -476,6 +485,17 @@ func (s *recognizeSection) actions() []button {
 		b = append(b,
 			button{label: "Open the song link", key: "o", do: func() tea.Cmd { return s.openLink(link) }},
 			button{label: "Copy the song link", key: "c", do: func() tea.Cmd { return s.h.copy(link, "the link "+link) }})
+	}
+	if v := s.rec.view; v != nil && s.details && s.bs == nil {
+		// The same as a result's details in Recognitions.
+		if v.ISRC != "" {
+			isrc := v.ISRC
+			b = append(b, button{label: "Copy ISRC", key: "i", do: func() tea.Cmd { return s.h.copy(isrc, "the ISRC "+isrc) }})
+		}
+		if v.UPC != "" {
+			upc := v.UPC
+			b = append(b, button{label: "Copy UPC", do: func() tea.Cmd { return s.h.copy(upc, "the UPC "+upc) }})
+		}
 	}
 	if s.mic() && s.rec.view != nil {
 		b = append(b, button{label: "Listen again", key: "", do: s.startListen})
@@ -580,7 +600,7 @@ func (s *recognizeSection) isBatch() bool { return s.counted() && s.cnt.c.Batch 
 // needToken asks how to get an API token, when there is none, before
 // anything runs; then goes on with next.
 func (s *recognizeSection) needToken(next func() tea.Cmd) tea.Cmd {
-	return s.h.askToken("recognize", "AudD recognizes music with your API token.", next)
+	return s.h.askToken("recognize", "AudD recognizes music with your API token.", true, next)
 }
 
 func (s *recognizeSection) startPlan(run bool) tea.Cmd {
@@ -732,7 +752,7 @@ func (s *recognizeSection) update(msg tea.Msg) tea.Cmd {
 		return s.resultKey(ks)
 	}
 	if ks == "ctrl+o" && !s.mic() {
-		b, cmd := newFileBrowser(s.form.value("input"))
+		b, cmd := newFileBrowser(expandHome(s.form.value("input")))
 		s.browser = b
 		return cmd
 	}
@@ -990,7 +1010,21 @@ func (s *recognizeSection) leftExits() bool {
 // enterpriseMatches are the songs of an enterprise result, one line each
 // with where in the file it is, shaped like batch results.
 func enterpriseMatches(doc map[string]any) []map[string]any {
-	chunks, ok := doc["result"].([]any)
+	// audd recognize --enterprise prints "tracks" (with --tracklist)
+	// or "matches"; a stored result is the API's chunks ("result").
+	if tracks, ok := doc["tracks"].([]any); ok && len(tracks) > 0 {
+		var out []map[string]any
+		for _, t := range tracks {
+			if m, ok := t.(map[string]any); ok {
+				out = append(out, map[string]any{"input": str(m["start"]), "start": str(m["start"]), "end": str(m["end"]), "status": "matched", "result": m})
+			}
+		}
+		return out
+	}
+	chunks, ok := doc["matches"].([]any)
+	if !ok {
+		chunks, ok = doc["result"].([]any)
+	}
 	if !ok {
 		return nil
 	}

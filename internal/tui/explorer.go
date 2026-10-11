@@ -345,7 +345,10 @@ type explorer struct {
 	// shows only the allowed tabs, never quits, and leaves cover art,
 	// the clipboard, and help to the screen around it.
 	embedded bool
-	allowed  []tabID
+	// signedOut, when set, says whether there is no API token (the empty
+	// streams list then says how to get one).
+	signedOut func() bool
+	allowed   []tabID
 	// blur: embedded, the list does not have the keys, so its selected
 	// row is marked but not highlighted.
 	blur bool

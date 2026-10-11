@@ -286,6 +286,10 @@ func TestExportFileName(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "plays.csv"), []byte("old"), 0o644)
 	press(h, key("enter"))
+	if s.dataForm.current().name != "run" {
+		t.Fatalf("enter in the file name goes on to Run: %s", s.dataForm.current().name)
+	}
+	press(h, key("enter"))
 	if h.confirm == nil || !strings.Contains(h.View(), "Replace plays.csv?") {
 		t.Fatalf("no question before writing over:\n%s", h.View())
 	}
@@ -373,7 +377,7 @@ func TestKeysAfterExport(t *testing.T) {
 	s.syncData()
 	s.dataForm.focusName("file")
 	name := s.dataForm.value("file")
-	press(h, key("enter"))
+	press(h, key("enter"), key("enter"))
 	f.waitFor(t, "streams export --since 7d")
 	pump(h, func() bool { return s.exportTo != "" })
 	press(h, key("o"))
@@ -416,7 +420,7 @@ func TestPasteDifferentTokenAsks(t *testing.T) {
 	if h.confirm == nil || !strings.Contains(h.View(), "Replace the API token of profile default?") {
 		t.Fatalf("no question:\n%s", h.View())
 	}
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	f.waitFor(t, "config set token -")
 	pump(h, func() bool { return strings.Contains(h.View(), "Token saved for profile default") })
 }

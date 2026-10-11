@@ -67,8 +67,6 @@ func (h *home) View() string {
 		body = h.askView(cw, bh)
 	case h.confirm != nil:
 		body = h.confirmView(cw)
-	case h.quitAsk:
-		body = h.quitView(cw)
 	case h.keysO:
 		h.keysScroll.lines = strings.Split(h.keysView(cw), "\n")
 		body = h.keysScroll.view(cw, bh)
@@ -238,8 +236,19 @@ func (h *home) sidebar(rows int) string {
 	}
 	if rows >= 13 {
 		// Two buttons (their keys, ctrl+k and ?, are in the footer).
-		lines[rows-2] = " " + h.mark("[ Commands ]", func() tea.Cmd { return h.openPalette("") })
-		lines[rows-1] = " " + h.mark("[ Keys ]", func() tea.Cmd {
+		// Two buttons (their keys, ctrl+k and ?, are in the footer); ↓
+		// past the last section reaches them.
+		btn := func(i int, label string) string {
+			if h.focus == focusSidebar && h.sideBtn == i && !h.overlay() {
+				if h.color {
+					return h.st.Bold.Reverse(true).Render(" " + label + " ")
+				}
+				return "[>" + label + "<]"
+			}
+			return "[ " + label + " ]"
+		}
+		lines[rows-2] = " " + h.mark(btn(1, "Commands"), func() tea.Cmd { return h.openPalette("") })
+		lines[rows-1] = " " + h.mark(btn(2, "Keys"), func() tea.Cmd {
 			h.keysO, h.keysScroll.off = true, 0
 			return nil
 		}) + h.st.Dim.Render(" q quit")
@@ -252,6 +261,7 @@ func (h *home) clickSection(i int) func() tea.Cmd {
 	return func() tea.Cmd {
 		h.paletteO = false
 		h.backTo = nil
+		h.sideBtn = 0
 		h.cur = i
 		h.toSidebar()
 		return h.activate()
@@ -288,13 +298,6 @@ func (h *home) hintsLine() string {
 
 func (h *home) commandLine() string {
 	c := h.command()
-	if h.prompt() {
-		// While a question is open, y answers it: nothing to copy.
-		if c == "" {
-			return ""
-		}
-		return truncate(h.st.Dim.Render("$ "+c), h.w)
-	}
 	if c == "" {
 		// Part of the first-run tip: once that is dismissed, it stays
 		// gone.
@@ -326,11 +329,11 @@ var moveKeys = []keyHelp{
 var globalKeys = []keyHelp{
 	{"1-7", "jump to a section (not while typing in a text field)"},
 	{"ctrl+k or :", "run any command; ctrl+k again closes it"},
-	{"y", "copy the command shown at the bottom (in a dialog: confirm)"},
+	{"y", "copy the command shown at the bottom (in a dialog too)"},
 	{"?", "keys for this screen"},
 	{"F1", "help"},
-	{"q", "quit; not while typing, and it asks while a command runs"},
-	{"ctrl+c", "quit, also while typing (it asks while a command runs)"},
+	{"q", "quit; it asks first when something typed is not saved or a command runs (not while typing)"},
+	{"ctrl+c", "quit, also while typing; asks like q, and a second ctrl+c quits"},
 	{"ctrl+u", "clear the field being typed in"},
 	{"click, wheel", "select or press; scroll"},
 }

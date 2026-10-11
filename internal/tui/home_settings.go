@@ -359,8 +359,25 @@ func (s *settingsSection) askSave(v string) tea.Cmd {
 		return s.panel.start(req)
 	}
 	if r.key != "token" {
-		s.undo = &settingUndo{key: r.key, value: r.value, wasDefault: r.source == config.SettingDefault}
-		return run()
+		save := func() tea.Cmd {
+			s.undo = &settingUndo{key: r.key, value: r.value, wasDefault: r.source == config.SettingDefault}
+			return run()
+		}
+		if w := settingWarning(r.key, v); w != "" {
+			// A value that works but may hurt: asked first.
+			edit := s.edit
+			return s.h.askFirst(&confirmState{
+				owner:    "settings",
+				question: fmt.Sprintf("Set %s to %s?", settingLabel(r.key), v),
+				notes:    []string{w + "."},
+				action:   "Set it to " + v,
+				command:  displayCommand(args),
+				cancel:   "Cancelled. " + settingLabel(r.key) + " unchanged.",
+				onCancel: func() { s.edit = edit },
+				yes:      save,
+			})
+		}
+		return save()
 	}
 	old := r.value
 	if r.source != "" {
@@ -449,18 +466,19 @@ func (s *settingsSection) view(w, h int) string {
 		case s.edit != nil && i == s.cur:
 			line += "  " + st.Dim.Render("editing")
 		case r.source != "":
-			line += "  " + st.Dim.Render("("+r.source+")")
+			line += "  " + st.Dim.Render("("+sourceWords(r.source)+")")
 		}
 		line = s.h.listRow(line, i == s.cur)
-		desc := st.Dim.Render(r.key + " · " + r.desc)
+		desc, style := r.key+" · "+r.desc, st.Dim
 		if s.edit != nil && i == s.cur && s.edit.problem != "" {
-			desc = st.Warn.Render(s.edit.problem)
+			desc, style = s.edit.problem, st.Warn
 		} else if s.edit != nil && i == s.cur {
 			if w := settingWarning(r.key, s.edit.value()); w != "" {
-				desc = st.Warn.Render(w)
+				desc, style = w, st.Warn
 			}
 		}
-		row := truncate(line, w) + "\n" + truncate("    "+desc, w)
+		// The description wraps under the setting, never cut.
+		row := truncate(line, w) + "\n" + indent(styleLines(style, output.Wrap(desc, max(10, w-4))), "    ")
 		b.WriteString(s.h.mark(row, func() tea.Cmd {
 			if s.edit != nil && s.cur == i {
 				return nil
@@ -594,3 +612,14 @@ func settingLabel(key string) string {
 
 // left: leaving Settings ends its undo.
 func (s *settingsSection) left() { s.undo = nil }
+
+// sourceWords says where a setting's value comes from.
+func sourceWords(src string) string {
+	switch src {
+	case config.SettingFile:
+		return "set in config file"
+	case config.SettingEnv:
+		return "from the environment"
+	}
+	return src
+}

@@ -374,3 +374,20 @@ func TestCoverageIsPerStream(t *testing.T) {
 		t.Fatalf("only stream 2 is on the account now: %+v", gaps)
 	}
 }
+
+// Plays saved for a period show the stream was heard then: the gap is
+// only what is before the first play and after the last one.
+func TestGapsLeaveOutPeriodsWithPlays(t *testing.T) {
+	s := openTemp(t)
+	now := t0.Add(3 * time.Hour)
+	s.Now = func() time.Time { return now }
+	if err := s.SetAccountStreams([]int{1}, t0); err != nil {
+		t.Fatal(err)
+	}
+	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(time.Hour), Artist: "A", Title: "One", PlayLength: 180})
+	s.AddPlay(Play{RadioID: 1, Timestamp: t0.Add(2 * time.Hour), Artist: "B", Title: "Two", PlayLength: 180})
+	gaps, err := s.Gaps(t0)
+	if err != nil || len(gaps) != 2 || !gaps[0].To.Equal(t0.Add(time.Hour)) || !gaps[1].From.Equal(t0.Add(2*time.Hour+180*time.Second)) {
+		t.Fatalf("gaps around the plays: %+v %v", gaps, err)
+	}
+}

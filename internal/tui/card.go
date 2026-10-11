@@ -211,7 +211,7 @@ func detailFields(r app.ResultView, key lipgloss.Style) []string {
 	var lines []string
 	for _, kv := range rows {
 		if kv[1] != "" {
-			lines = append(lines, key.Render(fmt.Sprintf("%-11s ", kv[0]))+kv[1])
+			lines = append(lines, key.Render(fmt.Sprintf("%-12s ", kv[0]))+kv[1])
 		}
 	}
 	if r.Cached {

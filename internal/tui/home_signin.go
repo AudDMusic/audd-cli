@@ -208,6 +208,12 @@ func (s *signinSection) update(msg tea.Msg) tea.Cmd {
 				return s.h.askFirst(&confirmState{
 					owner: owner, question: why + " Save it anyway?", action: "Save anyway",
 					topic: "Save anyway?", command: "audd config set token -", cancel: "Cancelled. API token unchanged.", yes: save,
+					onCancel: func() {
+						// Back in the field, typing, the token as it was.
+						s.paste.focusName("token")
+						s.paste.resume()
+						s.paste.get("token").input.CursorEnd()
+					},
 				})
 			}
 			if s.h.signedOut || s.h.testToken {
@@ -291,7 +297,7 @@ func (s *signinSection) view(w, h int) string {
 			return s.h.sendKey(tea.KeyMsg{Type: tea.KeyEnter})
 		}) + "\n\n")
 	}
-	if s.heading == "" {
+	if s.heading == "" && s.h.signedOut {
 		b.WriteString(styleLines(st.Dim, output.Wrap("You can look around first; recognizing needs a token.", w)))
 	}
 	return b.String()

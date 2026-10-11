@@ -54,7 +54,7 @@ func TestTypingAPathStaysFast(t *testing.T) {
 	press(h, key("ctrl+u"))
 	press(h, typeText(big)...)
 	pump(h, func() bool { return s.counted() })
-	if v := h.View(); !strings.Contains(v, "Found 1000+ files") {
+	if v := h.View(); !strings.Contains(v, "Found 1,000+ files") {
 		t.Fatalf("the count:\n%s", v)
 	}
 }
@@ -75,12 +75,11 @@ func TestRecorderPageState(t *testing.T) {
 	drain(h, h.activate(), 0)
 	press(h, key("]"), key("]"), key("down"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Stop ]") })
-	if v := h.View(); !strings.Contains(v, "Running (process 4242)") || strings.Contains(v, "[ Start ]") {
+	if v := h.View(); !strings.Contains(v, "Running. Press enter to stop it.") || strings.Contains(v, "4242") || strings.Contains(v, "[ Start ]") {
 		t.Fatalf("running:\n%s", v)
 	}
+	// One enter stops it.
 	press(h, key("enter"))
-	pump(h, func() bool { return h.confirm != nil })
-	press(h, key("y"))
 	pump(h, func() bool { return strings.Contains(h.View(), "[ Start ]") })
 	if v := h.View(); !strings.Contains(v, "Stopped. Press enter to start it.") || strings.Contains(v, "[ Stop ]") {
 		t.Fatalf("stopped:\n%s", v)
@@ -147,7 +146,7 @@ func TestTooManyFilesOffersTheFix(t *testing.T) {
 		t.Fatalf("cancel: in %s", s.form.current().name)
 	}
 	press(h, key("enter"))
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	if s.form.value("max-files") != "3" {
 		t.Fatalf("set to %q", s.form.value("max-files"))
 	}
@@ -229,16 +228,30 @@ func TestUndoSurvivesNavigation(t *testing.T) {
 // to get one; empty and signed-out states are not errors.
 func TestSignedOutButtons(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams", signedOut: true})
-	press(h, key("down"), key("tab"))
-	acts := h.pageActions()
-	if len(acts) == 0 || acts[0].label != "Add a stream" || acts[0].off == "" {
-		t.Fatalf("Add a stream: %+v", acts)
+	press(h, key("down"))
+	// The list offers the ways in, on the page; not the test token.
+	var labels []string
+	for _, a := range h.pageActions() {
+		labels = append(labels, a.label)
 	}
-	if foot := footerText(h.View()); !strings.Contains(foot, "get an API token first") {
-		t.Fatalf("footer: %q", foot)
+	if strings.Join(labels, ",") != "Paste a token…,Sign in,Refresh" {
+		t.Fatalf("signed-out list buttons: %v", labels)
 	}
+	// A stream's page: Edit URL is dimmed, and says why.
 	press(h, key("enter"))
-	if v := h.View(); h.confirm == nil || !strings.Contains(v, "Add a stream needs an API token") || !strings.Contains(v, "[ Use the test token ]") {
+	var edit *button
+	acts := h.pageActions()
+	for i := range acts {
+		if acts[i].label == "Edit URL" {
+			edit = &acts[i]
+		}
+	}
+	if edit == nil || edit.off == "" {
+		t.Fatalf("Edit URL: %+v", acts)
+	}
+	press(h, key("e"))
+	if v := h.View(); h.confirm == nil || !strings.Contains(v, "Edit URL needs an API token") || !strings.Contains(v, "Streams need your own token") ||
+		strings.Contains(v, "test token ]") || !strings.Contains(v, "[ Paste a token… ]") || !strings.Contains(v, "[ Sign in ]") {
 		t.Fatalf("the token question:\n%s", v)
 	}
 	if strings.Contains(h.View(), "Error") {

@@ -106,7 +106,7 @@ func (h *home) overlay() bool {
 // prompt reports whether a question waits for an answer: a command's
 // confirmation, one of the screen's own, or quitting.
 func (h *home) prompt() bool {
-	return h.ask != nil || h.confirm != nil || h.quitAsk
+	return h.ask != nil || h.confirm != nil
 }
 
 // hasKeys reports whether a list or form has the keys: one in the
@@ -139,11 +139,8 @@ func (h *home) key(k tea.KeyMsg) tea.Cmd {
 	if h.confirm != nil {
 		return h.confirmKey(s)
 	}
-	if h.quitAsk {
-		return h.quitKey(s)
-	}
 	if s == "ctrl+c" {
-		return h.quit()
+		return h.quit(true)
 	}
 	if h.keysO {
 		return h.keysKey(s)
@@ -210,7 +207,7 @@ func (h *home) globalKey(s string) (tea.Cmd, bool) {
 		h.keysScroll.off = 0
 		return nil, true
 	case "q":
-		return h.quit(), true
+		return h.quit(false), true
 	case "y":
 		if c := h.command(); c != "" {
 			return h.copy(c, "the command: "+c), true
@@ -225,23 +222,53 @@ func (h *home) globalKey(s string) (tea.Cmd, bool) {
 // sidebarKey: ↑/↓ move between sections, → or enter opens one.
 func (h *home) sidebarKey(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
+	switch s {
+	case "up", "down", "enter", "right":
+	default:
+		h.sideBtn = 0
+	}
 	if cmd, ok := h.globalKey(s); ok {
 		return cmd
 	}
 	h.backTo = nil
+	if h.sideBtn > 0 {
+		// On the Commands or Keys button under the menu.
+		switch s {
+		case "down":
+			h.sideBtn = min(2, h.sideBtn+1)
+			return nil
+		case "up":
+			h.sideBtn--
+			return nil
+		case "enter", "right":
+			b := h.sideBtn
+			h.sideBtn = 0
+			if b == 1 {
+				return h.openPalette("")
+			}
+			h.keysO, h.keysScroll.off = true, 0
+			return nil
+		}
+	}
 	switch s {
 	case "down":
-		if h.showSignin {
+		switch {
+		case h.showSignin:
 			h.showSignin = false
-		} else {
-			h.cur = (h.cur + 1) % len(h.order)
+		case h.cur == len(h.order)-1:
+			// Past the last section: the buttons under the menu (no
+			// wrapping to the top).
+			h.sideBtn = 1
+			return nil
+		default:
+			h.cur++
 		}
 		return h.activate()
 	case "up":
 		if h.showSignin {
 			h.showSignin = false
 		} else {
-			h.cur = (h.cur + len(h.order) - 1) % len(h.order)
+			h.cur = max(0, h.cur-1)
 		}
 		return h.activate()
 	case "enter", "right":
@@ -343,8 +370,13 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	if s == "esc" || s == "left" && leftExits(cur) {
 		return h.backOne()
 	}
-	if s == "up" && h.tabs() != nil && upExits(cur) {
-		h.focus = focusTabs
+	if s == "up" && upExits(cur) {
+		// ↑ at the top of a page: its tab bar, or back to the menu.
+		if h.tabs() != nil {
+			h.focus = focusTabs
+		} else {
+			h.focus = focusSidebar
+		}
 		return nil
 	}
 	if typing {
@@ -511,23 +543,48 @@ func (h *home) seenTip() {
 	}
 }
 
-// quit is q and ctrl+c: right away, or after asking while a command
-// that may spend requests is running.
-func (h *home) quit() tea.Cmd {
-	if h.runningCommand() != "" {
-		h.quitAsk = true
-		return nil
-	}
-	return tea.Quit
-}
-
-func (h *home) quitKey(s string) tea.Cmd {
-	h.quitAsk = false
-	switch s {
-	case "y", "Y", "ctrl+c":
+// quit is q and ctrl+c: right away, or after asking when something
+// would be lost (a command running, what was typed and not saved).
+// From the menu or a tab bar only a run in progress asks.
+func (h *home) quit(ctrlC bool) tea.Cmd {
+	lost := h.lostOnQuit()
+	if len(lost) == 0 {
 		return tea.Quit
 	}
-	return h.setFlash("Still running · it goes on in its section")
+	h.confirm = &confirmState{
+		owner:    h.activeID(),
+		question: "Quit?",
+		notes:    append(lost, "ctrl+c again quits."),
+		action:   "Quit",
+		topic:    "Quit",
+		cancel:   "Not quitting.",
+		quit:     true,
+		yes:      func() tea.Cmd { return tea.Quit },
+	}
+	if !ctrlC {
+		h.confirm.notes = lost
+	}
+	return nil
+}
+
+// unsaveder is a section that can say what is typed and not saved
+// ("" when nothing).
+type unsaveder interface{ unsaved() string }
+
+// lostOnQuit is what quitting now loses, in words.
+func (h *home) lostOnQuit() []string {
+	var lost []string
+	if c := h.runningCommand(); c != "" {
+		lost = append(lost, "This is still running: $ "+h.withSession(c)+". Quitting stops it; a batch keeps the files it finished, and audd jobs resume continues the rest.")
+	}
+	if h.focus == focusContent || h.paletteO {
+		if u, ok := h.active().(unsaveder); ok {
+			if s := u.unsaved(); s != "" {
+				lost = append(lost, s+" is not saved.")
+			}
+		}
+	}
+	return lost
 }
 
 // runningCommand is a command in flight that may spend requests ("" for
@@ -540,15 +597,6 @@ func (h *home) runningCommand() string {
 		best = max(best, id)
 	}
 	return h.runs.spending[best]
-}
-
-func (h *home) quitView(w int) string {
-	var b strings.Builder
-	b.WriteString(h.st.Bold.Render("Quit audd?") + "\n\n")
-	b.WriteString("This is still running:\n\n  " + h.st.Accent.Render("$ "+h.withSession(h.runningCommand())) + "\n\n")
-	b.WriteString(styleLines(h.st.Warn, output.Wrap("Quitting stops it. Files a batch already finished are kept, and audd jobs resume continues the rest.", w)) + "\n\n")
-	b.WriteString("Press y to quit, any other key to keep it running.")
-	return b.String()
 }
 
 // crumb is one part of the breadcrumb; click runs when it is clicked.
@@ -582,8 +630,6 @@ func (h *home) crumbs() ([]crumb, int) {
 		}
 		// A path, not a question: no "?".
 		return append(out, crumb{text: strings.TrimSuffix(topic, "?")}), len(out)
-	case h.quitAsk:
-		return []crumb{{text: "Quit"}}, 0
 	case h.keysO:
 		return []crumb{{text: "Keys"}}, 0
 	case h.paletteO:
@@ -733,7 +779,7 @@ func (h *home) footer() []keyHelp {
 	case h.confirm != nil && h.confirm.choices != nil:
 		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press"}, {"esc", "cancel"}}
 	case h.prompt():
-		return []keyHelp{{"y", "confirms"}, {"enter", "presses the selected button"}, {"←/→", "choose"}, {"n/esc", "cancel"}}
+		return []keyHelp{{"←/→/tab", "choose"}, {"enter", "press the selected button"}, {"n/esc", "cancel"}, {"y", "copy the command"}}
 	case h.keysO:
 		return []keyHelp{{"↑/↓", "scroll"}, {"esc", "close"}, {"F1", "the Help section"}}
 	case h.paletteO:
@@ -858,6 +904,8 @@ type confirmState struct {
 	choices []string
 	pick    func(i int) tea.Cmd
 	cur     int // the focused button; 0 is Cancel
+	// quit: the dialog asks before quitting.
+	quit bool
 	// topic ends the path while the dialog shows ("Remove?").
 	topic string
 	// onCancel runs when the answer is no (the field keeps what was
@@ -901,6 +949,8 @@ func (h *home) pressConfirm(i int) tea.Cmd {
 		return h.setFlash(msg)
 	case c.choices != nil:
 		return h.wrap(c.owner, c.pick(i-1))
+	case c.quit:
+		return tea.Quit
 	}
 	return h.wrap(c.owner, c.yes())
 }
@@ -917,17 +967,18 @@ func (h *home) confirmKey(s string) tea.Cmd {
 		return nil
 	case "enter":
 		return h.pressConfirm(c.cur)
-	case "y", "Y":
-		if c.choices == nil {
-			return h.pressConfirm(1)
-		}
+	case "y":
+		return h.copyCommand()
 	case "n", "N", "esc":
 		return h.pressConfirm(0)
 	case "ctrl+c":
+		if c.quit {
+			return tea.Quit // ctrl+c twice quits
+		}
 		h.confirm = nil
-		return h.quit()
+		return h.quit(true)
 	case "?":
-		return h.setFlash("y confirms · enter presses the selected button · ←/→ choose · n or esc cancels")
+		return h.setFlash("←/→ or tab choose · enter presses the selected button · n or esc cancels · y copies the command")
 	}
 	return h.setFlash(keyName(s) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
@@ -992,4 +1043,13 @@ func (h *home) keysKey(s string) tea.Cmd {
 		return h.noop(s)
 	}
 	return nil
+}
+
+// copyCommand copies the command on the bottom line (y), in a dialog
+// too.
+func (h *home) copyCommand() tea.Cmd {
+	if c := h.command(); c != "" {
+		return h.copy(c, "the command: "+c)
+	}
+	return h.setFlash("No command to copy here")
 }

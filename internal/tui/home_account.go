@@ -604,10 +604,10 @@ func (s *accountSection) billingView(w, h int) string {
 		if c := num(doc["amount_cents"]); c > 0 {
 			b.WriteString(fmt.Sprintf("Amount: $%.2f\n\n", c/100))
 		}
-		b.WriteString(st.Bold.Render(s.payWhat) + "\n\n")
-		b.WriteString("Open this link to review and pay (nothing is charged until you confirm there):\n\n  ")
+		b.WriteString(styleLines(st.Bold, output.Wrap(s.payWhat, w)) + "\n\n")
+		b.WriteString(output.Wrap("Open this link to review and pay (nothing is charged until you confirm there):", w) + "\n\n  ")
 		b.WriteString(st.Accent.Render(strings.Join(hardWrap([]string{s.payLink}, max(10, w-2)), "\n  ")) + "\n\n")
-		b.WriteString(st.Dim.Render("enter or o opens it in the browser, c copies it, esc closes it."))
+		b.WriteString(styleLines(st.Dim, output.Wrap("enter or o opens it in the browser, c copies it, esc closes it.", w)))
 		return b.String()
 	}
 	if s.buying {
@@ -634,7 +634,8 @@ func (s *accountSection) billingView(w, h int) string {
 	}
 	cur := s.currentPlan()
 	for i, p := range s.plans {
-		line := fmt.Sprintf("%-10s %s/mo  %s requests", planName(p),
+		// Columns line up: name, price, requests.
+		line := fmt.Sprintf("%-9s %5s/mo  %4s requests", planName(p),
 			shortMoney(num(p["monthly_price_cents"])), shortCount(int(num(p["included_requests"]))))
 		act := "Subscribe"
 		if i == cur {
@@ -806,7 +807,12 @@ func (s *accountSection) askToken() tea.Cmd {
 		command:  "audd config set token -",
 		action:   "Replace the token",
 		cancel:   "Not saved · esc closes the form",
-		onCancel: func() { s.tokForm.focusName("save") },
+		onCancel: func() {
+			// Back in the field, typing, the token as it was.
+			s.tokForm.focusName("token")
+			s.tokForm.resume()
+			s.tokForm.get("token").input.CursorEnd()
+		},
 		yes: func() tea.Cmd {
 			return s.tokSet.start(runReq{args: []string{"config", "set", "token", "-"}, stdin: v})
 		},

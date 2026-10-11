@@ -66,7 +66,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 			t.Fatalf("no %q:\n%s", want, v)
 		}
 	}
-	if foot := footerText(v); !strings.HasPrefix(foot, "y confirms  enter presses the selected button") || strings.Contains(v, "y copy") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL") || !strings.Contains(v, "[ Change the callback URL ]") {
+	if foot := footerText(v); !strings.HasPrefix(foot, "←/→/tab choose  enter press the selected button") || strings.Contains(foot, "confirm") || !strings.Contains(crumbText(v), "Streams › Callback › Change the callback URL") || !strings.Contains(v, "[ Change the callback URL ]") {
 		t.Fatalf("the question's hints: %q\n%s", foot, v)
 	}
 	press(h, key("n"))
@@ -82,7 +82,7 @@ func TestCallbackChangeAsks(t *testing.T) {
 	if strings.Contains(strings.Join(f.commands(), "\n"), "callback set") {
 		t.Fatal("a double enter lands on Cancel")
 	}
-	press(h, key("enter"), key("enter"), key("y"))
+	press(h, key("enter"), key("enter"), key("right"), key("enter"))
 	f.waitFor(t, "streams callback set https://hooks.example/audd")
 }
 

@@ -42,7 +42,9 @@ func (h *home) pageActions() []button {
 					b := &acts[i]
 					b.off = b.label + " needs an API token"
 					next := b.do
-					b.do = func() tea.Cmd { return h.askToken(h.activeID(), b.label+" needs an API token.", next) }
+					// Streams need the account's own token.
+					test := h.activeID() != "streams" && h.activeID() != "now-playing"
+					b.do = func() tea.Cmd { return h.askToken(h.activeID(), b.label+" needs an API token.", test, next) }
 				}
 			}
 		}

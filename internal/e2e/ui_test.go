@@ -122,6 +122,15 @@ func (s *uiSession) quit() int {
 	case code := <-s.done:
 		s.done <- code
 		return code
+	case <-time.After(2 * time.Second):
+		// It asked first (something typed is not saved, or a command
+		// runs): a second Ctrl-C quits.
+		s.keys.Write([]byte(kCtrlC))
+	}
+	select {
+	case code := <-s.done:
+		s.done <- code
+		return code
 	case <-time.After(15 * time.Second):
 		s.t.Fatal("audd did not exit after Ctrl-C")
 	}
@@ -197,7 +206,7 @@ func TestUIBatchWithConfirmation(t *testing.T) {
 	if n := e.api.Count(testutil.EndpointRecognize); n != 0 {
 		t.Fatalf("%d requests before the confirmation", n)
 	}
-	s.press("y")
+	s.press(kRight, kEnter)
 	s.wait("2 recognized, 0 no match, 0 failed")
 	if n := e.api.Count(testutil.EndpointRecognize); n != 2 {
 		t.Fatalf("%d recognitions", n)
@@ -225,7 +234,7 @@ func TestUIAddAndRemoveStream(t *testing.T) {
 	}
 	s.press(kEnter, "d") // the stream's page, then Remove (d)
 	s.wait("Remove stream 7?")
-	s.press("y")
+	s.press(kRight, kEnter)
 	s.wait("Removed stream 7")
 	if st := e.streams.Streams(); len(st) != 0 {
 		t.Fatalf("streams after removing: %+v", st)

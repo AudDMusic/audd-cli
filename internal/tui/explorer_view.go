@@ -178,8 +178,12 @@ func (m *explorer) keyList() []string {
 func (m *explorer) embeddedKeys() []string {
 	l := m.top()
 	switch {
+	case m.purpose == inputSetURL:
+		return []string{"enter save", "esc cancel"}
+	case m.purpose == inputFilter:
+		return []string{"enter keep the filter", "esc clear it"}
 	case m.purpose != inputNone:
-		return []string{"enter done"}
+		return []string{"enter done", "esc cancel"}
 	case m.tab == tabUsage || l == nil:
 		return nil
 	case l.detail:
@@ -275,6 +279,9 @@ func (m *explorer) levelView(l *level, h int) string {
 		case l.kind == "jobs":
 			return m.st.Dim.Render("No jobs yet. Batch runs (folders, globs, enterprise) appear here.")
 		case l.kind == "streams":
+			if m.embedded && m.signedOut != nil && m.signedOut() {
+				return "No API token yet.\n" + m.st.Dim.Render(output.Wrap(noTokenChoicesReal, max(20, m.w)))
+			}
 			if m.embedded {
 				return "No streams yet.\n" + m.st.Dim.Render("Add one with the Add a stream button below (or a).")
 			}

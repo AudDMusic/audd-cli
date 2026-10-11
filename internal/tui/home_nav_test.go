@@ -788,15 +788,16 @@ func TestQuitAsksWhileRunning(t *testing.T) {
 	}
 	press(h, key("esc"))
 	_, cmd := h.Update(key("q"))
-	if cmd != nil || !h.quitAsk || !strings.Contains(h.View(), "Quit audd?") || !strings.Contains(h.View(), "audd recognize song.mp3") {
+	quitting := func() bool { return h.confirm != nil && h.confirm.quit }
+	if cmd != nil || !quitting() || !strings.Contains(h.View(), "Quit?") || !strings.Contains(h.View(), "audd recognize song.mp3") || !strings.Contains(h.View(), "[>Cancel<]  [ Quit ]") {
 		t.Fatalf("q asks while a run is in progress:\n%s", h.View())
 	}
 	press(h, key("n"))
-	if h.quitAsk || !strings.Contains(h.View(), "Still running") {
-		t.Fatalf("any other key keeps it running:\n%s", h.View())
+	if quitting() || !strings.Contains(statusText(h.View()), "Not quitting") {
+		t.Fatalf("n keeps it running:\n%s", h.View())
 	}
 	_, cmd = h.Update(key("ctrl+c"))
-	if cmd != nil || !h.quitAsk {
+	if cmd != nil || !quitting() {
 		t.Fatal("ctrl+c asks too")
 	}
 	_, cmd = h.Update(key("ctrl+c"))

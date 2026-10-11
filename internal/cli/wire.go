@@ -249,7 +249,23 @@ func newExplorerData(a *app.App) (tui.ExplorerData, error) {
 		}
 		out := make([]tui.JobRow, 0, len(list))
 		for _, j := range list {
-			out = append(out, tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Pending: j.Pending, Inputs: j.Inputs, Status: j.Status})
+			row := tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Pending: j.Pending, Inputs: j.Inputs, Status: j.Status}
+			if j.Failed > 0 {
+				// Which failures a retry can fix, and why the others failed.
+				if items, err := st.Items(j.ID); err == nil {
+					for _, it := range items {
+						if it.State != "failed" {
+							continue
+						}
+						if tui.RetryHelps(it.ErrCode) {
+							row.RetryableFailed++
+						} else if row.FailReason == "" {
+							row.FailReason = it.Err
+						}
+					}
+				}
+			}
+			out = append(out, row)
 		}
 		return out, nil
 	}
@@ -265,7 +281,7 @@ func newExplorerData(a *app.App) (tui.ExplorerData, error) {
 		}
 		out := make([]tui.JobItem, 0, len(items))
 		for _, it := range items {
-			out = append(out, tui.JobItem{Index: it.Index, Input: it.Input.Name(), State: it.State, Result: it.Result, Err: it.Err})
+			out = append(out, tui.JobItem{Index: it.Index, Input: it.Input.Name(), State: it.State, Result: it.Result, Err: it.Err, ErrCode: it.ErrCode})
 		}
 		return out, nil
 	}

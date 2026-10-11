@@ -30,16 +30,22 @@ type JobRow struct {
 	Failed  int       `json:"failed"`
 	Pending int       `json:"pending"` // not sent yet: what Resume sends
 	Inputs  string    `json:"inputs"`  // what was recognized, in short: "music", "a.mp3 and 2 more"
-	Status  string    `json:"status"`
+	// RetryableFailed counts the failures a retry can fix (network,
+	// server, rate limit, quota); FailReason is why one of the others
+	// failed (bad audio, an unsupported file).
+	RetryableFailed int    `json:"retryable_failed"`
+	FailReason      string `json:"fail_reason,omitempty"`
+	Status          string `json:"status"`
 }
 
 // JobItem is one input of a batch job.
 type JobItem struct {
-	Index  int             `json:"index"`
-	Input  string          `json:"input"`
-	State  string          `json:"state"` // pending, done, failed
-	Result json.RawMessage `json:"result,omitempty"`
-	Err    string          `json:"error,omitempty"`
+	Index   int             `json:"index"`
+	Input   string          `json:"input"`
+	State   string          `json:"state"` // pending, done, failed
+	Result  json.RawMessage `json:"result,omitempty"`
+	Err     string          `json:"error,omitempty"`
+	ErrCode string          `json:"error_code,omitempty"`
 }
 
 // ExplorerData supplies the explorer's tabs. A nil source shows a short
@@ -98,4 +104,16 @@ func DefaultExplorerData(a *app.App) (ExplorerData, error) {
 	}
 	d.Feed = f
 	return d, nil
+}
+
+// RetryHelps reports whether retrying a file that failed with this error
+// code can work: the connection, the server, a rate or quota limit (after
+// topping up), or the token (after fixing it). Bad audio or an unsupported
+// file fails the same way again.
+func RetryHelps(code string) bool {
+	switch code {
+	case "", "network", "server", "rate_limited", "interrupted", "quota_exceeded", "token_rejected", "no_token":
+		return true
+	}
+	return false
 }

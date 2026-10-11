@@ -114,8 +114,13 @@ func TestSpendingDialogStartsOnCancel(t *testing.T) {
 	press(h, key("enter"))
 	pump(h, func() bool { return h.ask != nil })
 	v := h.View()
-	if h.ask == nil || h.ask.cur != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Recognize 2 files ]") || !strings.Contains(footerText(v), "y confirms") {
+	if h.ask == nil || h.ask.cur != 0 || !strings.Contains(v, "[>Cancel<]") || !strings.Contains(v, "[ Recognize 2 files ]") || !strings.Contains(footerText(v), "enter press the selected button") {
 		t.Fatalf("the spending dialog:\n%s", v)
+	}
+	// y copies the command, also in a dialog; it never confirms.
+	press(h, key("y"))
+	if h.ask == nil || sent.Load() != 0 || !strings.Contains(statusText(h.View()), "Copied the command") {
+		t.Fatalf("y in a dialog:\n%s", h.View())
 	}
 	press(h, key("enter"))
 	pump(h, func() bool { return h.ask == nil && recognizeOf(h).phase == "form" })
@@ -124,7 +129,7 @@ func TestSpendingDialogStartsOnCancel(t *testing.T) {
 	}
 	press(h, key("enter"))
 	pump(h, func() bool { return h.ask != nil })
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	pump(h, func() bool { return sent.Load() == 1 })
 }
 
@@ -326,7 +331,7 @@ func TestCurrentPlan(t *testing.T) {
 // format's extension.
 func TestStreamRemoveAndExportName(t *testing.T) {
 	h := navHome(t, homeOpts{start: "streams"})
-	press(h, key("down"), key("enter"), key("d"), key("y"))
+	press(h, key("down"), key("enter"), key("d"), key("right"), key("enter"))
 	if l := h.subs["streams"].(*streamsSection).pane.ex.top(); l.detail {
 		t.Fatal("back on the list after removing")
 	}

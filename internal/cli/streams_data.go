@@ -96,14 +96,29 @@ func streamGaps(st *streamstore.Store, from time.Time, ids []int) (gaps []stream
 	return gaps, false, err
 }
 
-// gapNote says how much of a range was not recorded: "Some streams were not
-// recorded for 30d 0h of this range (1 gap)".
+// gapNote says which periods of a range were not recorded: "Some
+// periods weren't recorded: Oct 9 13:00 – 14:30, Oct 10 02:00 – 03:10".
 func gapNote(gaps []streamstore.Gap) string {
-	var total time.Duration
-	for _, g := range gaps {
-		total += g.To.Sub(g.From)
+	var parts []string
+	for i, g := range gaps {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("and %d more", len(gaps)-3))
+			break
+		}
+		parts = append(parts, gapRange(g))
 	}
-	return fmt.Sprintf("Some streams were not recorded for %s of this range (%s)", fmtDuration(total), output.Plural(len(gaps), "gap"))
+	return "Some periods weren't recorded: " + strings.Join(parts, ", ")
+}
+
+// gapRange is a gap in short: "Oct 9 13:00 – 14:30" (the date again when
+// it ends on another day).
+func gapRange(g streamstore.Gap) string {
+	from, to := g.From.Local(), g.To.Local()
+	end := to.Format("15:04")
+	if from.YearDay() != to.YearDay() || from.Year() != to.Year() {
+		end = to.Format("Jan 2 15:04")
+	}
+	return from.Format("Jan 2 15:04") + " – " + end
 }
 
 func fmtLength(sec int) string {

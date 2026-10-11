@@ -54,7 +54,7 @@ func TestHistoryResumesJob(t *testing.T) {
 			`{"schema_version":1,"type":"summary","job_id":"k3x9","recognized":3,"no_match":0,"failed":0,"requests_spent_this_run":1}`+"\n", "", 0)
 	f.reply("jobs resume k3x9 --retry-failed --dry-run", "Plan: 1 file, at most 1 request.\nNothing was sent (--dry-run).\n", "", 0)
 	h := newTestHome(t, f, homeOpts{start: "recognitions"})
-	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("y"), "Job k3x9: 3 recognized")
+	v := drive(t, h, 120, 40, "Warriors", key("tab"), "k3x9", key("down"), key("enter"), "Retry failed files", key("tab"), key("right"), key("enter"), "Retry the failed files of job k3x9?", key("right"), key("enter"), "Job k3x9: 3 recognized")
 	if !strings.Contains(v, "Portishead — Roads") || !strings.Contains(v, "$ audd jobs resume k3x9 --retry-failed") {
 		t.Fatalf("resume:\n%s", v)
 	}
@@ -69,7 +69,7 @@ func TestStreamsSectionPages(t *testing.T) {
 	// ↓ from the tab bar goes into the list: its first row has the keys.
 	snap(t, "streams_list_row", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("down"), key("down"), "$ audd streams list")
 	snap(t, "streams_callback", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), "Callback URL: https")
-	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "process 4242")
+	snap(t, "streams_recorder", func() *home { return newTestHome(t, f, homeOpts{start: "streams"}) }, "Nina Si", key("]"), key("]"), "Running. Press enter")
 
 	h := sized(newTestHome(t, f, homeOpts{start: "streams"}), 120, 40)
 	drain(h, h.activate(), 0)
@@ -146,10 +146,10 @@ func TestStreamsAddAndRemove(t *testing.T) {
 		t.Fatalf("after adding:\n%s", h.View())
 	}
 	press(h, key("enter"), key("d"))
-	if v := h.View(); !strings.Contains(v, "Remove stream 1?") || !strings.Contains(v, "AudD stops monitoring it") || h.command() != "audd streams remove 1" || strings.Contains(v, "y copy") {
+	if v := h.View(); !strings.Contains(v, "Remove stream 1?") || !strings.Contains(v, "AudD stops monitoring it") || h.command() != "audd streams remove 1" {
 		t.Fatalf("remove asks:\n%s", h.View())
 	}
-	press(h, key("y"))
+	press(h, key("right"), key("enter"))
 	api.mu.Lock()
 	defer api.mu.Unlock()
 	if len(api.removed) != 1 || api.removed[0] != 1 {

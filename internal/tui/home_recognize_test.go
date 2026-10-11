@@ -156,7 +156,8 @@ func TestRecognizeBatchWithConfirmation(t *testing.T) {
 	}
 	tm.Send(key("enter"))
 	waitFor("Recognize 2 files, using 2 requests?")
-	tm.Send(key("y"))
+	tm.Send(key("right"))
+	tm.Send(key("enter"))
 	waitFor("Job j1: 1 recognized, 1 no match, 0 failed")
 	tm.Send(tea.KeyMsg{Type: tea.KeyCtrlC})
 	final := tm.FinalModel(t, teatest.WithFinalTimeout(5*time.Second))

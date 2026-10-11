@@ -155,7 +155,7 @@ func resultDetail(raw json.RawMessage, st detailStyles) string {
 		v, length, _ := ViewFromJSON(raw)
 		lines := detailFields(v, st.key)
 		if length > 0 {
-			lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Length"))+clock(length))
+			lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Track length"))+clock(length))
 		}
 		return strings.Join(lines, "\n")
 	} else if len(matches) > 0 {
@@ -169,7 +169,7 @@ func resultDetail(raw json.RawMessage, st detailStyles) string {
 		}
 		return strings.TrimRight(b.String(), "\n")
 	}
-	return st.dim.Render("No match.")
+	return st.dim.Render("No match. Recognize it again with Clip at another moment, or scan more with Enterprise.")
 }
 
 func shortSource(s string) string {
@@ -221,11 +221,20 @@ func jobRows(jobs []JobRow) []row {
 		j := j
 		r.detail = func(st detailStyles) string {
 			field := func(k, v string) string { return st.key.Render(fmt.Sprintf("%-10s", k)) + v + "\n" }
-			return st.title.Render("Job "+j.ID) + "\n\n" +
+			out := st.title.Render("Job "+j.ID) + "\n\n" +
 				field("Status", j.Status) +
 				field("Done", fmt.Sprintf("%d of %d files, %d failed", j.Done, j.Total, j.Failed)) +
 				field("Created", when(j.Created)) +
 				field("Command", jobCommand(j.Command))
+			if n := j.Failed - j.RetryableFailed; n > 0 && j.FailReason != "" {
+				// Say why, instead of offering a retry that fails again.
+				what := "These files failed"
+				if n == 1 {
+					what = "This file failed"
+				}
+				out += "\n" + st.dim.Render(fmt.Sprintf("%s because %s; retrying won't help.", what, strings.TrimSuffix(j.FailReason, ".")))
+			}
+			return out
 		}
 		rows = append(rows, r)
 	}
@@ -316,7 +325,7 @@ func streamRows(data []stationData, now time.Time) []row {
 	return rows
 }
 
-var playCols = []column{{title: "When", width: 18}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played", width: 7}, {title: "Length", width: 7}}
+var playCols = []column{{title: "When", width: 18}, {title: "Song", width: 0}, {title: "Album", width: 28}, {title: "Played for", width: 10}, {title: "Track length", width: 12}}
 
 // whenShort is the "When" cell of a stream: "now · 1:23" while a song
 // plays, "ended 2 min ago" for a result sent when the song ended, else the
@@ -329,6 +338,9 @@ func whenShort(p Play, now time.Time) string {
 		}
 		return "now · " + clock(p.Elapsed(now))
 	case p.PlayLength > 0:
+		if end, _ := p.Ended(); end.After(now) {
+			return "playing"
+		}
 		return "ended " + agoAt(p.Ago(now), now)
 	}
 	return "started " + agoAt(p.Ago(now), now)
@@ -354,10 +366,10 @@ func playRows(plays []Play, at time.Time) []row {
 			head := st.dim.Render(fmt.Sprintf("Stream %d · %s", p.RadioID, p.At.In(localZone).Format("2006-01-02 15:04:05")))
 			lines := cardLines(p.ResultView, true, st.title, st.dim, st.key)
 			if p.PlayLength > 0 {
-				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Played"))+clock(p.Played()))
+				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Played for"))+clock(p.Played()))
 			}
 			if p.TrackLength > 0 {
-				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s", "Length"))+clock(p.TrackLength))
+				lines = append(lines, st.key.Render(fmt.Sprintf("%-12s ", "Track length"))+clock(p.TrackLength))
 			}
 			return head + "\n\n" + strings.Join(lines, "\n")
 		}

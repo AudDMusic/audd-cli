@@ -233,6 +233,10 @@ func clockDay(t, now time.Time) string {
 // "started 17:32" (dated when not today).
 func playWhen(p Play, now time.Time) string {
 	if end, ok := p.Ended(); ok {
+		if end.After(now) {
+			// Its end is still ahead: it is playing.
+			return "playing since " + clockDay(p.At, now)
+		}
 		return "ended " + clockDay(end, now)
 	}
 	return "started " + clockDay(p.At, now)

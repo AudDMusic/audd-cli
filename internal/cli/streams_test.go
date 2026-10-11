@@ -697,7 +697,7 @@ func TestStreamsReport(t *testing.T) {
 		t.Fatal("nothing recorded most of the week: incomplete")
 	}
 	r = runStreams(t, "streams", "report", "--by", "label", "--format", "table")
-	if !strings.Contains(r.Stdout, "LABEL") || !strings.Contains(r.Stdout, "(unknown)") || !strings.Contains(r.Stdout, "Note: Some streams were not recorded for ") {
+	if !strings.Contains(r.Stdout, "LABEL") || !strings.Contains(r.Stdout, "(unknown)") || !strings.Contains(r.Stdout, "Note: Some periods weren't recorded: ") {
 		t.Fatalf("table:\n%s", r.Stdout)
 	}
 	r = runStreams(t, "streams", "report", "--by", "song", "--format", "csv")
@@ -748,7 +748,7 @@ func TestStreamsReportSinceAllMarksHoles(t *testing.T) {
 		t.Fatalf("history all time: %v", doc)
 	}
 	r = runStreams(t, "streams", "export", "--format", "csv")
-	if !strings.Contains(r.Stderr, "of this range (1 gap), so this export misses plays") {
+	if !strings.Contains(r.Stderr, "Some periods weren't recorded: ") || !strings.Contains(r.Stderr, ", so this export misses plays") {
 		t.Fatalf("export notes the gap: %q", r.Stderr)
 	}
 }

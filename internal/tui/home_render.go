@@ -56,7 +56,7 @@ func parseRecognition(doc map[string]any) recognition {
 	cached, _ := doc["cached"].(bool)
 	v, ok := api.View(raw, cached)
 	if !ok {
-		return recognition{text: "No match."}
+		return recognition{text: "No match.\nTry another moment of the file with Clip at, or scan more of it with Enterprise."}
 	}
 	return recognition{view: &v, link: v.SongLink, matched: true}
 }
@@ -88,7 +88,7 @@ func enterpriseRecognition(doc map[string]any) recognition {
 		}
 	}
 	if !r.matched {
-		r.text = "No match."
+		r.text = "No match in the part scanned.\nRaise the Limit to scan more of the file."
 		return r
 	}
 	if doc["cached"] == true {

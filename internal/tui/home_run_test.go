@@ -80,7 +80,7 @@ func TestRunAskYesNoAndTyped(t *testing.T) {
 		keys  []tea.KeyMsg
 		want  bool
 	}{
-		{"yes", "", keys("y"), true},
+		{"yes", "", keys("right", "enter"), true},
 		{"no", "", keys("n"), false},
 		{"esc", "", keys("esc"), false},
 		{"typed", "rotate", append(typeText("rotate"), key("enter")), true},
@@ -214,11 +214,13 @@ func TestAsksQueue(t *testing.T) {
 		t.Fatalf("one question on screen and one waiting: %v %d", h.ask != nil, len(h.asks))
 	}
 	first := h.ask.msg.question
-	h.Update(key("y"))
+	h.Update(key("right"))
+	h.Update(key("enter"))
 	if h.ask == nil || h.ask.msg.question == first {
 		t.Fatal("the waiting question comes next")
 	}
-	h.Update(key("y"))
+	h.Update(key("right"))
+	h.Update(key("enter"))
 	got := map[string]bool{<-answers: true, <-answers: true}
 	if !got["one"] || !got["two"] {
 		t.Fatalf("answers: %v", got)

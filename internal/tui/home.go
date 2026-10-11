@@ -232,8 +232,9 @@ type home struct {
 	headRows int
 	// tip is the first-run line that states how to move around.
 	tip bool
-	// quitAsk: q or ctrl+c while a command runs asks first.
-	quitAsk bool
+	// sideBtn is the button under the menu that has the keys: 1
+	// Commands, 2 Keys (0: none, a section has them).
+	sideBtn int
 	// confirm is a question of the screen's own, before something that
 	// spends requests or cannot be undone.
 	confirm *confirmState
@@ -719,6 +720,27 @@ func (h *home) useToken(test bool) {
 	if r, ok := h.subs["recognize"].(*recognizeSection); ok && r.phase == "result" {
 		r.phase, r.plan = "form", ""
 	}
+	h.reloadData()
+}
+
+// reloadData starts the sections that show account data afresh (with the
+// new token): nothing they loaded with the old one stays shown. The
+// section in view keeps its page (Account reloads it itself); the
+// others load again when opened.
+func (h *home) reloadData() {
+	fresh := map[string]func(*home) section{
+		"now-playing":  newNowPlayingSection,
+		"streams":      newStreamsSection,
+		"recognitions": newHistorySection,
+		"account":      newAccountSection,
+	}
+	for id, mk := range fresh {
+		if !h.inits[id] || id == h.activeID() {
+			continue
+		}
+		h.subs[id] = mk(h)
+		delete(h.inits, id)
+	}
 }
 
 // switchProfile rebuilds the session for another profile.
@@ -784,51 +806,26 @@ func leftExits(s section) bool {
 	return !s.capturing()
 }
 
-// noTokenChoices is the one wording of the ways to get a token.
-const noTokenChoices = "Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."
+// noTokenChoices is the one wording of the ways to get a token;
+// noTokenChoicesReal leaves out the test token (streams need your own).
+const (
+	noTokenChoices     = "Use the public test token (10 requests a day, nothing is saved), paste yours from dashboard.audd.io, or sign in."
+	noTokenChoicesReal = "Streams need your own token (the public test token does not work for them): paste yours from dashboard.audd.io, or sign in."
+)
 
-// askToken asks how to get an API token (why says what needs it); with
-// the test token it goes on with next.
-func (h *home) askToken(owner, why string, next func() tea.Cmd) tea.Cmd {
-	return h.askFirst(&confirmState{
-		owner:    owner,
-		question: "You need an API token",
-		notes:    []string{why + " " + noTokenChoices},
-		choices:  []string{"Use the test token", "Paste a token…", "Sign in"},
-		topic:    "API token?",
-		cancel:   "Cancelled. Nothing was sent.",
-		pick: func(i int) tea.Cmd {
-			switch i {
-			case 0:
-				cmd := h.signedIn(true)
-				return tea.Batch(cmd, h.setFlash("Using the test token: 10 requests a day"), next())
-			case 1:
-				cmd := h.jump("signin")
-				if si, ok := h.subs["signin"].(*signinSection); ok {
-					si.step = "paste"
-					si.paste.focusName("token")
-					si.paste.resume()
-				}
-				return cmd
-			}
-			cmd := h.jump("signin")
-			if si, ok := h.subs["signin"].(*signinSection); ok {
-				si.choice = 0
-				return tea.Batch(cmd, h.wrap("signin", si.update(tea.KeyMsg{Type: tea.KeyEnter})))
-			}
-			return cmd
-		},
-	})
-}
-
-// tokenButtons are the ways to get an API token, as buttons; next runs
-// once the test token is in use.
-func (h *home) tokenButtons(next func() tea.Cmd) []button {
-	return []button{
-		{label: "Use the test token", do: func() tea.Cmd {
-			return tea.Batch(h.signedIn(true), h.setFlash("Using the test token: 10 requests a day"), next())
-		}},
-		{label: "Paste a token…", do: func() tea.Cmd {
+// tokenWays are the ways to get an API token: label and action. With
+// test, the public test token is the first; next runs once it is in use
+// (the page stays where it is).
+func (h *home) tokenWays(test bool, next func() tea.Cmd) []button {
+	var b []button
+	if test {
+		b = append(b, button{label: "Use the test token", do: func() tea.Cmd {
+			h.useToken(true)
+			return tea.Batch(h.loadHeader(), h.setFlash("Using the test token: 10 requests a day"), next())
+		}})
+	}
+	return append(b,
+		button{label: "Paste a token…", do: func() tea.Cmd {
 			cmd := h.jump("signin")
 			if si, ok := h.subs["signin"].(*signinSection); ok {
 				si.step = "paste"
@@ -837,7 +834,7 @@ func (h *home) tokenButtons(next func() tea.Cmd) []button {
 			}
 			return cmd
 		}},
-		{label: "Sign in", do: func() tea.Cmd {
+		button{label: "Sign in", do: func() tea.Cmd {
 			cmd := h.jump("signin")
 			if si, ok := h.subs["signin"].(*signinSection); ok {
 				si.choice = 0
@@ -845,5 +842,32 @@ func (h *home) tokenButtons(next func() tea.Cmd) []button {
 			}
 			return cmd
 		}},
+	)
+}
+
+// askToken asks how to get an API token (why says what needs it).
+func (h *home) askToken(owner, why string, test bool, next func() tea.Cmd) tea.Cmd {
+	ways := h.tokenWays(test, next)
+	var choices []string
+	for _, w := range ways {
+		choices = append(choices, w.label)
 	}
+	notes := noTokenChoices
+	if !test {
+		notes = noTokenChoicesReal
+	}
+	return h.askFirst(&confirmState{
+		owner:    owner,
+		question: "You need an API token",
+		notes:    []string{why + " " + notes},
+		choices:  choices,
+		topic:    "API token",
+		cancel:   "Cancelled. Nothing was sent.",
+		pick:     func(i int) tea.Cmd { return ways[i].do() },
+	})
+}
+
+// tokenButtons are the ways to get an API token, as a page's buttons.
+func (h *home) tokenButtons(test bool, next func() tea.Cmd) []button {
+	return h.tokenWays(test, next)
 }

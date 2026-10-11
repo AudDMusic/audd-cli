@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -378,7 +379,8 @@ type askState struct {
 
 func newAskState(owner string, m runAskMsg, h *home) *askState {
 	// A command asks before spending more than one request. Cancel has
-	// the focus, so a double enter never spends; y confirms.
+	// the focus, so a double enter never spends; only enter on the
+	// action (or a click) confirms.
 	s := &askState{owner: owner, msg: m, typed: m.run.req.typed}
 	if s.typed != "" {
 		ti := textinput.New()
@@ -465,19 +467,19 @@ func (h *home) askKey(k tea.KeyMsg) tea.Cmd {
 	}
 	switch key {
 	case "left", "shift+tab":
-		s.cur = 0
+		s.cur = max(0, s.cur-1)
 		return nil
 	case "right", "tab":
-		s.cur = 1
+		s.cur = min(len(h.askButtons())-1, s.cur+1)
 		return nil
 	case "enter":
 		return h.pressAsk(s.cur)
-	case "y", "Y":
-		return h.pressAsk(1)
+	case "y":
+		return h.copyCommand()
 	case "n", "N":
 		return h.pressAsk(0)
 	case "?":
-		return h.setFlash("y confirms · enter presses the selected button · ←/→ choose · n or esc cancels")
+		return h.setFlash("←/→ or tab choose · enter presses the selected button · n or esc cancels · y copies the command")
 	}
 	return h.setFlash(keyName(key) + " does nothing here · ←/→ choose, enter presses, esc cancels")
 }
@@ -488,9 +490,47 @@ func (h *home) pressAsk(i int) tea.Cmd {
 		h.answer(true)
 		return nil
 	}
+	ways := h.tokenWays(false, nil)
 	h.answer(false)
+	if i >= 2 && i-2 < len(ways) {
+		// Use your own token instead: nothing was sent.
+		return tea.Batch(h.setFlash("Cancelled. Nothing was sent."), ways[i-2].do())
+	}
 	return h.setFlash("Cancelled. Nothing was sent.")
 }
+
+// askButtons are the buttons of a command's question: Cancel and the
+// action; with the public test token also the ways to use your own.
+func (h *home) askButtons() []string {
+	b := []string{"Cancel", h.ask.action()}
+	if h.testToken {
+		b = append(b, "Paste a token…", "Sign in")
+	}
+	return b
+}
+
+// testTokenNote says what the public test token allows, for a question
+// that spends requests ("" with your own token).
+func (h *home) testTokenNote(s *askState) string {
+	if !h.testToken {
+		return ""
+	}
+	need := ""
+	for _, t := range append([]string{s.msg.question}, s.msg.notes...) {
+		if m := requestsRe.FindStringSubmatch(t); m != nil {
+			need = m[1]
+			break
+		}
+	}
+	note := "The test token allows 10 requests a day"
+	if need != "" {
+		note += "; this run needs " + need + " and stops after the daily limit"
+	}
+	return note + ". Use your own token:"
+}
+
+// requestsRe finds "1,500 requests" in a plan.
+var requestsRe = regexp.MustCompile(`([0-9][0-9,]*) requests?\b`)
 
 // askView is the confirmation in the content pane.
 func (h *home) askView(w, ht int) string {
@@ -512,7 +552,10 @@ func (h *home) askView(w, ht int) string {
 			b.WriteString(h.st.Warn.Render("That does not match.") + "\n")
 		}
 	} else {
-		b.WriteString(h.dialogButtons([]string{"Cancel", s.action()}, s.cur, h.pressAsk, w) + "\n")
+		if note := h.testTokenNote(s); note != "" {
+			b.WriteString(styleLines(h.st.Warn, output.Wrap(note+" Paste a token or Sign in below.", w)) + "\n\n")
+		}
+		b.WriteString(h.dialogButtons(h.askButtons(), s.cur, h.pressAsk, w) + "\n")
 	}
 	return b.String()
 }
