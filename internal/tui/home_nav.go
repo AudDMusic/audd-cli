@@ -794,7 +794,7 @@ func (h *home) footer() []keyHelp {
 	case h.paletteO:
 		return composeKeys(h.palette.keys(), h.palette.leftExits(), h.palette.capturing())
 	case h.focus == focusSidebar:
-		return []keyHelp{{"↑/↓", "move"}, {"→", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"q", "quit"}, {"?", "keys"}}
+		return []keyHelp{{"↑/↓", "move"}, {"→", "open"}, {"1-7", "jump"}, {"ctrl+k", "commands"}, {"q", "quit (from the menu)"}, {"?", "keys"}}
 	case h.focus == focusTabs && h.tabs() != nil:
 		// The page's own keys work on the page, so they are not listed
 		// here.

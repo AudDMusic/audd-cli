@@ -225,7 +225,7 @@ func jobRows(jobs []JobRow) []row {
 				field("Status", j.Status) +
 				field("Done", fmt.Sprintf("%d of %d files, %d failed", j.Done, j.Total, j.Failed)) +
 				field("Created", when(j.Created)) +
-				field("Command", jobCommand(j.Command))
+				field("Command", j.BatchCommand())
 			if len(j.Failures) > 0 {
 				// Each failed file and why; whether a retry can fix it.
 				out += "\n" + st.key.Render("Failed") + "\n"

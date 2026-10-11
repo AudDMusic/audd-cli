@@ -743,7 +743,7 @@ func TestCSVAndTableOutput(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	testutil.Golden(t, "batch_table", norm(ta2.stdout.String(), sum.JobID))
-	if !strings.Contains(ta2.stderr.String(), "1 recognized, 1 no match, 1 failed, 0 cached; 3 requests used in this run.") {
+	if !strings.Contains(ta2.stderr.String(), "1 recognized, 1 no match, 1 failed, 0 cached; 3 requests sent (up to 3 billed) in this run.") {
 		t.Fatalf("human summary: %q", ta2.stderr)
 	}
 }
@@ -1270,5 +1270,52 @@ func TestRetryFailedOnlyRetriesWhatCanWork(t *testing.T) {
 	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, RetryAllFailed: true})
 	if f.count("bad-2.mp3") != 2 {
 		t.Fatalf("retry-all-failed: bad %d", f.count("bad-2.mp3"))
+	}
+}
+
+// Every request that reached AudD is counted, also those of a failed
+// attempt and of its retry: the whole job's count is what the server
+// received.
+func TestRequestsCountEveryAttempt(t *testing.T) {
+	f := newFakeAPI(t)
+	ta := newTestApp(t, f, output.FormatTable)
+	paths := mkfiles(t, "drop-1.mp3", "match-2.mp3")
+	sum, _ := RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(paths), MaxFiles: intp(2), Yes: true})
+	if !strings.Contains(ta.stderr.String(), "2 requests sent (up to 2 billed) in this run") {
+		t.Fatalf("first run: %q", ta.stderr)
+	}
+	ta.stderr.Reset()
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, RetryFailed: true, Yes: true})
+	calls := f.count("drop-1.mp3") + f.count("match-2.mp3")
+	st, _ := Open()
+	jobs, _ := List(st)
+	st.Close()
+	if calls != 3 || jobs[0].Requests != calls {
+		t.Fatalf("server got %d, the job counts %d", calls, jobs[0].Requests)
+	}
+	if !strings.Contains(ta.stderr.String(), "3 requests sent (up to 3 billed) in the whole job") {
+		t.Fatalf("summary: %q", ta.stderr)
+	}
+}
+
+// A 502 reached AudD's front: it is retryable, counted, and said so the
+// same way in the result line, the hint, and the retry.
+func TestBadGatewayIsRetryableAndCounted(t *testing.T) {
+	f := newFakeAPI(t)
+	ta := newTestApp(t, f, output.FormatJSONL)
+	paths := mkfiles(t, "gw-1.mp3", "match-2.mp3")
+	sum, err := RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(paths), MaxFiles: intp(2), Yes: true})
+	if e := output.AsError(err); e == nil || !strings.Contains(e.Hint, "retry the 1 file that can work") {
+		t.Fatalf("hint: %v", err)
+	}
+	if !strings.Contains(ta.stdout.String(), `"code":"server"`) || !strings.Contains(ta.stdout.String(), `"retryable":true`) {
+		t.Fatalf("result line: %s", ta.stdout)
+	}
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, RetryFailed: true, Yes: true})
+	st, _ := Open()
+	jobs, _ := List(st)
+	st.Close()
+	if n := f.count("gw-1.mp3") + f.count("match-2.mp3"); n < 3 || jobs[0].Requests != n {
+		t.Fatalf("server got %d, the job counts %d", n, jobs[0].Requests)
 	}
 }

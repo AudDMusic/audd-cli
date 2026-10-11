@@ -110,7 +110,9 @@ func (m *explorer) clickRow(l *level, i int) func() tea.Cmd {
 func (m *explorer) statusLine() string {
 	switch {
 	case m.purpose != inputNone:
-		return truncate(m.input.Prompt+m.input.Value()+"█", m.w)
+		// The caret where it is, also mid-text.
+		m.input.Width = max(10, m.w-len([]rune(m.input.Prompt))-2)
+		return truncate(m.input.View(), m.w)
 	case m.confirm != "":
 		return truncate(m.st.Warn.Render(m.confirm), m.w)
 	case m.exportAs:
@@ -323,7 +325,7 @@ func (m *explorer) levelView(l *level, h int) string {
 	var note string
 	if l.kind == "items" {
 		if j := m.jobOf(l); j != nil {
-			note = m.st.Dim.Render(truncate("$ "+jobCommand(j.Command), m.w))
+			note = m.st.Dim.Render(truncate("$ "+j.BatchCommand(), m.w))
 			h--
 		}
 	}

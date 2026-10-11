@@ -391,3 +391,21 @@ func TestGapsLeaveOutPeriodsWithPlays(t *testing.T) {
 		t.Fatalf("gaps around the plays: %+v %v", gaps, err)
 	}
 }
+
+// Before a stream was first known is before recording started: not a
+// gap.
+func TestNoGapBeforeAStreamWasKnown(t *testing.T) {
+	s := openTemp(t)
+	now := t0.Add(4 * time.Hour)
+	s.Now = func() time.Time { return now }
+	if err := s.SetAccountStreams([]int{1}, t0.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	for at := t0.Add(2 * time.Hour); !at.After(now); at = at.Add(30 * time.Second) {
+		s.Heartbeat(at, 1)
+	}
+	gaps, err := s.Gaps(t0)
+	if err != nil || len(gaps) != 0 {
+		t.Fatalf("gaps before the stream existed: %+v %v", gaps, err)
+	}
+}

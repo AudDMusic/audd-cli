@@ -201,6 +201,17 @@ func (s *accountSection) update(msg tea.Msg) tea.Cmd {
 		if done && s.pay.res.ok() {
 			s.payLink = str(parseDoc(s.pay.res.stdout)["url"])
 		}
+		if done && s.pay.res.err != nil && len(s.pay.args) > 1 && s.pay.args[1] == "buy" {
+			// Back in the field, typing, what was typed kept: a new
+			// number replaces or adds to it; nothing is sent again.
+			s.buying = true
+			msg := capFirst(s.pay.res.err.Message)
+			if h := humanHint(s.pay.res.err.Hint); h != "" {
+				msg += " " + h
+			}
+			s.buyIn.fail("requests", msg)
+			s.pay.res = nil
+		}
 		return nil
 	}
 	if mine, done := s.token.handle(msg); mine {
@@ -313,7 +324,8 @@ func (s *accountSection) billingKey(k tea.KeyMsg) tea.Cmd {
 			v := s.buyIn.value("requests")
 			n, err := strconv.Atoi(strings.ReplaceAll(v, ",", ""))
 			if err != nil || n <= 0 || n%1000 != 0 {
-				s.buyIn.err = "Enter a positive multiple of 1,000."
+				// The text stays, the cursor in it, to fix it.
+				s.buyIn.fail("requests", "Enter a positive multiple of 1,000.")
 				return nil
 			}
 			s.buyIn.err = ""

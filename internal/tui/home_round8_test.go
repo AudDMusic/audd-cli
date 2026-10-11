@@ -106,8 +106,8 @@ func TestErrorsAreScoped(t *testing.T) {
 	press(h2, typeText("/no/such/folder/with/a/long/name/somewhere/deep/song.mp3")...)
 	press(h2, key("enter"))
 	pump(h2, func() bool { return s2.form.get("input").problem != "" })
-	if p := s2.form.get("input").problem; !strings.Contains(p, "song.mp3") || !strings.Contains(p, "…") {
-		t.Fatalf("the path, shortened in the middle: %q", p)
+	if p := s2.form.get("input").problem; !strings.Contains(p, "/no/such/folder/with/a/long/name/somewhere/deep/song.mp3") || strings.Contains(p, "…") {
+		t.Fatalf("the path, as typed and in full: %q", p)
 	}
 	press(h2, typeText("x")...)
 	if p := s2.form.get("input").problem; p != "" {
@@ -218,6 +218,13 @@ func TestSaveThisReport(t *testing.T) {
 	pump(h, func() bool { b, _ := os.ReadFile(path); return len(b) > 0 })
 	if b, _ := os.ReadFile(path); string(b) != "song,plays\nA — One,3\n" {
 		t.Fatalf("the saved report: %q", b)
+	}
+	// Then where it is, and the folder and path buttons, as after an
+	// export.
+	pump(h, func() bool { return strings.Contains(h.View(), "Open folder") })
+	v := strings.Join(strings.Fields(strings.ReplaceAll(contentText(h.View()), "│", " ")), " ")
+	if !strings.Contains(v, "Saved to ") || !strings.Contains(v, "Open folder") || !strings.Contains(v, "Copy path") {
+		t.Fatalf("after saving:\n%s", h.View())
 	}
 }
 

@@ -1,12 +1,13 @@
 AudD  ·  profile default
                  │ Now playing
- 1 Recognize     │                                                                                        1 of 3 streams
-*2 Now playing   > 
- 3 Streams       │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
- 4 Recognitions  │ ┃ Stream 1                                       ┃│ Stream 2                                       │
- 5 Account       │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
- 6 Settings      │ ┃ Warriors                                       ┃│ Feeling Good                                   │
- 7 Help          │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
+ 1 Recognize     │ What's playing on your streams
+*2 Now playing   >                                                                                        1 of 3 streams
+ 3 Streams       │ 
+ 4 Recognitions  │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭────────────────────────────────────────────────╮
+ 5 Account       │ ┃ Stream 1                                       ┃│ Stream 2                                       │
+ 6 Settings      │ ┃ JUST PLAYED · ended 1 min ago                  ┃│ LAST PLAYED · ended 21 min ago                 │
+ 7 Help          │ ┃ Warriors                                       ┃│ Feeling Good                                   │
+                 │ ┃ Imagine Dragons                                ┃│ Nina Simone                                    │
                  │ ┃ Warriors (album) · Label · 2019                ┃│ Feeling Good (album) · Label · 2019            │
                  │ ┃ played 2:50                                    ┃│ played 3:50                                    │
                  │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛╰────────────────────────────────────────────────╯
@@ -18,7 +19,6 @@ AudD  ·  profile default
                  │ │                                                │
                  │ │                                                │
                  │ ╰────────────────────────────────────────────────╯
-                 │ 
                  │ 
                  │ 
                  │ 

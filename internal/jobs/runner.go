@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/AudDMusic/audd-cli/internal/api"
 	"io"
 	"os"
 	"os/signal"
@@ -158,6 +159,9 @@ type runner struct {
 	used     int
 	reserved int
 	unknown  int
+	// maybe are the requests of this run that reached AudD and failed: they
+	// may or may not be billed.
+	maybe    int
 	stopErr  error
 	stopCh   chan struct{}
 	lease    *Lease
@@ -225,7 +229,12 @@ func (r *runner) run(ctx context.Context) (app.BatchSummary, error) {
 		for i, it := range r.items {
 			inputs[i] = it.Input
 		}
-		job, err := r.st.Create(commandKey(inputs), inputs, r.p.Map())
+		params := r.p.Map()
+		if len(r.opts.CommandLine) > 0 {
+			b, _ := json.Marshal(r.opts.CommandLine)
+			params[CommandLineKey] = string(b)
+		}
+		job, err := r.st.Create(commandKey(inputs), inputs, params)
 		if err != nil {
 			return app.BatchSummary{}, err
 		}
@@ -536,16 +545,20 @@ func (r *runner) refund(res reservation) {
 
 // charge records what a call that reached the API used, on the item and in
 // the run's totals.
-func (r *runner) charge(it *Item, res reservation) {
+func (r *runner) charge(it *Item, res reservation, times int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	n := res.n * max(1, times)
+	// The budget (--max-requests) counts the retries too: only one
+	// request was reserved for them.
+	r.spent += n - res.n
 	switch {
 	case res.exact:
-		it.Requests = res.n
-		r.used += res.n
+		it.Requests += n
+		r.used += n
 	case res.limit != nil:
-		it.RequestsReserved = res.n
-		r.reserved += res.n
+		it.RequestsReserved += n
+		r.reserved += n
 	default:
 		it.RequestsUnknown = true
 		r.unknown++
@@ -588,7 +601,9 @@ func (r *runner) budgetStop() error {
 func (r *runner) process(runCtx, ctx context.Context, i int) {
 	it := r.items[i]
 	it.Err, it.ErrCode, it.APICode, it.SafeRetry, it.Cached, it.Result = "", "", 0, false, false, nil
-	it.Requests, it.RequestsReserved, it.RequestsUnknown, it.BudgetLimit = 0, 0, false, 0
+	// The requests of earlier attempts (a retry) stay counted: each one
+	// reached AudD.
+	it.BudgetLimit = 0
 
 	if res, ok := r.cached[i]; ok {
 		it.State, it.Result, it.Cached = StateDone, res, true
@@ -645,13 +660,22 @@ func (r *runner) process(runCtx, ctx context.Context, i int) {
 		return
 	}
 	for attempt := 0; ; attempt++ {
-		result, err := Recognize(ctx, r.a, it.Input, p)
+		// Every HTTP request that reaches AudD is counted, the SDK's own
+		// retries (a 502, say) included.
+		var sent atomic.Int64
+		result, err := Recognize(api.CountSent(ctx, &sent), r.a, it.Input, p)
+		times := max(1, int(sent.Load()))
 		if err == nil {
 			it.State, it.Result = StateDone, result
 			if budgetLimited {
 				it.BudgetLimit = *res.limit
 			}
-			r.charge(&it, res)
+			r.charge(&it, res, times)
+			if times > 1 {
+				r.mu.Lock()
+				r.maybe += res.n * (times - 1) // the failed tries before
+				r.mu.Unlock()
+			}
 			// --no-cache skips the cache read only: fresh results are
 			// still recorded (as single recognition does), so they show in
 			// the explorer's Recent tab and serve later runs.
@@ -689,7 +713,11 @@ func (r *runner) process(runCtx, ctx context.Context, i int) {
 		if f.safe {
 			r.refund(res)
 		} else {
-			r.charge(&it, res)
+			// It reached AudD and failed: it may be billed.
+			r.charge(&it, res, times)
+			r.mu.Lock()
+			r.maybe += res.n * times
+			r.mu.Unlock()
 		}
 		r.fail(&it, f)
 		return
@@ -766,9 +794,12 @@ func (r *runner) finish(ctx context.Context, status string) (app.BatchSummary, e
 		})
 	}
 	if a.Out.IsHuman() || a.Out.Format() == output.FormatCSV {
-		used := RequestsUsed(sum.RequestsSpent, sum.RequestsReserved, unknown) + " in this run"
+		r.mu.Lock()
+		maybe := r.maybe
+		r.mu.Unlock()
+		used := RequestsSent(sum.RequestsSpent, sum.RequestsReserved, unknown, maybe) + " in this run"
 		if job.Requests != sum.RequestsSpent || job.RequestsReserved != sum.RequestsReserved || job.RequestsUnknownFiles != unknown {
-			used += " (" + RequestsUsed(job.Requests, job.RequestsReserved, job.RequestsUnknownFiles) + " in the whole job)"
+			used += " (" + RequestsSent(job.Requests, job.RequestsReserved, job.RequestsUnknownFiles, failedRequests(r.items)) + " in the whole job)"
 		}
 		a.Out.Info("Job %s: %d recognized, %d no match, %d failed, %d cached; %s.",
 			job.ID, sum.Recognized, sum.NoMatch, sum.Failed, sum.Cached, used)
@@ -896,4 +927,16 @@ func RetryLine(items []Item) string {
 		return line + ", in a way a retry does not fix (" + firstCant(items) + ")"
 	}
 	return fmt.Sprintf("%s: %d can be retried, %d can't (%s)", line, can, cant, firstCant(items))
+}
+
+// failedRequests counts the requests of failed files that reached AudD
+// (they may be billed).
+func failedRequests(items []Item) int {
+	n := 0
+	for _, it := range items {
+		if it.State == StateFailed {
+			n += it.Requests
+		}
+	}
+	return n
 }

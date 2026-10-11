@@ -18,7 +18,7 @@ AudD  ·  profile default
                  │      In Recognize, set Source to Microphone to record a few
                  │      seconds and identify the song.
  [ Commands ]    │      $ audd listen
- [ Keys ] q quit │ 
+ [ Keys ] q quit │ ↓ 13 more lines
 
 ←/→ tabs  ↓ open  esc back  ? keys
 $ audd login --device                                                     y copy

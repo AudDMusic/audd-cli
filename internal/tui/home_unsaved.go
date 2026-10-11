@@ -14,7 +14,7 @@ func (s *recognizeSection) unsaved() string {
 
 func (s *streamsSection) unsaved() string {
 	switch {
-	case s.adding && (s.add.value("url") != ""):
+	case s.add.value("url") != "": // kept, also with the form closed
 		return "The stream you were adding"
 	case s.page == 1 && s.callbackUnsaved():
 		return "Your change to the callback URL"

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -142,7 +143,9 @@ func fmtDuration(d time.Duration) string {
 }
 
 func gapLine(g streamstore.Gap) string {
-	return fmt.Sprintf("not recorded %s – %s (%s)", g.From.Local().Format("2006-01-02 15:04"), g.To.Local().Format("2006-01-02 15:04"), fmtDuration(g.To.Sub(g.From)))
+	// Short, so both times fit at 80 columns: "not recorded Oct 9 13:00 –
+	// 14:30 (1h 30m)".
+	return fmt.Sprintf("not recorded %s (%s)", strings.ReplaceAll(gapRange(g), "\u00a0", " "), fmtDuration(g.To.Sub(g.From)))
 }
 
 type historyDoc struct {
@@ -340,6 +343,17 @@ When some streams were not recorded for part of the range, the report says so
 				if !doc.Complete {
 					a.Out.Info("Note: %s, so these totals miss plays from that time. See: audd streams history", gapNote(gaps))
 				}
+				if f == output.FormatCSV {
+					// The first column is named for the grouping ("artist"),
+					// not "key".
+					rows := make([]json.RawMessage, len(doc.Rows))
+					for i, r := range doc.Rows {
+						k, _ := json.Marshal(r.Key)
+						byName, _ := json.Marshal(by)
+						rows[i] = json.RawMessage(fmt.Sprintf(`{%s:%s,"plays":%d,"airtime_seconds":%d,"streams":%d}`, byName, k, r.Plays, r.AirtimeSeconds, r.Stations))
+					}
+					return a.Out.Result(rows, nil)
+				}
 				return a.Out.Result(doc.Rows, nil)
 			}
 			return a.Out.Result(doc, func(w io.Writer) {
@@ -351,7 +365,7 @@ When some streams were not recorded for part of the range, the report says so
 					}
 				} else {
 					tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-					fmt.Fprintf(tw, "%s\tPLAYS\tAIRTIME\tSTATIONS\n", strings.ToUpper(by))
+					fmt.Fprintf(tw, "%s\tPLAYS\tAIRTIME\tSTREAMS\n", strings.ToUpper(by))
 					for _, r := range doc.Rows {
 						airtime := "-"
 						if r.AirtimeSeconds > 0 {

@@ -54,8 +54,17 @@ func (b *fileBrowser) load(first bool) tea.Cmd {
 	req, dir := b.req, b.dir
 	return func() tea.Msg {
 		if first {
-			if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-				dir = filepath.Dir(dir)
+			// The nearest folder that is there: a path being typed (or
+			// with a typo) opens where it would be.
+			for i := 0; i < 64; i++ {
+				if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+					break
+				}
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
 			}
 			if abs, err := filepath.Abs(dir); err == nil {
 				dir = abs

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math/big"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -55,13 +56,16 @@ type Job struct {
 	Command []string          `json:"-"` // "recognize" + every input; can be long
 	Inputs  string            `json:"inputs"`
 	Params  map[string]string `json:"params"`
-	Created time.Time         `json:"created"`
-	Updated time.Time         `json:"updated"`
-	Total   int               `json:"total"`
-	Done    int               `json:"done"` // finished items, matched or not
-	NoMatch int               `json:"no_match"`
-	Failed  int               `json:"failed"`
-	Pending int               `json:"pending"`
+	// CommandLine is the command as it was typed, when known (older jobs
+	// have only Command, every input listed).
+	CommandLine []string  `json:"command_line,omitempty"`
+	Created     time.Time `json:"created"`
+	Updated     time.Time `json:"updated"`
+	Total       int       `json:"total"`
+	Done        int       `json:"done"` // finished items, matched or not
+	NoMatch     int       `json:"no_match"`
+	Failed      int       `json:"failed"`
+	Pending     int       `json:"pending"`
 	// Remaining is what a plain resume runs: pending items plus failures
 	// that are safe to retry.
 	Remaining int `json:"remaining"`
@@ -170,6 +174,7 @@ func fingerprint(cmd []string, params map[string]string) string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	keys = slices.DeleteFunc(keys, func(k string) bool { return k == CommandLineKey }) // how it was typed is not what it does
 	h := sha256.New()
 	enc := json.NewEncoder(h)
 	_ = enc.Encode(cmd)
@@ -324,6 +329,7 @@ GROUP BY j.id ORDER BY j.created DESC, j.id`, args...)
 		_ = json.Unmarshal([]byte(cmd), &j.Command)
 		j.Inputs = describeInputs(j.Command)
 		_ = json.Unmarshal([]byte(params), &j.Params)
+		j.CommandLine = commandLine(j.Params)
 		j.Created, j.Updated = time.UnixMilli(created), time.UnixMilli(updated)
 		j.Remaining = j.Pending + safeFailed
 		j.Status = deriveStatus(j.Status, now.Sub(time.UnixMilli(heartbeat)) > staleAfter, j.Pending, j.Remaining, j.Failed)
@@ -590,4 +596,15 @@ func describeInputs(cmd []string) string {
 		return fmt.Sprintf("%s and %d more", first, n)
 	}
 	return first
+}
+
+// CommandLineKey is the params key that keeps the command as typed.
+const CommandLineKey = "command_line"
+
+func commandLine(params map[string]string) []string {
+	var out []string
+	if v := params[CommandLineKey]; v != "" {
+		_ = json.Unmarshal([]byte(v), &out)
+	}
+	return out
 }

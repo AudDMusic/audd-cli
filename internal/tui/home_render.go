@@ -231,9 +231,13 @@ func resultSong(m map[string]any) string {
 	switch m["status"] {
 	case "failed":
 		if e, ok := m["error"].(map[string]any); ok {
-			return "failed: " + str(e["message"])
+			msg := str(e["message"])
+			if strings.HasPrefix(strings.ToLower(msg), "recognition failed") {
+				return capFirst(msg)
+			}
+			return "Failed: " + msg
 		}
-		return "failed"
+		return "Failed"
 	case "no_match":
 		return "no match"
 	}

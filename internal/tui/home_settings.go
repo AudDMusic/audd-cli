@@ -237,7 +237,7 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
-			if s.panel.res.ok() {
+			if s.panel.res != nil && s.panel.res.ok() {
 				key := s.panel.args[2]
 				what := settingLabel(key) + " is back to its default"
 				switch {
@@ -279,13 +279,19 @@ func (s *settingsSection) update(msg tea.Msg) tea.Cmd {
 		case "enter":
 			v := s.edit.value()
 			switch {
+			case v == "" && s.edit.isText():
+				s.edit.problem = "Enter a value, or esc to cancel"
+				return nil
 			case v == s.orig:
 				s.edit = nil
 				return s.h.setFlash("No change")
-			case v == "":
-				return s.h.setFlash("Enter a value, or esc to cancel")
 			case s.edit.check() != "":
 				s.edit.problem = s.edit.check()
+				return nil
+			}
+			if p := s.invalid(v); p != "" {
+				// The same rule as audd config set; the text stays.
+				s.edit.problem = p
 				return nil
 			}
 			return s.askSave(v)
@@ -622,4 +628,28 @@ func sourceWords(src string) string {
 		return "from the environment"
 	}
 	return src
+}
+
+// invalid checks a value with the rules of audd config set ("" when it
+// is fine), in the page's words.
+func (s *settingsSection) invalid(v string) string {
+	r := s.selected()
+	if r == nil || r.key == "token" {
+		return ""
+	}
+	if r.key == "streams.background_recorder" {
+		v = map[string]string{"on": "true", "off": "false"}[v]
+	}
+	if r.key == "format" && v == "auto" {
+		return ""
+	}
+	if err := config.SetKey(&config.Profile{}, r.key, v); err != nil {
+		msg := output.AsError(err).Message
+		msg = strings.Replace(msg, r.key+" ", settingLabel(r.key)+" ", 1)
+		if i := strings.Index(msg, ", got "); i >= 0 {
+			msg = msg[:i] // the value is right there in the field
+		}
+		return capFirst(msg)
+	}
+	return ""
 }

@@ -323,10 +323,11 @@ func TestEditStreamURL(t *testing.T) {
 	press(h, key("ctrl+u"))
 	press(h, typeText("not a url")...)
 	press(h, key("enter"))
-	if h.confirm != nil || !strings.Contains(h.flash, "not a stream URL") {
+	// A bad URL is not sent: the text stays in the field to fix.
+	if h.confirm != nil || !strings.Contains(h.flash, "no spaces") || ex.purpose != inputSetURL || ex.input.Value() != "not a url" {
 		t.Fatalf("a bad URL:\n%s", h.View())
 	}
-	press(h, key("e"), key("ctrl+u"))
+	press(h, key("ctrl+u"))
 	press(h, typeText("https://radio.example/new.mp3")...)
 	// A stream's URL saves right away, with undo, no question.
 	press(h, key("enter"))

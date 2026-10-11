@@ -124,8 +124,9 @@ func (s *nowPlayingSection) view(w, h int) string {
 		n := len(s.np.stations)
 		return output.Plural(n, "stream") + ", no songs yet.\n" + styleLines(st.Dim, output.Wrap("Results appear as AudD recognizes songs (the recorder saves them). r refreshes.", w))
 	}
-	s.np.w, s.np.h = w, h
-	return s.np.View()
+	// Said on top, so it is not taken for listening to the microphone.
+	s.np.w, s.np.h = w, h-1
+	return st.Dim.Render("What's playing on your streams") + "\n" + s.np.View()
 }
 
 func (s *nowPlayingSection) keys() []keyHelp {
@@ -421,7 +422,7 @@ func (p *explorerPane) actionsFor() []button {
 			b = append(b, button{label: "Files", key: "", do: func() tea.Cmd { return ex.drill(l, r) }})
 			b = append(b, jobButtons(j, l)...)
 			if j != nil {
-				cmd := jobCommand(j.Command)
+				cmd := j.BatchCommand()
 				b = append(b, button{label: "Copy the batch command", key: "c", do: func() tea.Cmd { return p.h.copy(cmd, "the batch command: "+cmd) }})
 			}
 			return b
@@ -566,16 +567,32 @@ type paneUndo struct {
 	do   func() tea.Cmd
 }
 
-// validStreamURL accepts what audd streams add takes: a URL with a host,
-// or a twitch:, youtube:, or youtube-ch: name.
-func validStreamURL(u string) bool {
+// validStreamURL accepts what audd streams add takes: an http(s) URL
+// with a host, or a twitch:, youtube:, or youtube-ch: name.
+func validStreamURL(u string) bool { return streamURLProblem(u) == "" }
+
+// streamURLProblem says what is wrong with a stream URL ("" when it is
+// fine).
+func streamURLProblem(u string) string {
+	if strings.ContainsAny(u, " \t") {
+		return "A stream URL has no spaces: check the URL"
+	}
 	for _, pre := range []string{"twitch:", "youtube:", "youtube-ch:"} {
-		if strings.HasPrefix(u, pre) && len(u) > len(pre) {
-			return true
+		if strings.HasPrefix(u, pre) {
+			if len(u) > len(pre) {
+				return ""
+			}
+			return "Add the name after " + pre
 		}
 	}
 	scheme, rest, ok := strings.Cut(u, "://")
-	return ok && scheme != "" && rest != "" && !strings.ContainsAny(u, " \t")
+	switch {
+	case !ok || rest == "" || strings.HasPrefix(rest, "/"):
+		return "That is not a stream URL: use http(s)://…, twitch:<channel>, youtube:<video_id>, or youtube-ch:<channel_id>"
+	case scheme != "http" && scheme != "https":
+		return "Stream URLs start with http:// or https:// (or twitch:, youtube:, youtube-ch:)"
+	}
+	return ""
 }
 
 // askRemove asks before removing the selected stream, naming it and
@@ -967,6 +984,7 @@ func newStreamsSection(h *home) section {
 	url.required = true
 	url.need = "Enter the stream's URL"
 	url.placeholder = "https://…"
+	url.validate = streamURLProblem
 	id := &field{kind: fInt, name: "id", label: "ID", help: "A number you choose for the stream", required: true, input: newInput()}
 	id.need = "Choose a number for the stream"
 	id.placeholder = "e.g. 1"
@@ -978,6 +996,7 @@ func newStreamsSection(h *home) section {
 	cb.need = "Enter the callback URL, or use the placeholder"
 	cb.placeholder = "e.g. https://your-server.example/audd"
 	cb.nextOnEnter = true // on to the data boxes; Save is at the end
+	cb.validate = callbackURLProblem
 	cbFields := []*field{cb}
 	for _, p := range providers {
 		cbFields = append(cbFields, providerField(p.name, p.label, p.what))
@@ -1162,7 +1181,9 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		if m.err != nil {
 			return s.h.setFlash("Could not save the report: " + m.err.Error())
 		}
-		return s.h.setFlash("Saved the report to " + shortKeepName(m.path, 60))
+		// Open folder and Copy path, as after an export.
+		s.exportTo = m.path
+		return s.h.setFlash("Saved the report")
 	}
 	if mine, done := s.savePanel.handle(msg); mine {
 		if done {
@@ -1614,7 +1635,7 @@ func (s *streamsSection) view(w, h int) string {
 		case s.cbPanel.running && s.cbPanel.run.req.tag == "get":
 			b.WriteString(st.Dim.Render("Reading the callback URL…"))
 		case s.cbPanel.res != nil && s.cbPanel.res.err != nil:
-			b.WriteString(errorText(st, s.cbPanel.res.err, w))
+			b.WriteString(streamsErrorText(st, s.cbPanel.res.err, w))
 		case s.cbSet:
 			b.WriteString("Callback URL: " + st.Bold.Render(s.cbURL))
 		case s.cbPanel.res != nil:
@@ -1622,7 +1643,7 @@ func (s *streamsSection) view(w, h int) string {
 		}
 		b.WriteString("\n\n" + styleLines(st.Dim, output.Wrap("AudD sends (POSTs) every stream result to your account's callback URL. If you don't have a server, "+streams.EmptyCallbackURL+" accepts the results and drops them; the recorder still saves them.", w)))
 		if s.callbackUnsaved() {
-			b.WriteString("\n" + st.Warn.Render("Unsaved changes · Save saves them, Revert changes puts them back"))
+			b.WriteString("\n" + st.Warn.Render("Unsaved changes · Save them, or Revert changes"))
 		}
 		b.WriteString("\n\n" + s.formView(s.cbForm, w))
 		return bar + b.String()
@@ -1633,7 +1654,7 @@ func (s *streamsSection) view(w, h int) string {
 		case s.recPanel.running:
 			state = st.Dim.Render("Checking…")
 		case s.recPanel.res != nil && s.recPanel.res.err != nil:
-			state = errorText(st, s.recPanel.res.err, w)
+			state = streamsErrorText(st, s.recPanel.res.err, w)
 		case s.recPanel.res != nil:
 			r := recorderInfo(s.recPanel.res.stdout)
 			if r.Running {
@@ -1664,7 +1685,7 @@ func (s *streamsSection) view(w, h int) string {
 	case s.dataPanel.running:
 		out += "\n\n" + st.Dim.Render("Running…")
 	case s.dataPanel.res != nil && s.dataPanel.res.err != nil:
-		out += "\n\n" + errorText(st, s.dataPanel.res.err, w)
+		out += "\n\n" + streamsErrorText(st, s.dataPanel.res.err, w)
 	case s.dataPanel.res != nil && s.dataPanel.run.req.tag == "export":
 		n := strings.Count(strings.TrimSpace(s.dataPanel.res.stdout), "\n") + 1
 		if strings.TrimSpace(s.dataPanel.res.stdout) == "" {
@@ -1678,7 +1699,13 @@ func (s *streamsSection) view(w, h int) string {
 			out += "\n\n" + output.Wrap(fmt.Sprintf("Wrote %s to %s.", output.Plural(n, "play"), filepath.Base(s.exportTo)), w)
 		}
 	case s.dataPanel.res != nil:
-		out += "\n\n" + st.Bold.Render(s.dataRanTitle) + "\n" + s.dataPanel.view(w, max(1, h-used-2))
+		saved := ""
+		if s.exportTo != "" {
+			// The report saved: where, in full.
+			saved = "\n" + styleLines(st.Dim, output.Wrap("Saved to "+s.exportTo, w))
+			used += strings.Count(saved, "\n")
+		}
+		out += "\n\n" + st.Bold.Render(s.dataRanTitle) + saved + "\n" + s.dataPanel.view(w, max(1, h-used-2))
 	}
 	return out
 }
@@ -2253,4 +2280,26 @@ func (s *streamsSection) askStopRecorder() tea.Cmd {
 			return s.recPanel.start(runReq{args: []string{"streams", "recorder", "stop"}, format: "table"})
 		},
 	})
+}
+
+// callbackURLProblem says what is wrong with a callback URL ("" when it
+// is fine): AudD POSTs to an http(s) address.
+func callbackURLProblem(u string) string {
+	if strings.ContainsAny(u, " \t") {
+		return "A callback URL has no spaces: check the URL"
+	}
+	scheme, rest, ok := strings.Cut(u, "://")
+	if !ok || (scheme != "http" && scheme != "https") || rest == "" {
+		return "The callback URL is an http:// or https:// address"
+	}
+	return ""
+}
+
+// streamsErrorText is errorText for the Streams pages: without a token
+// it offers only the real token kinds (streams need your own).
+func streamsErrorText(st output.Styles, e *runError, w int) string {
+	if e != nil && (e.Code == "no_token" || e.Code == "token_rejected" || hintKind(e.Hint) == "token") {
+		return "Sign in or add a token to monitor streams.\n" + styleLines(st.Dim, output.Wrap(noTokenChoicesReal, w))
+	}
+	return errorText(st, e, w)
 }

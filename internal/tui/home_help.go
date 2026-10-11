@@ -149,8 +149,9 @@ var letterKeys = []keyHelp{
 }
 
 type helpSection struct {
-	h    *home
-	page int
+	startOff int // the Getting started page's scroll
+	h        *home
+	page     int
 
 	stepCur int
 
@@ -510,7 +511,9 @@ func (s *helpSection) view(w, h int) string {
 	var b strings.Builder
 	switch s.page {
 	case 0:
-		b.WriteString(st.Bold.Render("Getting started") + "\n\n")
+		// The steps scroll to keep the selected one in view.
+		lines := []string{st.Bold.Render("Getting started"), ""}
+		curFrom, curTo := 0, 0
 		for i, step := range gettingStarted {
 			title := fmt.Sprintf("%d. %s", i+1, step.title)
 			if s.stepDone(i) {
@@ -519,16 +522,26 @@ func (s *helpSection) view(w, h int) string {
 			item := s.h.listRow(title, i == s.stepCur) + "\n" +
 				styleLines(st.Dim, indent(output.Wrap(step.text, max(10, w-5)), "     ")) + "\n" +
 				"     " + st.Accent.Render(truncate("$ "+s.stepCommand(i), w-5))
-			b.WriteString(s.h.mark(item, func() tea.Cmd {
+			click := func() tea.Cmd {
 				if s.stepCur == i {
 					return s.runStep(i)
 				}
 				s.stepCur = i
 				return nil
-			}) + "\n\n")
+			}
+			if i == s.stepCur {
+				curFrom = len(lines)
+			}
+			for _, l := range strings.Split(item, "\n") {
+				lines = append(lines, s.h.mark(l, click))
+			}
+			if i == s.stepCur {
+				curTo = len(lines)
+			}
+			lines = append(lines, "")
 		}
-		b.WriteString(styleLines(st.Dim, output.Wrap("Enter goes to the step. Every screen shows the command it runs at the bottom; y copies it.", w)))
-		return bar + b.String()
+		lines = append(lines, strings.Split(styleLines(st.Dim, output.Wrap("Enter goes to the step. Every page shows the command it runs at the bottom; y copies it.", w)), "\n")...)
+		return bar + windowLines(lines, curFrom, curTo, h, &s.startOff, st)
 	case 1:
 		outlineW := 0
 		if w >= 100 {
@@ -757,4 +770,37 @@ func (s *helpSection) leftExits() bool {
 		return s.picker.filter.Position() == 0
 	}
 	return true
+}
+
+// windowLines shows h rows of lines, scrolled (*off) so the rows from
+// to to are in view, with "↑ N more" / "↓ N more" where rows are hidden.
+func windowLines(lines []string, from, to, h int, off *int, st output.Styles) string {
+	if len(lines) <= h || h < 4 {
+		return strings.Join(lines, "\n")
+	}
+	room := h - 2 // a marker row at the top and the bottom
+	if from < *off {
+		*off = from
+	}
+	if to > *off+room {
+		*off = to - room
+	}
+	*off = max(0, min(*off, len(lines)-room))
+	var out []string
+	if *off > 0 {
+		out = append(out, st.Dim.Render(moreWords(*off, "↑")))
+	} else {
+		room++ // no marker on top: one more row of the page
+	}
+	end := min(len(lines), *off+room)
+	out = append(out, lines[*off:end]...)
+	if rest := len(lines) - end; rest > 0 {
+		out = append(out, st.Dim.Render(moreWords(rest, "↓")))
+	}
+	return strings.Join(out, "\n")
+}
+
+// moreWords is "↓ 1 more line" / "↑ 12 more lines".
+func moreWords(n int, arrow string) string {
+	return arrow + " " + output.Plural(n, "more line")
 }

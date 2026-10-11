@@ -326,6 +326,12 @@ func (m *explorer) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		val := strings.TrimSpace(m.input.Value())
 		p := m.purpose
+		if (p == inputSetURL || p == inputAddURL) && val != "" {
+			if problem := streamURLProblem(val); problem != "" {
+				// Not sent: the text stays, to fix it.
+				return m, m.setFlash(problem)
+			}
+		}
 		m.purpose = inputNone
 		m.input.Blur()
 		return m, m.submit(p, val)

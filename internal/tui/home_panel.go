@@ -299,9 +299,9 @@ func hintKind(hint string) string {
 func humanHint(hint string) string {
 	switch hintKind(hint) {
 	case "signin":
-		return "Sign in first: the Sign in button is below."
+		return "Sign in first: Account › Sign in."
 	case "token":
-		return "Set an API token first: the buttons below offer the ways."
+		return "Set an API token first: Account › API token, or sign in."
 	}
 	switch {
 	case hint == "":

@@ -33,7 +33,7 @@ func fakeExplorerData(api *fakeStreamsAPI) ExplorerData {
 		{Source: "/music/mix.mp3", At: testNow.Add(-3 * time.Hour), Result: json.RawMessage(`[{"offset":"00:00","songs":[{"artist":"Daft Punk","title":"One More Time","timecode":"00:05"}]},{"offset":"00:12","songs":[{"artist":"Daft Punk","title":"Aerodynamic","timecode":"00:01"}]}]`)},
 	}
 	jobs := []JobRow{
-		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, RetryableFailed: 1, Status: "partial"},
+		{ID: "k3x9", Command: []string{"audd", "recognize", "./music", "--max-files", "10"}, CommandLine: []string{"recognize", "./music", "--max-files", "10"}, Created: testNow.Add(-30 * time.Minute), Total: 3, Done: 2, Failed: 1, RetryableFailed: 1, Status: "partial"},
 	}
 	items := []JobItem{
 		{Index: 0, Input: "/music/a.mp3", State: "done", Result: json.RawMessage(`{"artist":"Massive Attack","title":"Teardrop","song_link":"https://lis.tn/Teardrop"}`)},

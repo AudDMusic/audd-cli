@@ -3,7 +3,12 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/AudDMusic/audd-cli/internal/paths"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -547,7 +552,33 @@ func (h *home) takeOSC(s string) tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return clearHomeOSCMsg{} })
 }
 
-func (h *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (h *home) Update(msg tea.Msg) (m tea.Model, cmd tea.Cmd) {
+	// A bug never closes the window silently: it is said and logged, and
+	// the session goes on.
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(r)
+			h.flash = fmt.Sprintf("Something went wrong: %v (your data is safe; details in %s)", r, panicLog())
+			m, cmd = h, nil
+		}
+	}()
+	return h.update(msg)
+}
+
+// panicLog is the file where panics of interactive mode are written.
+func panicLog() string { return filepath.Join(paths.DataDir(), "ui-errors.log") }
+
+func logPanic(r any) {
+	_ = os.MkdirAll(filepath.Dir(panicLog()), 0o755)
+	f, err := os.OpenFile(panicLog(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s panic: %v\n%s\n", time.Now().Format(time.RFC3339), r, debug.Stack())
+}
+
+func (h *home) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h.w, h.h = msg.Width, msg.Height

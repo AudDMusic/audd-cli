@@ -314,7 +314,7 @@ func TestUIRecognizeErrorsShow(t *testing.T) {
 		s.typeText(filepath.Join(e.dir, "nope.mp3"))
 		s.press(kEnter)
 		s.wait("o such file or folder")
-		s.wait("nope.mp3: check")
+		s.wait("check")
 	})
 	t.Run("too many files", func(t *testing.T) {
 		e := uiEnv(t)

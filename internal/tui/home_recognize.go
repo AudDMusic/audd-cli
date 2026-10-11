@@ -544,7 +544,8 @@ func (s *recognizeSection) check(forRun bool) (string, string) {
 		// The path as typed, its middle shortened when long (the file
 		// name, where typos are, stays).
 		in := f.value("input")
-		msg := capFirst(strings.Replace(e.Message, expandHome(in), shortKeepName(in, 50), 1))
+		// The path as typed, in full (wrapped, never cut): the typo shows.
+		msg := capFirst(strings.Replace(e.Message, expandHome(in), in, 1))
 		if e.Hint != "" {
 			msg += ": " + e.Hint
 		}

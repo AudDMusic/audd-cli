@@ -701,7 +701,7 @@ func TestStreamsReport(t *testing.T) {
 		t.Fatalf("table:\n%s", r.Stdout)
 	}
 	r = runStreams(t, "streams", "report", "--by", "song", "--format", "csv")
-	if !strings.HasPrefix(r.Stdout, "key,plays,airtime_seconds,stations\nA — One,2,400,2\n") {
+	if !strings.HasPrefix(r.Stdout, "song,plays,airtime_seconds,streams\nA — One,2,400,2\n") {
 		t.Fatalf("csv:\n%s", r.Stdout)
 	}
 	if r := runStreams(t, "streams", "report", "--by", "genre"); r.Code != output.ExitUsage {

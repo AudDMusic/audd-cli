@@ -857,9 +857,9 @@ func (s *scrollView) view(w, h int) string {
 		var ind string
 		switch below := len(s.lines) - end; {
 		case below > 0 && s.off > 0:
-			ind = fmt.Sprintf("↑↓ %d more lines below", below)
+			ind = "↑↓ " + output.Plural(below, "more line") + " below"
 		case below > 0:
-			ind = fmt.Sprintf("↓ %d more lines below", below)
+			ind = "↓ " + output.Plural(below, "more line") + " below"
 		default:
 			ind = "End · ↑ back to the top"
 		}

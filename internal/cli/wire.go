@@ -251,7 +251,7 @@ func newExplorerData(a *app.App) (tui.ExplorerData, error) {
 		}
 		out := make([]tui.JobRow, 0, len(list))
 		for _, j := range list {
-			row := tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Pending: j.Pending, Inputs: j.Inputs, Status: j.Status}
+			row := tui.JobRow{ID: j.ID, Command: j.Command, Created: j.Created, Total: j.Total, Done: j.Done, Failed: j.Failed, Pending: j.Pending, Inputs: j.Inputs, CommandLine: j.CommandLine, Status: j.Status}
 			if j.Failed > 0 {
 				// Which failures a retry can fix, and why the others failed.
 				if items, err := st.Items(j.ID); err == nil {

@@ -31,6 +31,8 @@ type JobRow struct {
 	Failed  int       `json:"failed"`
 	Pending int       `json:"pending"` // not sent yet: what Resume sends
 	Inputs  string    `json:"inputs"`  // what was recognized, in short: "music", "a.mp3 and 2 more"
+	// CommandLine is the command as typed (empty for older jobs).
+	CommandLine []string `json:"command_line,omitempty"`
 	// RetryableFailed counts the failures a retry can fix (network,
 	// server, rate limit, quota); FailReason is why one of the others
 	// failed (bad audio, an unsupported file).
@@ -118,4 +120,14 @@ func RetryHelps(code string) bool { return jobs.RetryHelps(code) }
 type JobFailure struct {
 	File, Reason string
 	CanRetry     bool
+}
+
+// BatchCommand is the job's command to show and copy: as it was typed,
+// or, for a job that only has the expanded list of files, the command
+// that continues it.
+func (j JobRow) BatchCommand() string {
+	if len(j.CommandLine) > 0 {
+		return displayCommand(j.CommandLine)
+	}
+	return "audd jobs resume " + j.ID
 }

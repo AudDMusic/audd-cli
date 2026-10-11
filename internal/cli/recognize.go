@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/spf13/pflag"
 	"io"
 	"os"
 	"slices"
@@ -243,6 +244,7 @@ func runRecognize(cmd *cobra.Command, a *app.App, f *recognizeFlags, args []stri
 			Return: ret, EnterpriseOpts: eopts, Concurrency: f.concurrency,
 			DryRun: f.dryRun, NoCache: f.noCache, Yes: a.Flags.Yes,
 			Resume: f.resume, New: f.startNew,
+			CommandLine: typedCommand(cmd, args),
 		})
 		if err != nil {
 			return err
@@ -724,4 +726,29 @@ func humanBytes(n int64) string {
 		return fmt.Sprintf("%.1f MB", float64(n)/mb)
 	}
 	return fmt.Sprintf("%d KB", (n+1023)/1024)
+}
+
+// typedCommand is the command as it was typed: the inputs as given (a
+// folder or a glob, not every file found) and the flags set, without
+// the token or a run's own choices (--yes, --resume, --new, --dry-run).
+func typedCommand(cmd *cobra.Command, args []string) []string {
+	out := append([]string{"recognize"}, args...)
+	skip := map[string]bool{"token": true, "yes": true, "resume": true, "new": true, "dry-run": true, "browse": true}
+	cmd.Flags().Visit(func(fl *pflag.Flag) {
+		if skip[fl.Name] {
+			return
+		}
+		if fl.Value.Type() == "bool" {
+			if fl.Value.String() == "true" {
+				out = append(out, "--"+fl.Name)
+			}
+			return
+		}
+		v := fl.Value.String()
+		if strings.HasSuffix(fl.Value.Type(), "Slice") {
+			v = strings.Trim(v, "[]") // a list as typed: a,b
+		}
+		out = append(out, "--"+fl.Name, v)
+	})
+	return out
 }
