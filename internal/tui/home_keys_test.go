@@ -281,7 +281,7 @@ func TestExportFileName(t *testing.T) {
 	s.dataForm.focusName("file")
 	press(h, key("ctrl+u"))
 	press(h, typeText("plays.csv")...)
-	if s.dataForm.value("file") != "plays.csv" || !strings.HasSuffix(h.command(), filepath.Join(dir, "plays.csv")) {
+	if s.dataForm.value("file") != "plays.csv" || !strings.HasSuffix(h.command(), shellQuote(filepath.Join(dir, "plays.csv"))) {
 		t.Fatalf("file name: %q, command %s", s.dataForm.value("file"), h.command())
 	}
 	os.WriteFile(filepath.Join(dir, "plays.csv"), []byte("old"), 0o644)

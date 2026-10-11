@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -105,11 +106,15 @@ func TestTildeExpands(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	h := navHome(t, homeOpts{start: "recognize"})
 	press(h, typeText("~/song.mp3")...)
-	if c := h.command(); c != "audd recognize "+filepath.Join(home, "song.mp3") {
-		t.Fatalf("command: %q", c)
+	if c, want := h.command(), displayCommand([]string{"recognize", filepath.Join(home, "song.mp3")}); c != want {
+		t.Fatalf("command: %q, want %q", c, want)
 	}
-	if got := expandHome("~root/x.mp3"); runtime.GOOS != "windows" && got != "/root/x.mp3" {
-		t.Fatalf("~root: %q", got)
+	if runtime.GOOS != "windows" {
+		if u, err := user.Lookup("root"); err == nil {
+			if got, want := expandHome("~root/x.mp3"), filepath.Join(u.HomeDir, "x.mp3"); got != want {
+				t.Fatalf("~root: %q, want %q", got, want)
+			}
+		}
 	}
 }
 

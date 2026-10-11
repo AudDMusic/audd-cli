@@ -18,6 +18,7 @@ import (
 	"github.com/AudDMusic/audd-cli/internal/account"
 	"github.com/AudDMusic/audd-cli/internal/app"
 	"github.com/AudDMusic/audd-cli/internal/config"
+	"github.com/AudDMusic/audd-cli/internal/oauth"
 	"github.com/AudDMusic/audd-cli/internal/output"
 	"github.com/AudDMusic/audd-cli/internal/secrets"
 	"github.com/AudDMusic/audd-cli/internal/testutil"
@@ -157,6 +158,11 @@ type homeOpts struct {
 func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	t.Helper()
 	oldRun, oldApp := HomeRun, HomeApp
+	// The sign-in method depends on the machine (browser on a desktop,
+	// a code elsewhere); tests pin it so snapshots match everywhere.
+	oldMethod := signinMethod
+	signinMethod = func() string { return string(oauth.MethodDevice) }
+	t.Cleanup(func() { signinMethod = oldMethod })
 	HomeRun = f.run
 	t.Cleanup(func() { HomeRun, HomeApp = oldRun, oldApp })
 	oldZone := localZone

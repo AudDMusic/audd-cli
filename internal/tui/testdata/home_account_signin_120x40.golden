@@ -37,4 +37,4 @@ AudD  ·  profile default
  [ Keys ] q quit │ 
 
 ←/→ tabs  ↓ open  esc back  ? keys
-$ audd login --browser                                                                                            y copy
+$ audd login --device                                                                                             y copy

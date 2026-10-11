@@ -37,4 +37,4 @@ AudD  ·  profile default  ·  signed out
  [ Keys ] esc ←  │ 
 
 ↑/↓ choose  enter go  ←/esc back  ? keys
-$ audd login --browser                                                                                            y copy
+$ audd login --device                                                                                             y copy
