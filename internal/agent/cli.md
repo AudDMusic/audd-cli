@@ -107,8 +107,9 @@ form's last text field runs the form; in Add a stream, Enter in the ID field
 adds the stream, and the box below it is optional. After an error, the
 cursor is back in the field the error is about.
 
-Saved values (a setting, the callback URL, a stream's URL, the token) change
-only after Enter or Edit; Esc cancels and puts the old value back. Settings
+On a saved value (a setting, the callback URL, a stream's URL), typing
+replaces it as if it was all selected, Enter or Edit edits it, and Esc puts
+the old value back; on a text field letters always type. Settings
 of audd and a stream's URL save right away; `u` (or ctrl+z) undoes the last
 change until you make another or leave the section. Spending requests
 (including resuming a job), removing a stream, signing out, and replacing the
