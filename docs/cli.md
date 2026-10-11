@@ -198,7 +198,10 @@ failures a retry can fix (connection, server, rate limit, quota). Files that
 fail the same way again (audio that cannot be decoded, an unsupported format)
 are sent again only with `--retry-all-failed`. `audd jobs show` and the
 summary say which failures can be retried: "2 files failed: 1 can be retried,
-1 can't (corrupt.mp3: ...)".
+1 can't (corrupt.mp3: ...)". A job keeps the command as you typed it (the
+folder or glob, not every file found), and summaries count every request
+that reached AudD, retries included; when some of them failed, the summary
+says "N requests sent (up to N billed)".
 
 Running the same batch again while its job is unfinished offers to resume it.
 Without a terminal it stops with exit 6 (`resume_available`): pass `--resume`
