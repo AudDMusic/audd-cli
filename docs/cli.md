@@ -111,10 +111,14 @@ of audd and a stream's URL save right away; `u` (or ctrl+z) undoes the last
 change until you make another or leave the section. Spending requests
 (including resuming a job), removing a stream, signing out, and replacing the
 token or the callback URL ask first in a dialog with a button named for the
-action. Every dialog opens on Cancel, so Enter twice never spends anything;
-`y` confirms and `n` or Esc cancels. Without an API token, buttons that need
-one are dimmed and offer the test token, pasting a token, or signing in. `q`
-asks first while a command is running.
+action. Every dialog opens on Cancel, so Enter twice never spends anything:
+move to the action with left, right, or Tab and press Enter (or click it);
+`n` or Esc cancels. `y` copies the command on the bottom line everywhere,
+in a dialog too. Without an API token, buttons that need one are dimmed and
+offer the ways to get one (streams need your own token, not the public test
+token). `q` quits right away from the menu or a tab bar; on a page with
+something typed and not saved, or while a command runs, it asks first and
+says what would be lost (ctrl+c twice quits). Paths can start with `~`.
 
 The mouse works too: click a section, a tab, a row, a field, or a button, and
 scroll with the wheel. To select text with the mouse, hold Shift (Option in
