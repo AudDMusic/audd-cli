@@ -109,6 +109,9 @@ func (m *explorer) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		if l.cursor < n-1 {
 			l.cursor++
+		} else if cmd := m.loadMore(l); cmd != nil {
+			// At the end of the plays read so far: older ones.
+			return m, tea.Batch(cmd, m.setFlash("Loading older plays…"))
 		}
 	case "up", "k":
 		if l.cursor > 0 {
@@ -300,6 +303,8 @@ func (m *explorer) startInput(p inputPurpose, prompt, value string) tea.Cmd {
 	m.purpose = p
 	m.input.Prompt = prompt
 	m.input.SetValue(value)
+	// A value to change is as if all selected: typing replaces it.
+	m.inputFresh = value != ""
 	m.input.CursorEnd()
 	return m.input.Focus()
 }
@@ -335,6 +340,15 @@ func (m *explorer) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.purpose = inputNone
 		m.input.Blur()
 		return m, m.submit(p, val)
+	}
+	if m.inputFresh {
+		m.inputFresh = false
+		if k.Type == tea.KeyRunes || k.Type == tea.KeySpace || k.String() == "backspace" {
+			m.input.SetValue("")
+			if k.String() == "backspace" {
+				return m, nil
+			}
+		}
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(k)

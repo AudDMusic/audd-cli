@@ -34,7 +34,7 @@ AudD  ·  profile default
                  │ 
                  │ 
  [ Commands ]    │ 
- [ Keys ] q quit │ 
+ [ Keys ] esc ←  │ 
 
 type filter  ↑/↓ move  enter open  esc close  ctrl+u clear
 $ audd recognize                                                                                                  y copy

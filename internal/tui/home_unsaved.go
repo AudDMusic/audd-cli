@@ -161,3 +161,26 @@ func (s *helpSection) pageEntered() {
 		s.stepCur, s.startOff = 0, 0
 	}
 }
+
+// onText: the cursor is on a text field of the page's form (see texter).
+func (s *recognizeSection) onText() bool {
+	return s.phase == "form" && s.browser == nil && s.form.onText()
+}
+
+func (s *streamsSection) onText() bool {
+	switch s.page {
+	case 0:
+		return s.adding && s.add.onText()
+	case 1:
+		return s.cbForm.onText()
+	case 3:
+		return s.dataForm.onText()
+	}
+	return false
+}
+
+func (s *signinSection) onText() bool { return s.step == "paste" && s.paste.onText() }
+
+func (s *accountSection) onText() bool {
+	return s.tokPasting && s.tokForm.onText() || s.buying && s.buyIn.onText()
+}

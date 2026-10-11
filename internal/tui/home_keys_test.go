@@ -203,7 +203,7 @@ func TestTestTokenAndSignIn(t *testing.T) {
 		t.Fatalf("command with the test token: %q", c)
 	}
 	drain(h, h.navigate("settings"), 0)
-	if !strings.Contains(h.View(), "test token for this session") || strings.Contains(h.View(), "--token flag") {
+	if !strings.Contains(h.View(), "Using the public test token for this session (not saved)") || strings.Contains(h.View(), "--token flag") {
 		t.Fatalf("token source:\n%s", h.View())
 	}
 }

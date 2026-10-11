@@ -680,6 +680,11 @@ func (h *home) withSession(c string) string {
 	if !h.testToken || !strings.HasPrefix(c, "audd ") || strings.Contains(c, "--token") {
 		return c
 	}
+	for _, p := range []string{"audd login", "audd logout", "audd auth", "audd config", "audd token", "audd ui"} {
+		if strings.HasPrefix(c, p) {
+			return c // these do not use the token they would run with
+		}
+	}
 	if i := strings.Index(c, " > "); i >= 0 {
 		return c[:i] + " --token test" + c[i:]
 	}

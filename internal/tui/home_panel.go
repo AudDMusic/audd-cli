@@ -309,6 +309,12 @@ func humanHint(hint string) string {
 	case strings.Contains(hint, "jobs resume") || strings.Contains(hint, "jobs show"):
 		return "" // the page's buttons do it (Retry, the job's files)
 	case strings.HasPrefix(hint, "audd "):
+		// A command this app has a page for: the page.
+		for cmd, page := range hintPages {
+			if strings.HasPrefix(hint, cmd) {
+				return "See " + page + "."
+			}
+		}
 		return "In a terminal: " + hint
 	}
 	return capFirst(strings.TrimSuffix(hint, ".")) + "."
@@ -330,4 +336,19 @@ func (h *home) hintButtons(e *runError, next func() tea.Cmd, test bool) []button
 		return h.tokenWays(test, next)
 	}
 	return nil
+}
+
+// hintPages are the pages that do what a hint's command does.
+var hintPages = map[string]string{
+	"audd jobs list":        "Recognitions › Jobs",
+	"audd streams list":     "Streams",
+	"audd streams history":  "Streams › History & reports",
+	"audd streams report":   "Streams › History & reports",
+	"audd usage":            "Account › Usage",
+	"audd billing":          "Account › Billing",
+	"audd streams add":      "Streams › Add a stream",
+	"audd streams callback": "Streams › Callback",
+	"audd streams recorder": "Streams › Recorder",
+	"audd config":           "Settings",
+	"audd token":            "Account › API token",
 }

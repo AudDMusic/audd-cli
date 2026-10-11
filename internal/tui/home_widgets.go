@@ -484,6 +484,13 @@ func (f *form) capturing() bool {
 	return c != nil && c.isText() && !c.locked
 }
 
+// onText reports whether the cursor is on a text field (typing in it or
+// not): a printable key there starts typing in it.
+func (f *form) onText() bool {
+	c := f.current()
+	return c != nil && c.isText()
+}
+
 // buttonAt reports whether visible field i is a button.
 func (f *form) buttonAt(i int) bool {
 	v := f.visible()
@@ -555,11 +562,23 @@ func (f *form) update(k tea.KeyMsg) (string, tea.Cmd) {
 			c.input.CursorEnd()
 			return "", c.input.Focus()
 		}
-		if f.h != nil && (k.Type == tea.KeyRunes || s == "backspace") {
-			if !c.lockable {
-				return "", f.h.setFlash("Press enter to type in " + c.label)
+		if k.Type == tea.KeyRunes || k.Type == tea.KeySpace || s == "backspace" {
+			// Typing on the field types in it. A saved value is replaced
+			// by what is typed (as if it was all selected); esc puts it
+			// back. A new form's field goes on where it was.
+			c.locked = false
+			if c.lockable {
+				c.orig = c.input.Value()
+				c.input.SetValue("")
+				if s == "backspace" {
+					return "", c.input.Focus()
+				}
 			}
-			return "", f.h.setFlash("Press enter or e to edit " + c.label)
+			c.input.CursorEnd()
+			cmd := c.input.Focus()
+			var cmd2 tea.Cmd
+			c.input, cmd2 = c.input.Update(k)
+			return "", tea.Batch(cmd, cmd2)
 		}
 		return "", nil
 	}

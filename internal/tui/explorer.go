@@ -229,6 +229,10 @@ type level struct {
 	dscroll int
 	loading bool
 	err     error
+	// limit is how many plays a "plays" level reads; more says there may
+	// be older ones (the last read was full): ↓ at the end reads more.
+	limit int
+	more  bool
 }
 
 func (l *level) visible() []row {
@@ -345,6 +349,9 @@ type explorer struct {
 	// shows only the allowed tabs, never quits, and leaves cover art,
 	// the clipboard, and help to the screen around it.
 	embedded bool
+	// inputFresh: the input holds a value nothing was typed over yet
+	// (typing replaces it).
+	inputFresh bool
 	// signedOut, when set, says whether there is no API token (the empty
 	// streams list then says how to get one).
 	signedOut func() bool
@@ -471,6 +478,7 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 	if l == nil || l.kind == "matches" {
 		return nil // made from its parent's row, nothing to load
 	}
+	limit := l.playLimit()
 	kind, arg, embedded := l.kind, l.arg, m.embedded
 	return func() tea.Msg {
 		msg := rowsMsg{tab: t, kind: kind, arg: arg}
@@ -520,7 +528,7 @@ func (m *explorer) load(t tabID, l *level) tea.Cmd {
 				break
 			}
 			id, _ := strconv.Atoi(arg)
-			plays, err := d.Feed.Plays(ctx, id, historyLimit)
+			plays, err := d.Feed.Plays(ctx, id, limit)
 			msg.rows, msg.err = playRows(plays, now()), err
 		}
 		return msg
@@ -553,6 +561,9 @@ func (m *explorer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				l.loading, l.err = false, msg.err
 			} else {
 				l.setRows(msg.rows)
+				if l.kind == "plays" {
+					l.more = len(msg.rows) >= l.playLimit()
+				}
 			}
 		}
 		return m, nil
@@ -623,4 +634,25 @@ func (m *explorer) switchTab(t tabID) tea.Cmd {
 		return m.load(t, m.top())
 	}
 	return nil
+}
+
+// playPage is how many more plays ↓ at the end reads.
+const playPage = 50
+
+// playLimit is how many plays the level reads now.
+func (l *level) playLimit() int {
+	if l.limit <= 0 {
+		return playPage
+	}
+	return l.limit
+}
+
+// loadMore reads the next page of older plays, when there may be more.
+func (m *explorer) loadMore(l *level) tea.Cmd {
+	if l.kind != "plays" || !l.more || l.loading {
+		return nil
+	}
+	l.limit = l.playLimit() + playPage
+	l.loading = true
+	return m.load(m.tab, l)
 }

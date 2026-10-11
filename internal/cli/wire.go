@@ -59,6 +59,10 @@ func init() {
 
 	tui.NewFeed = newStoreFeed
 	tui.NewExplorerData = newExplorerData
+	tui.RecorderRunning = func(profile string) (bool, error) {
+		running, _, _, err := streams.Status(profile)
+		return running, err
+	}
 }
 
 // requestFor is the API request a job's settings describe.

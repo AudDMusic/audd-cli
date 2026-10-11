@@ -190,15 +190,18 @@ func TestRecognizeOpensSelected(t *testing.T) {
 	}
 	press(h, key("right"), key("esc"))
 	press(h, key("3"))
-	if h.activeID() != "recognize" {
-		t.Fatal("in the form a digit never jumps")
+	if h.activeID() != "recognize" || s.form.value("input") != "a.mp33" {
+		t.Fatalf("on a text field a digit types: %q", s.form.value("input"))
 	}
-	press(h, key("esc"), key("3"))
+	for i := 0; i < 3 && h.focus != focusSidebar; i++ {
+		press(h, key("esc"))
+	}
+	press(h, key("3"))
 	if h.activeID() != "streams" {
 		t.Fatal("from the menu a digit jumps")
 	}
 	press(h, key("1"))
-	if !s.form.capturing() || s.form.current().name != "input" || s.form.value("input") != "a.mp3" {
+	if !s.form.capturing() || s.form.current().name != "input" || s.form.value("input") != "a.mp33" {
 		t.Fatal("back on Recognize: typing in Input again, value kept")
 	}
 }

@@ -65,7 +65,7 @@ func (s *nowPlayingSection) title() string { return "Now playing" }
 
 func (s *nowPlayingSection) init() tea.Cmd {
 	a, ctx := s.h.a, s.h.ctx
-	return tea.Batch(s.h.startRecorder(), func() tea.Msg {
+	return tea.Batch(s.h.startRecorder(), s.h.recorderStatus(), func() tea.Msg {
 		feed, err := NewFeed(a)
 		if err != nil {
 			return npSetupMsg{err: err}
@@ -125,8 +125,12 @@ func (s *nowPlayingSection) view(w, h int) string {
 		return output.Plural(n, "stream") + ", no songs yet.\n" + styleLines(st.Dim, output.Wrap("Results appear as AudD recognizes songs (the recorder saves them). r refreshes.", w))
 	}
 	// Said on top, so it is not taken for listening to the microphone.
-	s.np.w, s.np.h = w, h-1
-	return st.Dim.Render("What's playing on your streams") + "\n" + s.np.View()
+	top := st.Dim.Render("What's playing on your streams")
+	if n := s.h.recorderNotice(w); n != "" {
+		top = n
+	}
+	s.np.w, s.np.h = w, h-strings.Count(top, "\n")-1
+	return top + "\n" + s.np.View()
 }
 
 func (s *nowPlayingSection) keys() []keyHelp {
@@ -179,6 +183,10 @@ func (s *nowPlayingSection) actions() []button {
 		}})
 	}
 	np := s.np
+	var start []button
+	if s.h.recorderStopped() {
+		start = []button{{label: "Start the recorder", token: true, do: func() tea.Cmd { return s.h.startRecorderNow() }}}
+	}
 	press := func(r rune) func() tea.Cmd {
 		return func() tea.Cmd {
 			_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -195,7 +203,7 @@ func (s *nowPlayingSection) actions() []button {
 	if cur := np.current(); cur != nil && len(cur.Plays) > 0 && cur.Plays[0].SongLink != "" && !np.history {
 		b = append(b, button{label: "Open the song link", key: "o", do: press('o')}, button{label: "Copy the song link", key: "c", do: press('c')})
 	}
-	return append(b, button{label: "Refresh", key: "r", do: func() tea.Cmd {
+	return append(append(start, b...), button{label: "Refresh", key: "r", do: func() tea.Cmd {
 		_, cmd := np.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
 		return tea.Batch(cmd, s.h.setFlash("Refreshed"))
 	}})
@@ -464,6 +472,9 @@ func (p *explorerPane) actionsFor() []button {
 			return append(p.h.tokenWays(false, func() tea.Cmd { return nil }), refresh)
 		}
 		b = append(b, button{label: "Add a stream", key: "a", token: true, do: func() tea.Cmd { return p.onAdd() }})
+		if p.h.recorderStopped() {
+			b = append(b, button{label: "Start the recorder", token: true, do: func() tea.Cmd { return p.h.startRecorderNow() }})
+		}
 	case "items":
 		b = append(b, jobButtons(ex.jobOf(l), l)...)
 	}
@@ -495,7 +506,8 @@ func (p *explorerPane) downExits() bool {
 	if l.detail {
 		return true
 	}
-	return l.cursor >= len(l.visible())-1
+	// Plays with older ones to read: ↓ at the end reads them.
+	return l.cursor >= len(l.visible())-1 && !(l.kind == "plays" && l.more)
 }
 
 // askExport asks which format to export the list in.
@@ -1059,7 +1071,9 @@ func (s *streamsSection) syncData() {
 
 func (s *streamsSection) title() string { return "Streams" }
 
-func (s *streamsSection) init() tea.Cmd { return tea.Batch(s.pane.init(), s.h.startRecorder()) }
+func (s *streamsSection) init() tea.Cmd {
+	return tea.Batch(s.pane.init(), s.h.startRecorder(), s.h.recorderStatus())
+}
 
 func (s *streamsSection) tabNames() []string      { return streamsPages }
 func (s *streamsSection) tabIndex() int           { return s.page }
@@ -1153,6 +1167,12 @@ func (s *streamsSection) update(msg tea.Msg) tea.Cmd {
 		if done && s.cbPanel.run.req.tag == "set" && s.cbPanel.res.ok() {
 			s.cbForm.get("url").locked = true
 			return tea.Batch(s.h.setFlash("Callback URL set to "+s.cbForm.value("url")+", "+dataWords(s.returnSet())), s.getCallback())
+		}
+		return nil
+	}
+	if m, ok := msg.(recStatusMsg); ok {
+		if m.err == nil && s.recRunning == "" {
+			s.recRunning = map[bool]string{true: "yes", false: "no"}[m.running]
 		}
 		return nil
 	}
@@ -1652,6 +1672,9 @@ func (s *streamsSection) view(w, h int) string {
 				out += "\n\n" + st.Dim.Render("Adding…")
 			}
 			return bar + out
+		}
+		if n := s.h.recorderNotice(w); n != "" {
+			return bar + n + "\n" + s.pane.view(w, h-strings.Count(n, "\n")-1)
 		}
 		return bar + s.pane.view(w, h)
 	case 1:
@@ -2320,4 +2343,44 @@ func streamsErrorText(st output.Styles, e *runError, w int) string {
 		return "Sign in or add a token to monitor streams.\n" + styleLines(st.Dim, output.Wrap(noTokenChoicesReal, w))
 	}
 	return errorText(st, e, w)
+}
+
+// recorderStatus reads whether the background recorder runs (once; the
+// Recorder page reads it again after Start and Stop).
+func (h *home) recorderStatus() tea.Cmd {
+	st, ok := h.subs["streams"].(*streamsSection)
+	if !ok || RecorderRunning == nil || st.recRunning != "" || h.a.Profile == nil {
+		return nil
+	}
+	profile := h.a.Profile.Name
+	// Read in the background (a process check), not in Update.
+	return h.wrap("streams", func() tea.Msg {
+		running, err := RecorderRunning(profile)
+		return recStatusMsg{running: running, err: err}
+	})
+}
+
+// RecorderRunning reports whether the background recorder of a profile
+// runs (set by the CLI; nil: not known).
+var RecorderRunning func(profile string) (bool, error)
+
+// recStatusMsg is whether the recorder runs, read in the background.
+type recStatusMsg struct {
+	running bool
+	err     error
+}
+
+// recorderStopped reports whether the recorder is known to be stopped.
+func (h *home) recorderStopped() bool {
+	st, ok := h.subs["streams"].(*streamsSection)
+	return ok && st.recRunning == "no"
+}
+
+// recorderNotice says the recorder is stopped ("" when it runs or is not
+// known).
+func (h *home) recorderNotice(w int) string {
+	if !h.recorderStopped() {
+		return ""
+	}
+	return styleLines(h.st.Warn, output.Wrap("The recorder is stopped: new songs aren't being saved on this computer.", w))
 }

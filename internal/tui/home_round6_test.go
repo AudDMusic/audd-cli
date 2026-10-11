@@ -277,8 +277,12 @@ func TestEscInFields(t *testing.T) {
 	if !s.adding || s.add.capturing() || s.add.value("url") != "https://radio.example/x.mp3" || h.focus != focusContent {
 		t.Fatalf("esc in a new field:\n%s", h.View())
 	}
+	if !strings.Contains(footerText(h.View()), "enter type in URL") {
+		t.Fatalf("footer after esc:\n%s", h.View())
+	}
+	// A letter on the field types in it again (never a shortcut).
 	press(h, key("x"))
-	if s.add.value("url") != "https://radio.example/x.mp3" || !strings.Contains(footerText(h.View()), "enter type in URL") {
+	if s.add.value("url") != "https://radio.example/x.mp3x" || !s.add.capturing() {
 		t.Fatalf("a letter after esc:\n%s", h.View())
 	}
 	// A saved value: esc cancels.

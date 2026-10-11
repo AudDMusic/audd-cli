@@ -70,7 +70,7 @@ func TestQuitAsksWhenSomethingIsLost(t *testing.T) {
 	}
 	h = navHome(t, homeOpts{start: "recognize"})
 	press(h, typeText("song.mp3")...)
-	press(h, key("esc"))
+	press(h, key("esc"), key("down")) // off the text field (on a text field q types)
 	// Inside the page q says how to quit.
 	if _, cmd := h.Update(key("q")); cmd != nil || h.confirm != nil || !strings.Contains(statusText(h.View()), "Press esc to go back to the menu, then q to quit") {
 		t.Fatalf("q in a page:\n%s", h.View())

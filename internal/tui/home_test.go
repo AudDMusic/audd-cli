@@ -211,6 +211,9 @@ func newTestHome(t *testing.T, f *fakeRun, o homeOpts) *home {
 	if isListen(o.start) {
 		h.useMic()
 	}
+	// Runs still going (a recorder status read) end before the fakes are
+	// put back.
+	t.Cleanup(func() { h.waitRuns(5 * time.Second) })
 	return h
 }
 

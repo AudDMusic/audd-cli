@@ -16,8 +16,8 @@ AudD  ·  profile default
                  │   menu or a tab bar. Recognize opens typing in its File, URL,
                  │   or folder field; other pages open with no text field
                  │   selected. After an error the cursor is back in the field it
-                 │   is about. A saved value, such as the callback URL, is
- [ Commands ]    │   changed only after enter or e, and esc puts the old value
- [ Keys ] q quit │ ↓ 124 more lines below
+                 │   is about. On a saved value, such as the callback URL,
+ [ Commands ]    │   typing replaces it (as if it was all selected), enter or e
+ [ Keys ] q quit │ ↓ 125 more lines below
 
 ←/→ tabs  ↓ open  esc back  ? keys

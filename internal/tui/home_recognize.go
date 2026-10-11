@@ -481,12 +481,12 @@ func (s *recognizeSection) actions() []button {
 	switch {
 	case s.panel.res != nil && s.panel.res.err != nil && s.panel.res.err.Code == "no_token":
 		return s.h.tokenButtons(true, func() tea.Cmd { s.phase = "form"; return s.startPlan(true) })
+	case s.bs != nil && len(s.bs.results) > 0:
+		// A batch (also one with failures): the buttons act on the
+		// selected row, with a retry for the failures it can fix.
+		return s.h.batchButtons(s.bs)
 	case s.panel.res != nil && s.panel.res.err != nil:
 		return nil // the sign-in or token buttons are added for the hint
-	case s.bs != nil:
-		// On the list too: the buttons act on the selected row; a retry
-		// for the failures it can fix.
-		return s.h.batchButtons(s.bs)
 	case s.rec.view != nil && !s.details:
 		b = append(b, button{label: "Details", key: "", do: func() tea.Cmd { s.details, s.dscroll.off = true, 0; return nil }})
 	case s.mic() && s.rec.view == nil:

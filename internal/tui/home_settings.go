@@ -71,6 +71,9 @@ func (s *settingsSection) load() {
 			// Where this computer actually keeps it.
 			r.desc = "API token, kept in " + secrets.Where(s.h.a.Secrets)
 		}
+		if k == "token" && s.h.testToken {
+			r.desc = "Using the public test token for this session (not saved)"
+		}
 		if k == "token" {
 			t, src, err := config.ResolveToken(s.h.flags.Token, name, s.h.a.Secrets)
 			switch {
@@ -92,7 +95,7 @@ func (s *settingsSection) load() {
 func tokenSourceWords(src config.TokenSource, test bool) string {
 	switch {
 	case test:
-		return "test token for this session"
+		return "test token"
 	case src == config.SourceFlag:
 		return "from --token"
 	case src == config.SourceEnv:
@@ -110,7 +113,7 @@ func (s *settingsSection) notEditable(r settingRow) string {
 	switch r.source {
 	case "from AUDD_API_TOKEN":
 		return "The token comes from AUDD_API_TOKEN; change it in your shell"
-	case "from --token", "test token for this session":
+	case "from --token", "test token":
 		return "This session's token was given when audd started; sign in or paste a token in Account to save one"
 	case config.SettingEnv:
 		return "This setting comes from an environment variable; change it in your shell"
@@ -150,7 +153,11 @@ func (s *settingsSection) editor(r settingRow) *field {
 		f.input.Focus()
 		return f
 	}
-	f := &field{kind: fInt, name: "value", label: settingLabel(r.key), help: "A whole number, then enter", input: newInput()}
+	help := "A whole number, then enter"
+	if r.key == "max_requests" {
+		help = "A whole number, then enter; leave it empty and unset it (d) for no limit"
+	}
+	f := &field{kind: fInt, name: "value", label: settingLabel(r.key), help: help, input: newInput()}
 	if _, err := strconv.Atoi(r.value); err == nil {
 		// The value in effect, from the file, the environment, or the
 		// default.

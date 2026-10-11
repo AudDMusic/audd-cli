@@ -38,13 +38,20 @@ func TestLettersNeverReachAFieldWithoutTheKeys(t *testing.T) {
 		t.Fatalf("no feedback:\n%s", h.View())
 	}
 	press(h, key("down"))
-	press(h, typeText("zz")...)
-	if got := s.cbForm.value("url"); got != "https://audd.tech/empty/" {
-		t.Fatalf("a read-only value changed: %q", got)
-	}
 	if !strings.Contains(h.View(), "(enter or e to edit)") || !strings.Contains(footerText(h.View()), "enter/e edit") {
-		t.Fatalf("the read-only field does not say how to change it:\n%s", h.View())
+		t.Fatalf("the saved field does not say how to change it:\n%s", h.View())
 	}
+	// Typing replaces the saved value (as if it was all selected); esc
+	// puts it back.
+	press(h, typeText("zz")...)
+	if got := s.cbForm.value("url"); got != "zz" || !s.cbForm.capturing() {
+		t.Fatalf("typing on a saved value: %q", got)
+	}
+	press(h, key("esc"))
+	if got := s.cbForm.value("url"); got != "https://audd.tech/empty/" {
+		t.Fatalf("esc restores: %q", got)
+	}
+	// e edits it, keeping it.
 	press(h, key("e"))
 	press(h, typeText("x")...)
 	if got := s.cbForm.value("url"); got != "https://audd.tech/empty/x" {

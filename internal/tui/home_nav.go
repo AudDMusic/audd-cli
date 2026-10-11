@@ -341,7 +341,7 @@ func (h *home) tabsKey(k tea.KeyMsg) tea.Cmd {
 // key does something only when it moves around or the page lists it.
 func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 	s := k.String()
-	if s == "enter" && !h.confirmedAt.IsZero() && time.Since(h.confirmedAt) < 1500*time.Millisecond {
+	if s == "enter" && !h.confirmedAt.IsZero() && time.Since(h.confirmedAt) < 1500*time.Millisecond && hasStop(h.pageActions()) {
 		// A second enter right after confirming does nothing: never a
 		// Stop by accident.
 		h.confirmedAt = time.Time{}
@@ -386,7 +386,8 @@ func (h *home) pageKey(k tea.KeyMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if typing {
+	if typing || (k.Type == tea.KeyRunes || k.Type == tea.KeySpace) && onText(cur) && !h.btnActive {
+		// On a text field a printable key types in it: never a shortcut.
 		return h.send(h.activeID(), k)
 	}
 	switch {
@@ -1088,4 +1089,22 @@ func inForm(s section) bool {
 func (h *home) confirmed() {
 	h.btnActive = false
 	h.confirmedAt = time.Now()
+}
+
+// texter is a section that says whether its cursor is on a text field.
+type texter interface{ onText() bool }
+
+func onText(s section) bool {
+	t, ok := s.(texter)
+	return ok && t.onText()
+}
+
+// hasStop reports whether the page has a Stop button (a run in progress).
+func hasStop(acts []button) bool {
+	for _, b := range acts {
+		if b.label == "Stop" {
+			return true
+		}
+	}
+	return false
 }

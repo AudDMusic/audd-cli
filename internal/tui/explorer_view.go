@@ -127,6 +127,15 @@ func (m *explorer) statusLine() string {
 		}
 		n := len(l.visible())
 		s := l.title + " · " + output.Plural(n, rowNoun(l.kind))
+		if l.kind == "plays" {
+			// Not all of them, when there may be more.
+			s = l.title + " · " + "the latest " + output.Plural(n, "play")
+			if l.more {
+				s += " · ↓ at the end loads older ones"
+			} else {
+				s = l.title + " · all " + output.Plural(n, "play")
+			}
+		}
 		if r := l.selected(); r != nil && l.kind == "streams" && m.w < 100 && !l.detail && len(r.cells) > 4 {
 			// The URL column is left out on narrow screens: the selected
 			// stream's URL is here.
