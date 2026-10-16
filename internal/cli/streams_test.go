@@ -843,12 +843,16 @@ func TestParseSince(t *testing.T) {
 func TestStreamsWatchPassesThroughSongFields(t *testing.T) {
 	srv := setupStreams(t)
 	srv.SetStreams(streamstest.Stream{RadioID: 3, Running: true})
+	// A play from yesterday, inside history's default window. The server
+	// sends its timestamps in UTC+3.
+	played := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute)
+	serverTime := played.In(time.FixedZone("UTC+3", 3*3600)).Format("2006-01-02 15:04:05")
 	go func() {
 		for srv.Count("longpoll") == 0 {
 			time.Sleep(10 * time.Millisecond)
 		}
 		// Metadata turned on with `streams callback set --return apple_music`.
-		srv.Push(3, json.RawMessage(`{"status":"success","result":{"radio_id":3,"timestamp":"2026-10-08 14:02:00","play_length":200,"results":[{"artist":"Live Artist","title":"Live Song","score":100,"apple_music":{"url":"https://music.apple.com/x","artwork":{"url":"https://is1-ssl.mzstatic.com/{w}x{h}bb.jpg"}},"new_field":"kept"}]}}`))
+		srv.Push(3, json.RawMessage(`{"status":"success","result":{"radio_id":3,"timestamp":"`+serverTime+`","play_length":200,"results":[{"artist":"Live Artist","title":"Live Song","score":100,"apple_music":{"url":"https://music.apple.com/x","artwork":{"url":"https://is1-ssl.mzstatic.com/{w}x{h}bb.jpg"}},"new_field":"kept"}]}}`))
 	}()
 	code, stdout, stderr := runLive(t, func(s string) bool { return strings.Count(s, "\n") >= 1 }, "streams", "watch", "3")
 	if code != 0 {
@@ -866,7 +870,7 @@ func TestStreamsWatchPassesThroughSongFields(t *testing.T) {
 	if len(plays) != 1 {
 		t.Fatalf("history %s", r.Stdout)
 	}
-	if p := plays[0].(map[string]any); p["apple_music"] == nil || p["timestamp"] != "2026-10-08T11:02:00Z" {
+	if p := plays[0].(map[string]any); p["apple_music"] == nil || p["timestamp"] != played.Format(time.RFC3339) {
 		t.Fatalf("history keeps the stored song fields: %v", p)
 	}
 }
