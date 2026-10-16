@@ -17,7 +17,7 @@ import (
 // chunk is the enterprise billing unit: one request per 12 seconds of audio.
 const chunk = 12 * time.Second
 
-// pricePerRequest is the pay-as-you-go price: $5 per 1,000 requests.
+// pricePerRequest is the Indie plan rate: $5 per 1,000 requests.
 const pricePerRequest = 5.0 / 1000
 
 // assumedBytesPerSecond turns a file size into a duration when ffprobe is

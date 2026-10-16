@@ -24,7 +24,7 @@ import (
 // endpoint bills one request per 12 seconds of audio.
 const ChunkSeconds = 12
 
-// PricePerRequestUSD is the pay-as-you-go price used for estimates ($5 per
+// PricePerRequestUSD is the Indie plan rate used for estimates ($5 per
 // 1,000 requests).
 const PricePerRequestUSD = 0.005
 
@@ -195,7 +195,7 @@ func ScannedChunks(n int, skip, every *int) int {
 }
 
 // Render prints the plan on stderr, for example "Plan: 142 files, ≈ 142
-// requests (≈ $0.71 at the pay-as-you-go price of $5 per 1,000 requests);
+// requests (≈ $0.71 at $5 per 1,000 requests, the Indie plan rate);
 // 30 already cached (free)."
 func (p Plan) Render(out *output.Printer) {
 	out.Info("Plan: %s.", p.String())
@@ -232,7 +232,7 @@ func (p PlanText) Capped() bool {
 }
 
 // String is the plan as one sentence without the "Plan: " lead or the
-// final period: "142 files, 142 requests ($0.71 at the pay-as-you-go price
+// final period: "142 files, 142 requests ($0.71 at $5 per 1,000 requests, the Indie plan rate
 // of $5 per 1,000 requests); 30 already cached (free)". "≈" marks an
 // approximate plan.
 func (p PlanText) String() string {
@@ -247,17 +247,17 @@ func (p PlanText) String() string {
 	}
 	switch {
 	case p.Capped() && p.UnknownLengthFiles > 0:
-		fmt.Fprintf(&b, "%s, stops after %s (%s), at most $%s at the pay-as-you-go price of $5 per 1,000 requests; without it nothing would cap the scan, since %s no known length and no --limit",
+		fmt.Fprintf(&b, "%s, stops after %s (%s), at most $%s at $5 per 1,000 requests, the Indie plan rate; without it nothing would cap the scan, since %s no known length and no --limit",
 			plural(p.Files, "file", "files"), plural(p.MaxRequests, "request", "requests"), name,
 			Dollars(cost(p.MaxRequests)), plural(p.UnknownLengthFiles, "URL has", "URLs have"))
 	case p.Capped():
-		fmt.Fprintf(&b, "%s, stops after %d of %s%s (%s), at most $%s at the pay-as-you-go price of $5 per 1,000 requests",
+		fmt.Fprintf(&b, "%s, stops after %d of %s%s (%s), at most $%s at $5 per 1,000 requests, the Indie plan rate",
 			plural(p.Files, "file", "files"), p.MaxRequests, approx, plural(p.Requests, "request", "requests"), name, Dollars(cost(p.MaxRequests)))
 	case p.UnknownLengthFiles > 0:
 		fmt.Fprintf(&b, "%s, requests unknown: %s no known length and no --limit, so the scan is not capped (each 12-second chunk is one request, 300 per hour of audio)",
 			plural(p.Files, "file", "files"), plural(p.UnknownLengthFiles, "URL has", "URLs have"))
 	default:
-		fmt.Fprintf(&b, "%s, %s%s (%s$%s at the pay-as-you-go price of $5 per 1,000 requests)",
+		fmt.Fprintf(&b, "%s, %s%s (%s$%s at $5 per 1,000 requests, the Indie plan rate)",
 			plural(p.Files, "file", "files"), approx, plural(p.Requests, "request", "requests"), approx, Dollars(p.CostUSD))
 	}
 	if p.Enterprise {

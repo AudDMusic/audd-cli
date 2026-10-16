@@ -220,7 +220,7 @@ func TestEstimate(t *testing.T) {
 	if p.CachedFiles != 1 || p.Requests != 1 {
 		t.Fatalf("cached: %+v", p)
 	}
-	if s := p.String(); s != "2 files, 1 request ($0.005 at the pay-as-you-go price of $5 per 1,000 requests) on the enterprise endpoint; 1 already cached (free)" {
+	if s := p.String(); s != "2 files, 1 request ($0.005 at $5 per 1,000 requests, the Indie plan rate) on the enterprise endpoint; 1 already cached (free)" {
 		t.Fatalf("render: %q", s)
 	}
 }
@@ -232,7 +232,7 @@ func TestRenderApproximate(t *testing.T) {
 	out := output.NewPrinter(io.Discard, &errb, output.PrinterOptions{})
 	p.Render(out)
 	// The same wording as a batch's plan (jobs.Plan.Line).
-	want := "Plan: 142 files, ≈ 142 requests (≈ $0.71 at the pay-as-you-go price of $5 per 1,000 requests); 30 already cached (free); approximate, since some lengths are estimated from file sizes (install ffmpeg for exact counts); 900 requests left this cycle.\n"
+	want := "Plan: 142 files, ≈ 142 requests (≈ $0.71 at $5 per 1,000 requests, the Indie plan rate); 30 already cached (free); approximate, since some lengths are estimated from file sizes (install ffmpeg for exact counts); 900 requests left this cycle.\n"
 	if errb.String() != want {
 		t.Fatalf("got %q", errb.String())
 	}
@@ -241,14 +241,14 @@ func TestRenderApproximate(t *testing.T) {
 func TestPlanOneRequestLeft(t *testing.T) {
 	left := 1
 	p := Plan{Files: 1, Requests: 1, CostUSD: 0.005, RemainingAllowance: &left}
-	if got := p.String(); got != "1 file, 1 request ($0.005 at the pay-as-you-go price of $5 per 1,000 requests); 1 request left this cycle" {
+	if got := p.String(); got != "1 file, 1 request ($0.005 at $5 per 1,000 requests, the Indie plan rate); 1 request left this cycle" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestPlanTextWithMaxRequests(t *testing.T) {
 	got := PlanText{Files: 3, Requests: 12, CostUSD: 0.06, Enterprise: true, MaxRequests: 5}.String()
-	if !strings.HasPrefix(got, "3 files, stops after 5 of 12 requests (--max-requests 5), at most $0.025 at the pay-as-you-go price") {
+	if !strings.HasPrefix(got, "3 files, stops after 5 of 12 requests (--max-requests 5), at most $0.025 at $5 per 1,000 requests, the Indie plan rate") {
 		t.Fatalf("capped: %s", got)
 	}
 	got = PlanText{Files: 1, UnknownLengthFiles: 1, MaxRequests: 5, MaxRequestsName: "the max_requests setting (5)"}.String()

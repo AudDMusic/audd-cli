@@ -1234,7 +1234,7 @@ func TestPlanSaysWhereMaxRequestsStops(t *testing.T) {
 	if e.Code != "confirmation_required" || !strings.Contains(e.Message, "Recognize 4 files, stopping after 2 requests (--max-requests 2)") {
 		t.Fatalf("question: %#v", err)
 	}
-	if !strings.Contains(ta.stderr.String(), "Plan: 4 files, stops after 2 of 4 requests (--max-requests 2), at most $0.01 at the pay-as-you-go price") {
+	if !strings.Contains(ta.stderr.String(), "Plan: 4 files, stops after 2 of 4 requests (--max-requests 2), at most $0.01 at $5 per 1,000 requests, the Indie plan rate") {
 		t.Fatalf("plan: %s", ta.stderr.String())
 	}
 	if f.totalRequests() != 0 {
