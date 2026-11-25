@@ -59,8 +59,12 @@ func init() {
 }
 
 // HomeSections are the section names audd ui --section accepts, in
-// sidebar order. It also accepts listen: Recognize with the microphone.
+// sidebar order. It also accepts the names in sectionAliases.
 var HomeSections = []string{"recognize", "now-playing", "streams", "recognitions", "account", "settings", "help"}
+
+// sectionAliases are the other names --section accepts: listen opens
+// Recognize with the microphone, and history opens Recognitions.
+var sectionAliases = map[string]string{"listen": "recognize", "history": "recognitions"}
 
 var homeTitles = []string{"Recognize", "Now playing", "Streams", "Recognitions", "Account", "Settings", "Help"}
 
@@ -72,15 +76,16 @@ func sectionIndex(name string) (int, error) {
 	if name == "" {
 		return -1, nil
 	}
-	if isListen(name) {
-		name = "recognize"
+	if to, ok := sectionAliases[name]; ok {
+		name = to
 	}
 	for i, s := range HomeSections {
 		if s == name || strings.ReplaceAll(s, "-", "") == strings.ReplaceAll(name, "-", "") {
 			return i, nil
 		}
 	}
-	return 0, output.Errf(output.ExitUsage, "invalid_argument", "audd ui --section "+strings.Join(HomeSections, "|"),
+	names := append([]string{HomeSections[0], "listen"}, HomeSections[1:]...)
+	return 0, output.Errf(output.ExitUsage, "invalid_argument", "audd ui --section "+strings.Join(names, "|"),
 		"unknown section %q", name)
 }
 

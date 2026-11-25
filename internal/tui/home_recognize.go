@@ -226,7 +226,8 @@ var (
 
 // sync shows the fields of the current source. For files, it shows the
 // enterprise options only with --enterprise, and the metadata options
-// only without it (the enterprise endpoint has none).
+// only without it (enterprise results come without provider metadata by
+// default, and audd recognize takes --return for standard recognition).
 func (s *recognizeSection) sync() {
 	mic := s.mic()
 	cur := s.form.current()

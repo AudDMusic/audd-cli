@@ -299,6 +299,20 @@ func TestErrorMapping(t *testing.T) {
 		if tt.code == 900 && !strings.Contains(e.Hint, "--token") {
 			t.Errorf("flag token hint: %q", e.Hint)
 		}
+		if tt.name == "server" && e.Hint != api.ServerErrorHint {
+			t.Errorf("code %d: hint %q", tt.code, e.Hint)
+		}
+	}
+	// A gateway error without a JSON body says what happened and what to do.
+	f := testutil.NewFakeAPI(t)
+	f.On(testutil.EndpointRecognize, func(testutil.FakeRequest) (int, any) { return http.StatusBadGateway, "bad gateway" })
+	{
+		a, _ := newApp(t, nil)
+		a.Flags.Token = oldToken
+		_, err := recognize(context.Background(), a)
+		if e := asErr(t, err); e.Code != "server" || e.Message != "AudD returned HTTP 502" || e.Hint != api.ServerErrorHint || !e.Retryable {
+			t.Errorf("HTTP 502: %+v", e)
+		}
 	}
 	// Connection failures are network errors.
 	a, _ := newApp(t, nil)
@@ -349,5 +363,31 @@ func TestPreUploadUnreachableProxy(t *testing.T) {
 	}
 	if !api.PreUpload(err) {
 		t.Fatalf("an unreachable proxy means nothing was sent: %#v", err)
+	}
+}
+
+// AudD answers an addStream call at the account's stream limit with 902
+// (as well as 610); a 902 on any other call is the request quota.
+func TestStreamLimitErrors(t *testing.T) {
+	const atLimit = "Adding a stream stream failed: authorization failed: the limit was reached. (Please check if you have an active subscription for music recognition for audio streams on https://dashboard.audd.io/ or contact us to try it for free: api@audd.io)"
+	for _, tt := range []struct {
+		name string
+		err  *audd.AudDAPIError
+		want string
+	}{
+		{"610", &audd.AudDAPIError{ErrorCode: 610, Message: "streams limit reached"}, "stream_limit"},
+		{"902 from addStream", &audd.AudDAPIError{ErrorCode: 902, Message: atLimit, RequestMethod: "addStream"}, "stream_limit"},
+		{"902 from addRadio", &audd.AudDAPIError{ErrorCode: 902, Message: atLimit, RequestMethod: "addRadio"}, "stream_limit"},
+		{"902 adding a stream, no method echoed", &audd.AudDAPIError{ErrorCode: 902, Message: atLimit}, "stream_limit"},
+		{"902 from recognize", &audd.AudDAPIError{ErrorCode: 902, Message: "Recognition failed: authorization failed: the limit was reached.", RequestMethod: "recognize"}, "quota_exceeded"},
+		{"902 without a method", &audd.AudDAPIError{ErrorCode: 902, Message: "limit reached"}, "quota_exceeded"},
+	} {
+		e := asErr(t, api.MapError(tt.err, config.SourceEnv))
+		if e.Code != tt.want || e.Exit != output.ExitQuota || e.APICode != tt.err.ErrorCode || e.Message != tt.err.Message {
+			t.Errorf("%s: %+v", tt.name, e)
+		}
+		if tt.want == "stream_limit" && !strings.Contains(e.Hint, "audd streams remove") {
+			t.Errorf("%s: hint %q", tt.name, e.Hint)
+		}
 	}
 }

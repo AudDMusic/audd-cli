@@ -36,7 +36,9 @@ arrive, and keep a local record of every play.
 
 The first time you use a streams command, audd starts a background recorder
 that saves every result to a local database, so history and reports stay
-complete. Turn that off with: audd config set streams.background_recorder false`,
+complete. It does not start while the account has no streams, or in CI. Turn
+it off with: audd config set streams.background_recorder false (or set
+AUDD_NO_BACKGROUND_RECORDER=1 for one shell or container).`,
 		Example: `  audd streams add https://radio.example/stream.mp3 --id 1
   audd streams list
   audd streams watch

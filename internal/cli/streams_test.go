@@ -25,6 +25,7 @@ import (
 	"github.com/AudDMusic/audd-cli/internal/streams/streamstest"
 	"github.com/AudDMusic/audd-cli/internal/streamstore"
 	"github.com/AudDMusic/audd-cli/internal/testutil"
+	"github.com/AudDMusic/audd-cli/internal/update"
 )
 
 // streamsFake, when set, is the API every command in this test binary talks to.
@@ -207,6 +208,20 @@ func TestStreamsListJSONAndTable(t *testing.T) {
 	r = runStreams(t, "streams", "list", "--format", "table")
 	if !strings.Contains(r.Stdout, "audd streams add <url> --id 1") {
 		t.Fatalf("empty list hint: %q", r.Stdout)
+	}
+}
+
+// At the stream limit, addStream answers 902 (the body recorded from the
+// live API): that is stream_limit, not the request quota.
+func TestStreamsAddAtTheStreamLimit(t *testing.T) {
+	srv := setupStreams(t)
+	srv.FailAddStream(json.RawMessage(`{"status":"error","error":{"error_code":902,"error_message":"Adding a stream stream failed: authorization failed: the limit was reached. (Please check if you have an active subscription for music recognition for audio streams on https://dashboard.audd.io/ or contact us to try it for free: api@audd.io)"},"request_params":{"radio_id":"5","url":"https://radio.example/a"},"request_api_method":"addStream","request_http_method":"POST"}`))
+	r := runStreams(t, "streams", "add", "https://radio.example/a", "--id", "5")
+	if r.Code != output.ExitQuota || !strings.Contains(r.Stderr, `"code":"stream_limit"`) || !strings.Contains(r.Stderr, "audd streams remove") || strings.Contains(r.Stderr, "audd usage") {
+		t.Fatalf("stream limit: %d %s", r.Code, r.Stderr)
+	}
+	if len(srv.Streams()) != 0 {
+		t.Fatal("nothing was added")
 	}
 }
 
@@ -536,8 +551,18 @@ func TestStreamsRecorderStartStatusStop(t *testing.T) {
 	}
 }
 
+// notInCI clears the variables that mark a CI run, where the recorder does
+// not start by itself.
+func notInCI(t *testing.T) {
+	t.Helper()
+	for _, k := range update.CIVariables {
+		t.Setenv(k, "")
+	}
+}
+
 func TestStreamsCommandsStartTheRecorderOnce(t *testing.T) {
 	srv := setupStreams(t)
+	notInCI(t)
 	srv.SetStreams(streamstest.Stream{RadioID: 1, Running: true})
 	var held []*streams.Lock
 	restore := streams.SetSpawnForTesting(func(exe string, args, env []string, logPath string) (int, error) {
@@ -574,6 +599,38 @@ func TestStreamsCommandsStartTheRecorderOnce(t *testing.T) {
 	r = runStreams(t, "streams", "list")
 	if len(held) != 0 || strings.Contains(r.Stderr, "Recording stream results") {
 		t.Fatal("respects streams.background_recorder false")
+	}
+}
+
+// The recorder does not start by itself for an account without streams or
+// in a CI run; audd streams recorder start still starts it.
+func TestStreamsRecorderAutoStartSkipsCIAndEmptyAccounts(t *testing.T) {
+	srv := setupStreams(t)
+	notInCI(t)
+	var held []*streams.Lock
+	restore := streams.SetSpawnForTesting(func(string, []string, []string, string) (int, error) {
+		l, err := streams.Acquire("default")
+		held = append(held, l)
+		return 1, err
+	})
+	defer restore()
+	defer func() {
+		for _, l := range held {
+			l.Release()
+		}
+	}()
+	for _, args := range [][]string{{"streams", "list"}, {"streams", "history"}, {"streams", "callback", "get"}} {
+		if r := runStreams(t, args...); len(held) != 0 || strings.Contains(r.Stderr, "Recording stream results") {
+			t.Fatalf("%v started a recorder for an account without streams: %q", args, r.Stderr)
+		}
+	}
+	srv.SetStreams(streamstest.Stream{RadioID: 1, Running: true})
+	t.Setenv("CI", "true")
+	if r := runStreams(t, "streams", "list"); len(held) != 0 || strings.Contains(r.Stderr, "Recording stream results") {
+		t.Fatalf("started in CI: %q", r.Stderr)
+	}
+	if r := runStreams(t, "streams", "recorder", "start"); r.Code != 0 || len(held) != 1 {
+		t.Fatalf("explicit start in CI: %d %s", r.Code, r.Stderr)
 	}
 }
 
@@ -844,9 +901,9 @@ func TestStreamsWatchPassesThroughSongFields(t *testing.T) {
 	srv := setupStreams(t)
 	srv.SetStreams(streamstest.Stream{RadioID: 3, Running: true})
 	// A play from yesterday, inside history's default window. The server
-	// sends its timestamps in UTC+3.
+	// sends its timestamps in UTC.
 	played := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute)
-	serverTime := played.In(time.FixedZone("UTC+3", 3*3600)).Format("2006-01-02 15:04:05")
+	serverTime := played.Format("2006-01-02 15:04:05")
 	go func() {
 		for srv.Count("longpoll") == 0 {
 			time.Sleep(10 * time.Millisecond)

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/AudDMusic/audd-cli/internal/cli"
+	_ "github.com/AudDMusic/audd-cli/internal/termbg" // before Bubble Tea's terminal query
 )
 
 func main() {

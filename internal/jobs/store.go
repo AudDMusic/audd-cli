@@ -174,7 +174,8 @@ func fingerprint(cmd []string, params map[string]string) string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	keys = slices.DeleteFunc(keys, func(k string) bool { return k == CommandLineKey }) // how it was typed is not what it does
+	// How it was typed, and whether it read the cache, are not what it does.
+	keys = slices.DeleteFunc(keys, func(k string) bool { return k == CommandLineKey || k == NoCacheKey })
 	h := sha256.New()
 	enc := json.NewEncoder(h)
 	_ = enc.Encode(cmd)
@@ -600,6 +601,10 @@ func describeInputs(cmd []string) string {
 
 // CommandLineKey is the params key that keeps the command as typed.
 const CommandLineKey = "command_line"
+
+// NoCacheKey is the params key set ("true") for a job started with
+// --no-cache: resuming it does not read the cache either.
+const NoCacheKey = "no_cache"
 
 func commandLine(params map[string]string) []string {
 	var out []string

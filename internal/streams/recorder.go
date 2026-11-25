@@ -655,7 +655,13 @@ func (r *Recorder) watch(ctx context.Context, radioID int, backfilled, emit bool
 		if time.Since(started) > time.Minute {
 			backoff = r.backoffMin
 		}
-		r.note("stream %d: connection to AudD lost, reconnecting in %s: %v", radioID, backoff, MapError(r.app, err))
+		// A poll ends with one error: AudD refusing the request (an error
+		// body), an HTTP error, or a network failure.
+		if mapped := MapError(r.app, err); output.AsError(mapped).Code == "invalid_request" {
+			r.note("stream %d: AudD refused the longpoll request, trying again in %s: %v", radioID, backoff, mapped)
+		} else {
+			r.note("stream %d: connection to AudD lost, reconnecting in %s: %v", radioID, backoff, mapped)
+		}
 		if !sleep(ctx, backoff) {
 			return
 		}

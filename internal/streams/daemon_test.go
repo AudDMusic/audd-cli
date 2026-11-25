@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,11 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AudDMusic/audd-go"
+
 	"github.com/AudDMusic/audd-cli/internal/app"
 	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 	"github.com/AudDMusic/audd-cli/internal/secrets"
+	"github.com/AudDMusic/audd-cli/internal/streams/streamstest"
 	"github.com/AudDMusic/audd-cli/internal/testutil"
+	"github.com/AudDMusic/audd-cli/internal/update"
 )
 
 func TestLockAllowsOneRecorderPerProfile(t *testing.T) {
@@ -103,6 +108,22 @@ func TestEnsureBackground(t *testing.T) {
 	}
 	t.Setenv("AUDD_NO_BACKGROUND_RECORDER", "")
 
+	// Not in a CI run.
+	notInCI(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+	if started, _ := EnsureBackground(a); started || len(*calls) != 0 {
+		t.Fatal("must not start in CI")
+	}
+	t.Setenv("GITHUB_ACTIONS", "")
+
+	// Not while the account has no streams.
+	srv := streamstest.New(t)
+	a.APIClient = func() (*audd.Client, error) { return srv.Client(), nil }
+	if started, err := EnsureBackground(a); started || err != nil || len(*calls) != 0 || srv.Count("getStreams") != 1 {
+		t.Fatalf("no streams: %v %v %d", started, err, len(*calls))
+	}
+	srv.SetStreams(streamstest.Stream{RadioID: 1, Running: true})
+
 	started, err := EnsureBackground(a)
 	if err != nil || !started || len(*calls) != 1 {
 		t.Fatalf("start: %v %v %d", started, err, len(*calls))
@@ -120,6 +141,82 @@ func TestEnsureBackground(t *testing.T) {
 	defer l.Release()
 	if started, _ := EnsureBackground(a); started || len(*calls) != 1 {
 		t.Fatal("must not start a second recorder")
+	}
+	if n := srv.Count("getStreams"); n != 2 {
+		t.Fatalf("the stream list is read only before a start: %d", n)
+	}
+}
+
+func TestEnsureBackgroundRestartsARecorderFromAnOlderVersion(t *testing.T) {
+	testutil.Isolate(t)
+	t.Setenv("AUDD_API_TOKEN", testutil.PlaceholderToken)
+	notInCI(t)
+	calls := fakeSpawn(t)
+	a := testApp(t)
+	oldVersion := app.Version
+	app.Version = "0.2.0"
+	var held *Lock
+	oldTerm := terminateProcess
+	terminateProcess = func(pid int) error {
+		if held != nil {
+			held.Release()
+			held = nil
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		app.Version = oldVersion
+		terminateProcess = oldTerm
+		if held != nil {
+			held.Release()
+		}
+	})
+	setRecorderVersion := func(v string) {
+		t.Helper()
+		info, err := readPID("default")
+		if err != nil {
+			t.Fatal(err)
+		}
+		info.Version = v
+		b, _ := json.Marshal(info)
+		if err := os.WriteFile(PIDPath("default"), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	l, err := Acquire("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	held = l
+	// A foreground recorder from an older version is left alone.
+	setRecorderVersion("0.1.4")
+	if started, err := EnsureBackground(a); started || err != nil || held == nil || len(*calls) != 0 {
+		t.Fatalf("foreground recorder: %v %v %d", started, err, len(*calls))
+	}
+	if err := held.MarkBackground(); err != nil {
+		t.Fatal(err)
+	}
+	// A background recorder of this version, or a newer one, keeps running.
+	for _, v := range []string{"0.2.0", "0.3.0"} {
+		setRecorderVersion(v)
+		if started, err := EnsureBackground(a); started || err != nil || held == nil || len(*calls) != 0 {
+			t.Fatalf("recorder %s: %v %v %d", v, started, err, len(*calls))
+		}
+	}
+	// One started by an older version is stopped and started again.
+	setRecorderVersion("0.1.4")
+	started, err := EnsureBackground(a)
+	if err != nil || !started || held != nil || len(*calls) != 1 {
+		t.Fatalf("older recorder: %v %v %d", started, err, len(*calls))
+	}
+}
+
+// notInCI clears the variables that mark a CI run.
+func notInCI(t *testing.T) {
+	t.Helper()
+	for _, k := range update.CIVariables {
+		t.Setenv(k, "")
 	}
 }
 

@@ -169,6 +169,48 @@ func TestInstallPinnedVersionAndDir(t *testing.T) {
 	}
 }
 
+// When the install folder is not on PATH, the advice names the file new
+// terminals of the user's shell read, and the command for this terminal.
+func TestInstallPathAdviceFollowsTheShell(t *testing.T) {
+	rel := newRelease(t)
+	srv := rel.serve(t)
+	bashrc := "~/.bashrc"
+	if runtime.GOOS == "darwin" {
+		bashrc = "~/.bash_profile"
+	}
+	for shell, want := range map[string]string{
+		"/bin/zsh":           "~/.zshrc",
+		"/usr/local/bin/zsh": "~/.zshrc",
+		"/bin/bash":          bashrc,
+		"/bin/sh":            "~/.profile",
+		"":                   "~/.profile",
+	} {
+		env := []string{}
+		if shell != "" {
+			env = append(env, "SHELL="+shell)
+		}
+		res := runInstall(t, srv, env...)
+		if res.err != nil {
+			t.Fatalf("%q: install failed: %v\n%s", shell, res.err, res.stderr)
+		}
+		line := `export PATH="` + res.dir + `:$PATH"`
+		if !strings.Contains(res.stderr, "  echo '"+line+"' >> "+want+"\n") || !strings.Contains(res.stderr, "\n  "+line+"\n") {
+			t.Errorf("SHELL=%q: want %s and the line for this terminal:\n%s", shell, want, res.stderr)
+		}
+	}
+	res := runInstall(t, srv, "SHELL=/usr/bin/fish")
+	if res.err != nil || !strings.Contains(res.stderr, "  fish_add_path "+res.dir+"\n") || strings.Contains(res.stderr, "export PATH") {
+		t.Errorf("fish: %v\n%s", res.err, res.stderr)
+	}
+	// Nothing to add when the folder is on PATH already.
+	home := t.TempDir()
+	dir := filepath.Join(home, "bin")
+	res = runInstall(t, srv, "SHELL=/bin/zsh", "AUDD_INSTALL_DIR="+dir, "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if res.err != nil || strings.Contains(res.stderr, "not on your PATH") {
+		t.Errorf("on PATH: %v\n%s", res.err, res.stderr)
+	}
+}
+
 func TestInstallChecksumMismatch(t *testing.T) {
 	rel := newRelease(t)
 	bad := sha256.Sum256([]byte("something else"))

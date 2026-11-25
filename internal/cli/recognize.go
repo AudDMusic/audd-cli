@@ -89,8 +89,9 @@ A batch prints one JSON line per file and a summary line when piped (also
 with --format json). Running the same batch again after an interruption asks
 whether to continue it; --resume or --new answers without asking.
 
-Results are cached by file contents (URLs for 24 hours), so recognizing the
-same audio again is free. --no-cache sends it anyway.
+Results are cached by file contents (URLs for 24 hours, no-matches for 7
+days) for each account, so recognizing the same audio again is free.
+--no-cache sends it anyway.
 
 No match is not an error: the result is null and the exit code is 0, unless
 you pass --fail-on-no-match (exit 1; in a batch, when any file has no match).`,
@@ -175,7 +176,8 @@ func runRecognize(cmd *cobra.Command, a *app.App, f *recognizeFlags, args []stri
 		}
 	}
 	if f.enterprise && ret != "" {
-		return usageErr("drop --return, or recognize a clip without --enterprise", "--return isn't available with --enterprise: the enterprise endpoint doesn't return Apple Music, Spotify, Deezer, or MusicBrainz metadata")
+		return usageErr("drop --return, or recognize a clip without --enterprise to get that metadata; to have it on enterprise results, write to api@audd.io",
+			"--return is for standard recognition: enterprise results don't include Apple Music, Spotify, Deezer, or MusicBrainz metadata by default")
 	}
 	if f.duration != "" && f.at == "" {
 		return usageErr("add --at, e.g. --at 1:30 --duration 20", "--duration sets the clip length for --at")
@@ -209,7 +211,7 @@ func runRecognize(cmd *cobra.Command, a *app.App, f *recognizeFlags, args []stri
 	if err != nil {
 		return err
 	}
-	req := api.Request{Enterprise: f.enterprise, Return: ret, Limit: limit, EnterpriseOpts: eopts}
+	req := api.Request{Enterprise: f.enterprise, Return: ret, Limit: limit, EnterpriseOpts: eopts, CacheScope: api.CacheScope(a)}
 	if f.enterprise {
 		// Validate the passthrough values before anything is sent.
 		if _, err := req.EnterpriseOptions(); err != nil {
@@ -365,10 +367,11 @@ func recognizeOne(ctx context.Context, a *app.App, f *recognizeFlags, in media.I
 		defer c.Close()
 	}
 	params := req.CacheParams()
-	key, err := cache.KeyForInput(in, req.Endpoint(), params)
+	content, err := cache.InputID(in)
 	if err != nil {
 		return usageErr("check the path", "cannot read %s: %v", name, err)
 	}
+	key := cache.Key(content, req.Endpoint(), params)
 	var (
 		raw    json.RawMessage
 		cached bool
@@ -435,7 +438,7 @@ func recognizeOne(ctx context.Context, a *app.App, f *recognizeFlags, in media.I
 			return err
 		}
 		if c != nil {
-			if err := c.PutEntry(cache.Entry{Key: key, Source: name, Endpoint: req.Endpoint(), Result: raw}, in.URL != ""); err != nil {
+			if err := c.PutEntry(cache.Entry{Key: key, Source: name, Endpoint: req.Endpoint(), Content: content, Result: raw}, in.URL != ""); err != nil {
 				a.Out.Info("Could not save the result to the cache: %v", err)
 			}
 		}
@@ -531,6 +534,14 @@ func printStandard(a *app.App, f *recognizeFlags, name string, cached bool, clip
 	return ok, a.Out.Result(doc, func(w io.Writer) {
 		if !ok {
 			fmt.Fprintln(w, "No match.")
+			if a.Out.Quiet() {
+				return
+			}
+			st := a.Out.Styles()
+			if cached {
+				fmt.Fprintln(w, st.Dim.Render("(cached result, no request used; --no-cache sends it again)"))
+			}
+			fmt.Fprintln(w, st.Dim.Render("Try another moment with --at 1:00, or scan the whole file with --enterprise --limit N."))
 			return
 		}
 		if a.Out.Quiet() {
@@ -556,11 +567,14 @@ func printEnterprise(a *app.App, f *recognizeFlags, name string, cached bool, cl
 	}
 	matched := len(matches) > 0
 	human := func(w io.Writer) {
+		st := a.Out.Styles()
 		if !matched {
 			fmt.Fprintln(w, "No match.")
+			if cached && !a.Out.Quiet() {
+				fmt.Fprintln(w, st.Dim.Render("(cached result, no requests used; --no-cache sends it again)"))
+			}
 			return
 		}
-		st := a.Out.Styles()
 		if f.tracklist {
 			for _, t := range tracks {
 				line := fmt.Sprintf("%s – %s", t.Start, t.End)

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AudDMusic/audd-go"
 	"github.com/gofrs/flock"
 
 	"github.com/AudDMusic/audd-cli/internal/api"
@@ -19,6 +20,7 @@ import (
 	"github.com/AudDMusic/audd-cli/internal/config"
 	"github.com/AudDMusic/audd-cli/internal/output"
 	"github.com/AudDMusic/audd-cli/internal/secrets"
+	"github.com/AudDMusic/audd-cli/internal/update"
 )
 
 func init() {
@@ -353,17 +355,32 @@ func Executable() (string, error) {
 
 // EnsureBackground starts the background recorder for the active profile
 // unless it is running, turned off (streams.background_recorder false or
-// AUDD_NO_BACKGROUND_RECORDER set), or there is no API token. started
-// reports whether this call started it. It is assigned to
-// app.EnsureRecorder. AUDD_NO_BACKGROUND_RECORDER is intentionally supported
-// but left out of the user docs: tests (internal/e2e) and throwaway
-// environments such as CI use it so that only an explicit
-// `audd streams recorder start` starts a recorder.
+// AUDD_NO_BACKGROUND_RECORDER set), in a CI run, there is no API token, or
+// the account has no streams. A background recorder that an older version
+// of audd started is restarted. started reports whether this call started it.
+// It is assigned to app.EnsureRecorder. Only an explicit
+// `audd streams recorder start` starts a recorder in those cases.
 func EnsureBackground(a *app.App) (started bool, err error) {
 	if a == nil || a.Profile == nil {
 		return false, nil
 	}
-	if !a.Profile.RecorderEnabled() || os.Getenv("AUDD_NO_BACKGROUND_RECORDER") != "" || isTestBinary() {
+	if !a.Profile.RecorderEnabled() || os.Getenv("AUDD_NO_BACKGROUND_RECORDER") != "" || isTestBinary() || update.InCI(os.Getenv) {
+		return false, nil
+	}
+	profile := profileName(a.Profile.Name)
+	running, _, _, err := Status(profile)
+	if err != nil {
+		return false, err
+	}
+	if running {
+		// A background recorder started by an older audd keeps running the
+		// older program: restart it so it runs this one.
+		if info, err := readPID(profile); err == nil && info.Background && update.Newer(app.Version, info.Version) {
+			return RestartBackground(a)
+		}
+		return false, nil
+	}
+	if !accountHasStreams(a) {
 		return false, nil
 	}
 	started, err = startBackground(a)
@@ -371,6 +388,18 @@ func EnsureBackground(a *app.App) (started bool, err error) {
 		return false, nil
 	}
 	return started, err
+}
+
+// streamListTimeout bounds the stream-list check before an automatic start.
+var streamListTimeout = 10 * time.Second
+
+// accountHasStreams reports whether the account has a stream to record. It
+// is true when the list cannot be read: the recorder then reports why.
+func accountHasStreams(a *app.App) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), streamListTimeout)
+	defer cancel()
+	list, err := Do(ctx, a, func(c *audd.Client) ([]audd.Stream, error) { return c.Streams().ListContext(ctx) })
+	return err != nil || len(list) > 0
 }
 
 // StartBackground starts the background recorder for the active profile

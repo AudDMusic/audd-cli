@@ -160,6 +160,14 @@ var migrations = []string{
 		first_seen INTEGER NOT NULL,
 		current    INTEGER NOT NULL DEFAULT 1
 	);`,
+	// AudD's stream timestamps ("YYYY-MM-DD hh:mm:ss") are UTC from
+	// 2026-10-12 on. Plays stored from them as UTC+3 sit three hours early:
+	// move the ones from that day on (stored at or after 2026-10-12
+	// 00:00:00 UTC, Unix 1791763200) to the time AudD sent. The first step
+	// goes through negative values so no two plays of a stream share a
+	// timestamp in between.
+	`UPDATE plays SET ts = -(ts + 10800) WHERE ts >= 1791763200;
+	UPDATE plays SET ts = -ts WHERE ts < 0;`,
 }
 
 // Open opens DataDir()/streams-<profile>.db.

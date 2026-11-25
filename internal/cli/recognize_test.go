@@ -127,9 +127,19 @@ func TestRecognizeNoMatch(t *testing.T) {
 	if r.Code != 0 || decode(t, r.Stdout)["result"] != nil || !strings.Contains(r.Stdout, `"result":null`) {
 		t.Fatalf("no match: %d %s", r.Code, r.Stdout)
 	}
+	// For people: the next thing to try, and that a cached no-match used no
+	// request and how to ask again.
+	const next = "Try another moment with --at 1:00, or scan the whole file with --enterprise --limit N.\n"
 	r = run(t, "recognize", song, "--format", "table")
-	if r.Code != 0 || r.Stdout != "No match.\n" {
+	if r.Code != 0 || r.Stdout != "No match.\n(cached result, no request used; --no-cache sends it again)\n"+next {
+		t.Fatalf("human cached no match: %q", r.Stdout)
+	}
+	r = run(t, "recognize", song, "--format", "table", "--no-cache")
+	if r.Code != 0 || r.Stdout != "No match.\n"+next {
 		t.Fatalf("human no match: %q", r.Stdout)
+	}
+	if r := run(t, "recognize", song, "--format", "table", "--quiet"); r.Stdout != "No match.\n" {
+		t.Fatalf("quiet no match: %q", r.Stdout)
 	}
 	r = run(t, "recognize", song, "--fail-on-no-match")
 	if r.Code != output.ExitUnexpected || errCode(t, r) != "no_match" || !strings.Contains(r.Stdout, `"result":null`) || !strings.Contains(r.Stderr, "--at 1:00") {
@@ -415,8 +425,12 @@ func TestRecognizeEnterpriseNeedsLimit(t *testing.T) {
 			t.Errorf("%v: %d", args, r.Code)
 		}
 	}
+	// Enterprise results come without provider metadata by default; the
+	// message says so and what to do, and never that it can't be had.
+	before := len(f.Requests())
 	r = run(t, "recognize", song, "--enterprise", "--limit", "3", "--return", "spotify")
-	if r.Code != output.ExitUsage || !strings.Contains(r.Stderr, "enterprise endpoint doesn't return") {
+	if r.Code != output.ExitUsage || !strings.Contains(r.Stderr, "by default") || !strings.Contains(r.Stderr, "api@audd.io") ||
+		strings.Contains(r.Stderr, "available") || strings.Contains(r.Stderr, "doesn't return") || len(f.Requests()) != before {
 		t.Fatalf("%d %s", r.Code, r.Stderr)
 	}
 	r = run(t, "recognize", song, "--return", "napster")
@@ -670,6 +684,48 @@ func TestCatalogAdd(t *testing.T) {
 	r = run(t, "catalog", "add", song, "--id", "1")
 	if r.Code != output.ExitQuota || !strings.Contains(r.Stderr, "custom catalog access") {
 		t.Fatalf("%d %s", r.Code, r.Stderr)
+	}
+}
+
+// What AudD returns depends on the account (its custom catalog, its
+// enterprise fields), so cached results are kept per account, and adding a
+// song to the custom catalog drops that song's cached results.
+func TestCacheIsPerAccountAndCatalogAddClearsIt(t *testing.T) {
+	f, dir := setup(t)
+	f.Reply(testutil.EndpointRecognize, testutil.Success(nil))
+	song := audio(t, dir, "song.mp3", "song bytes")
+	other := audio(t, dir, "other.mp3", "other bytes")
+	for _, p := range []string{song, other} {
+		if r := run(t, "recognize", p); r.Code != 0 || decode(t, r.Stdout)["cached"] != false {
+			t.Fatalf("first: %d %s %s", r.Code, r.Stdout, r.Stderr)
+		}
+	}
+	if r := run(t, "recognize", song); decode(t, r.Stdout)["cached"] != true || f.Count(testutil.EndpointRecognize) != 2 {
+		t.Fatalf("same account: %s", r.Stdout)
+	}
+	// Another account (another profile's token) asks AudD itself.
+	r := run(t, "recognize", song, "--token", "fedcba9876543210fedcba9876543210")
+	if decode(t, r.Stdout)["cached"] != false || f.Count(testutil.EndpointRecognize) != 3 {
+		t.Fatalf("other account: %s", r.Stdout)
+	}
+	// Batches use the same per-account cache.
+	r = run(t, "recognize", song, other, "--max-files", "2", "--yes", "--token", "fedcba9876543210fedcba9876543210")
+	if r.Code != 0 || f.Count(testutil.EndpointRecognize) != 4 {
+		t.Fatalf("batch: %d requests\n%s", f.Count(testutil.EndpointRecognize), r.Stdout)
+	}
+
+	f.Reply(testutil.EndpointUpload, map[string]any{"status": "success", "result": nil})
+	if r := run(t, "catalog", "add", song, "--id", "42"); r.Code != 0 {
+		t.Fatal(r.Stderr)
+	}
+	f.Reply(testutil.EndpointRecognize, testutil.Success(map[string]any{"audio_id": 42, "timecode": "00:01"}))
+	r = run(t, "recognize", song)
+	if d := decode(t, r.Stdout); d["cached"] != false || d["result"].(map[string]any)["audio_id"] != float64(42) || f.Count(testutil.EndpointRecognize) != 5 {
+		t.Fatalf("after catalog add: %s", r.Stdout)
+	}
+	// Only the uploaded song was dropped.
+	if r := run(t, "recognize", other); decode(t, r.Stdout)["cached"] != true {
+		t.Fatalf("other song: %s", r.Stdout)
 	}
 }
 

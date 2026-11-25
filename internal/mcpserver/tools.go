@@ -126,7 +126,7 @@ func (t *tools) register(s *mcp.Server) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "catalog_add",
-		Description: "Fingerprint a song into the account's custom catalog under audio_id. Billed, sent exactly once, and never retried automatically; a song already under that audio_id is replaced. Custom catalog access is enabled per account.",
+		Description: "Fingerprint a song into the account's custom catalog under audio_id. Uploads are not counted as requests. Sent exactly once and never retried automatically; a song already under that audio_id is replaced. Custom catalog access is enabled per account.",
 		Annotations: &mcp.ToolAnnotations{Title: "Add to custom catalog", DestructiveHint: boolPtr(true), OpenWorldHint: openWorld},
 	}, t.catalogAdd)
 

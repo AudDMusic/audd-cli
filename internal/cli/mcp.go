@@ -103,9 +103,10 @@ func mcpForwardedFlags(a *app.App) []string {
 }
 
 // mcpCost is the most requests a tool call can spend, counted against the
-// session's --max-requests: one for a recognition or a catalog upload, the
-// limit for an enterprise scan (capped is set: the scan's limit can be
-// lowered to fit), nothing for a dry run or a call that is not billed.
+// session's --max-requests: one for a recognition, the limit for an
+// enterprise scan (capped is set: the scan's limit can be lowered to fit),
+// nothing for a dry run or a call that is not billed, such as a custom
+// catalog upload.
 func mcpCost(args []string) (cost int, capped bool) {
 	if len(args) == 0 || slices.Contains(args, "--dry-run") {
 		return 0, false
@@ -118,7 +119,7 @@ func mcpCost(args []string) (cost int, capped bool) {
 			}
 		}
 		return 1, true
-	case args[0] == "recognize", len(args) > 1 && args[0] == "catalog" && args[1] == "add":
+	case args[0] == "recognize":
 		return 1, false
 	}
 	return 0, false

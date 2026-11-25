@@ -65,25 +65,31 @@ func init() {
 	}
 }
 
-// requestFor is the API request a job's settings describe.
-func requestFor(p jobs.Params) api.Request {
-	return api.Request{Enterprise: p.Enterprise, Return: p.Return, Limit: p.Limit, EnterpriseOpts: p.Options}
+// requestFor is the API request a job's settings describe, for the account
+// a uses.
+func requestFor(a *app.App, p jobs.Params) api.Request {
+	return api.Request{Enterprise: p.Enterprise, Return: p.Return, Limit: p.Limit, EnterpriseOpts: p.Options, CacheScope: api.CacheScope(a)}
 }
 
 // batchRecognize is jobs.Recognize: the API layer (token self-healing, error
 // mapping), with the SDK error kept so the runner can tell safe retries.
 func batchRecognize(ctx context.Context, a *app.App, in media.Input, p jobs.Params) (json.RawMessage, error) {
-	return api.RecognizeWithCause(ctx, a, in, requestFor(p))
+	return api.RecognizeWithCause(ctx, a, in, requestFor(a, p))
 }
 
-func batchCacheKey(in media.Input, p jobs.Params) (string, error) {
-	r := requestFor(p)
-	return cache.KeyForInput(in, r.Endpoint(), r.CacheParams())
+// batchCacheKey is the same key as `audd recognize <file>`, with the input's
+// ID (cache.InputID).
+func batchCacheKey(a *app.App, in media.Input, p jobs.Params) (key, content string, err error) {
+	r := requestFor(a, p)
+	if content, err = cache.InputID(in); err != nil {
+		return "", "", err
+	}
+	return cache.Key(content, r.Endpoint(), r.CacheParams()), content, nil
 }
 
-// batchCacheGet is jobs.CacheGet: the same key as `audd recognize <file>`.
+// batchCacheGet is jobs.CacheGet.
 func batchCacheGet(a *app.App, in media.Input, p jobs.Params) (json.RawMessage, bool) {
-	key, err := batchCacheKey(in, p)
+	key, _, err := batchCacheKey(a, in, p)
 	if err != nil {
 		return nil, false
 	}
@@ -97,7 +103,7 @@ func batchCacheGet(a *app.App, in media.Input, p jobs.Params) (json.RawMessage, 
 
 // batchCachePut is jobs.CachePut.
 func batchCachePut(a *app.App, in media.Input, p jobs.Params, result json.RawMessage) {
-	key, err := batchCacheKey(in, p)
+	key, content, err := batchCacheKey(a, in, p)
 	if err != nil {
 		return
 	}
@@ -106,7 +112,7 @@ func batchCachePut(a *app.App, in media.Input, p jobs.Params, result json.RawMes
 		return
 	}
 	defer c.Close()
-	if err := c.PutEntry(cache.Entry{Key: key, Source: in.Name(), Endpoint: requestFor(p).Endpoint(), Result: result}, in.URL != ""); err != nil && a.Out != nil {
+	if err := c.PutEntry(cache.Entry{Key: key, Source: in.Name(), Endpoint: requestFor(a, p).Endpoint(), Content: content, Result: result}, in.URL != ""); err != nil && a.Out != nil {
 		a.Out.Info("Could not save the result for %s to the cache: %v", in.Name(), err)
 	}
 }

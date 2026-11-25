@@ -72,7 +72,8 @@ arguments and flags; `?` lists the keys of the screen, and `q` quits.
 Interactive mode runs the same commands, with the same limits and
 confirmations: it asks before spending more than one request and never adds
 `--yes`. `audd ui --section <name>` opens a section (`recognize`,
-`now-playing`, `streams`, `recognitions`, `account`, `settings`, `help`).
+`now-playing`, `streams`, `recognitions`, `account`, `settings`, `help`);
+`--section listen` opens Recognize with the microphone.
 
 Menu on the left, page on the right. Arrows move, Enter goes in, Esc comes
 back. On the sidebar, up and down pick a section and right or Enter opens it.
@@ -202,7 +203,9 @@ summary say which failures can be retried: "2 files failed: 1 can be retried,
 1 can't (corrupt.mp3: ...)". A job keeps the command as you typed it (the
 folder or glob, not every file found), and summaries count every request
 that reached AudD, retries included; when some of them failed, the summary
-says "N requests sent (up to N billed)".
+says "N requests sent (up to N billed)". A job started with `--no-cache` skips
+the cache when it is resumed too; `audd jobs resume <id> --no-cache` does that
+for any job.
 
 Running the same batch again while its job is unfinished offers to resume it.
 Without a terminal it stops with exit 6 (`resume_available`): pass `--resume`
@@ -215,9 +218,10 @@ is what this run used.
 
 ### Results cache
 
-Results are cached by file contents (URLs for 24 hours). Recognizing the same
-audio again is free and marked `"cached": true`. `--no-cache` sends it anyway;
-`audd cache clear` empties the cache.
+Results are cached for each account by file contents (URLs for 24 hours,
+no-matches for 7 days). Recognizing the same audio again is free and marked
+`"cached": true`. `audd catalog add` drops the cached results of the song it
+adds. `--no-cache` sends it anyway; `audd cache clear` empties the cache.
 
 ## Limits and confirmations
 
@@ -292,6 +296,14 @@ audd streams record                             # the same recorder in the foreg
 audd config set streams.background_recorder false
 ```
 
+The recorder does not start by itself while the account has no streams, or in
+CI (when `CI` or another CI variable is set). `AUDD_NO_BACKGROUND_RECORDER=1`
+keeps it from starting by itself in one shell or container, as
+`streams.background_recorder false` does for a profile; `audd streams recorder
+start` still starts it.
+After an update, the next `audd` command restarts a background recorder that
+the older version started.
+
 `audd streams watch --forward-to http://localhost:8080/callback` and
 `audd streams record --forward-to URL` also POST each result to your URL,
 shaped like an AudD callback, for testing a callback handler locally.
@@ -328,9 +340,9 @@ pick the method yourself.
 audd catalog add song.mp3 --id 42
 ```
 
-Fingerprints a song into your custom catalog under `audio_id` 42. Each upload
-is billed and is never retried automatically. Custom catalog access is enabled
-per account.
+Fingerprints a song into your custom catalog under `audio_id` 42. Uploads are
+not counted as requests. Each upload is sent once and never retried
+automatically. Custom catalog access is enabled per account.
 
 ## Account
 

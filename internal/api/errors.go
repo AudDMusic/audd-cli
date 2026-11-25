@@ -93,12 +93,12 @@ func mapAPIError(ae *audd.AudDAPIError, src config.TokenSource) *output.Error {
 	switch code := ae.ErrorCode; {
 	case code == 900 || code == 901 || code == 903:
 		e.Code, e.Exit, e.Hint, e.DocsURL = "token_rejected", output.ExitAuth, tokenHint(src), DashboardURL
+	case code == 610 || code == 902 && streamLimit(ae):
+		e.Code, e.Exit, e.Hint = "stream_limit", output.ExitQuota, "remove a stream (audd streams remove <id>) or upgrade your plan at "+DashboardURL
 	case code == 902:
 		e.Code, e.Exit, e.Hint = "quota_exceeded", output.ExitQuota, "audd usage shows what's left; audd billing plans lists plans"
 	case code == 904 || code == 905:
 		e.Code, e.Exit, e.Hint = "not_enabled", output.ExitQuota, "this feature isn't enabled for your token; see "+DashboardURL+" or write to api@audd.io"
-	case code == 610:
-		e.Code, e.Exit, e.Hint = "stream_limit", output.ExitQuota, "remove a stream (audd streams remove <id>) or upgrade your plan at "+DashboardURL
 	case code == 611:
 		e.Code, e.Exit, e.Retryable = "rate_limited", output.ExitQuota, true
 	case code == 907:
@@ -110,6 +110,10 @@ func mapAPIError(ae *audd.AudDAPIError, src config.TokenSource) *output.Error {
 		}
 	case code == 50 || code == 51 || (code >= 600 && code <= 602) || (code >= 700 && code <= 702) || code == 906 || code == 1000:
 		e.Code, e.Exit = "invalid_request", output.ExitUsage
+	case code == 0 && errors.Is(ae, audd.ErrInvalidRequest):
+		// A request AudD refused with a text error and no code, such as a
+		// longpoll {"error":"Invalid timeout arg.  Must be 1-120."}.
+		e.Code, e.Exit = "invalid_request", output.ExitUsage
 	case code == 19 || code == 31337:
 		// 19 also covers maintenance, but mostly means the request was
 		// refused (blocked, test-token scope, missing stream callback URL):
@@ -118,7 +122,7 @@ func mapAPIError(ae *audd.AudDAPIError, src config.TokenSource) *output.Error {
 	case code == 20:
 		e.Code, e.Exit, e.Hint = "update_required", output.ExitQuota, "audd update"
 	default: // 100, HTTP errors without a JSON body, and anything new
-		e.Code, e.Exit, e.Retryable = "server", output.ExitNetwork, true
+		e.Code, e.Exit, e.Retryable, e.Hint = "server", output.ExitNetwork, true, ServerErrorHint
 		if ae.ErrorCode == 0 && ae.HTTPStatus != 0 {
 			e.Message = fmt.Sprintf("AudD returned HTTP %d", ae.HTTPStatus)
 		}
@@ -127,6 +131,21 @@ func mapAPIError(ae *audd.AudDAPIError, src config.TokenSource) *output.Error {
 		e.DocsURL = APIDocsURL
 	}
 	return e
+}
+
+// ServerErrorHint is the hint on errors AudD could not answer (HTTP 5xx,
+// error 100).
+const ServerErrorHint = "AudD could not answer just now; try again in a minute"
+
+// streamLimit reports whether a 902 is the account's stream limit rather
+// than its request quota: AudD answers an addStream (addRadio) call on an
+// account with every stream slot in use with 902 "Adding a stream stream
+// failed: authorization failed: the limit was reached".
+func streamLimit(ae *audd.AudDAPIError) bool {
+	method := strings.ToLower(ae.RequestMethod)
+	adding := method == "addstream" || method == "addradio" ||
+		strings.HasPrefix(strings.ToLower(ae.Message), "adding a stream")
+	return adding && strings.Contains(strings.ToLower(ae.Message), "limit")
 }
 
 // APIDocsURL and EnterpriseDocsURL are the docs pages that list the API's

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -128,8 +129,8 @@ func TestRecorderBackfillThenLiveDedupes(t *testing.T) {
 	h := newHarness(t)
 	h.srv.SetStreams(streamstest.Stream{RadioID: 1, URL: "https://radio.example/1", Running: true})
 	h.srv.SetRecent(1, streamstest.RecentBody(30,
-		map[string]any{"artist": "A", "title": "One", "timestamp": "2026-10-08 14:00:00", "play_length": 200},
-		map[string]any{"artist": "B", "title": "Two", "timestamp": "2026-10-08 14:04:00", "play_length": 180},
+		map[string]any{"artist": "A", "title": "One", "timestamp": "2026-10-08 11:00:00", "play_length": 200},
+		map[string]any{"artist": "B", "title": "Two", "timestamp": "2026-10-08 11:04:00", "play_length": 180},
 	))
 	stop := start(t, h.recorder(RecorderOptions{}))
 	waitFor(t, "backfill", func() bool { return h.count() == 2 })
@@ -137,8 +138,8 @@ func TestRecorderBackfillThenLiveDedupes(t *testing.T) {
 		t.Fatal("the start-up backfill is not reported as live plays")
 	}
 	// The live feed repeats the last backfilled play, then a new one.
-	h.srv.PushMatch(1, "2026-10-08 14:04:00", "B", "Two", 180)
-	h.srv.PushMatch(1, "2026-10-08 14:07:00", "C", "Three", 150)
+	h.srv.PushMatch(1, "2026-10-08 11:04:00", "B", "Two", 180)
+	h.srv.PushMatch(1, "2026-10-08 11:07:00", "C", "Three", 150)
 	waitFor(t, "live plays", func() bool { return h.count() == 3 })
 	if err := stop(); err != nil {
 		t.Fatal(err)
@@ -154,7 +155,7 @@ func TestRecorderBackfillThenLiveDedupes(t *testing.T) {
 	if latest.Title != "Three" || latest.Label != "Label" || latest.RadioID != 1 {
 		t.Fatalf("latest %+v", latest)
 	}
-	// The backfill reached back to 14:00 (UTC+3), so the store is complete from then.
+	// The backfill reached back to 11:00, so the store is complete from then.
 	gaps, _ := h.store.Gaps(time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC))
 	for _, g := range gaps {
 		if g.From.Before(time.Date(2026, 10, 8, 11, 0, 1, 0, time.UTC)) && g.To.After(time.Now().Add(-time.Minute)) {
@@ -172,7 +173,7 @@ func TestRecorderReconnectsAfterServerErrors(t *testing.T) {
 	h.srv.FailNextPolls(3)
 	start(t, h.recorder(RecorderOptions{}))
 	waitFor(t, "reconnects", func() bool { return h.srv.Count("longpoll") >= 4 })
-	h.srv.PushMatch(2, "2026-10-08 14:07:00", "C", "Three", 150)
+	h.srv.PushMatch(2, "2026-10-08 11:07:00", "C", "Three", 150)
 	waitFor(t, "play after reconnect", func() bool { return h.count() == 1 })
 	// Every reconnect backfills from the recent-results endpoint.
 	if n := h.srv.Count("getChannelById"); n < 3 {
@@ -183,13 +184,69 @@ func TestRecorderReconnectsAfterServerErrors(t *testing.T) {
 	}
 }
 
+// Longpoll answers with an events list ({"events":[{"timestamp",
+// "category","data"}]}): every event is recorded in order, and the next
+// request asks for events after the newest one, with the category alone
+// (the fake fails the test if a longpoll request carries the API token).
+func TestRecorderReadsLongpollEvents(t *testing.T) {
+	h := newHarness(t)
+	h.srv.SetStreams(streamstest.Stream{RadioID: 2, Running: true})
+	start(t, h.recorder(RecorderOptions{}))
+	waitFor(t, "first poll", func() bool { return h.srv.Count("longpoll") >= 1 })
+	h.srv.PushMatch(2, "2026-10-08 11:04:00", "B", "Two", 180)
+	h.srv.PushNotification(2, 651, "no music", true, 1791457320)
+	h.srv.PushMatch(2, "2026-10-08 11:07:00", "C", "Three", 150)
+	newest := strconv.FormatInt(h.srv.LastEventTimestamp(), 10)
+	waitFor(t, "both plays", func() bool { return len(h.livePlays()) == 2 })
+	if p := h.livePlays(); p[0].Title != "Two" || p[1].Title != "Three" || !p[1].Timestamp.Equal(time.Date(2026, 10, 8, 11, 7, 0, 0, time.UTC)) {
+		t.Fatalf("plays %+v", p)
+	}
+	waitFor(t, "the notification", func() bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, e := range h.health {
+			if e.Code == 651 {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor(t, "since_time of the newest event", func() bool {
+		for _, c := range h.srv.Calls() {
+			if c.Method == "longpoll" && c.Params.Get("since_time") == newest {
+				return c.Params.Get("category") == streamstest.Category(2)
+			}
+		}
+		return false
+	})
+}
+
+// A longpoll error body ends that poll; the recorder says AudD refused the
+// request, keeps trying, and records again once AudD accepts it.
+func TestRecorderLongpollErrorBody(t *testing.T) {
+	h := newHarness(t)
+	h.srv.SetStreams(streamstest.Stream{RadioID: 2, Running: true})
+	h.srv.SetPollError(json.RawMessage(`{"error":"Invalid timeout arg.  Must be 1-120."}`))
+	start(t, h.recorder(RecorderOptions{}))
+	waitFor(t, "the refusal noted", func() bool {
+		v, _ := h.store.Meta("last_error")
+		return strings.Contains(v, "AudD refused the longpoll request") && strings.Contains(v, "Invalid timeout arg")
+	})
+	if n := h.srv.Count("longpoll"); n < 1 {
+		t.Fatalf("longpoll requests: %d", n)
+	}
+	h.srv.SetPollError(nil)
+	h.srv.PushMatch(2, "2026-10-08 11:07:00", "C", "Three", 150)
+	waitFor(t, "a play once AudD accepts the request", func() bool { return h.count() == 1 })
+}
+
 func TestRecorderReconnectBackfillReportsMissedPlays(t *testing.T) {
 	h := newHarness(t)
 	h.srv.SetStreams(streamstest.Stream{RadioID: 2, Running: true})
 	h.srv.FailNextPolls(1)
 	h.srv.FailNextRecent(1) // the start-up backfill fails
 	// After the failed poll, the reconnect backfill finds a play.
-	h.srv.SetRecent(2, streamstest.RecentBody(30, map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 14:00:00"}))
+	h.srv.SetRecent(2, streamstest.RecentBody(30, map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 11:00:00"}))
 	start(t, h.recorder(RecorderOptions{}))
 	waitFor(t, "missed play", func() bool { return len(h.livePlays()) == 1 })
 	if p := h.livePlays()[0]; p.Title != "Missed" || p.RadioID != 2 {
@@ -211,7 +268,7 @@ func TestRecorderRescanPicksUpNewStreamsAndHealth(t *testing.T) {
 		}
 		return false
 	})
-	h.srv.PushMatch(9, "2026-10-08 15:00:00", "N", "New", 100)
+	h.srv.PushMatch(9, "2026-10-08 12:00:00", "N", "New", 100)
 	waitFor(t, "play on new stream", func() bool { p, _ := h.store.Latest(9); return p != nil })
 	hv, _ := h.store.LatestHealth(9)
 	if hv == nil || hv.Running {
@@ -402,7 +459,7 @@ func TestForwarderRelaysCallbackBodies(t *testing.T) {
 	h.srv.SetStreams(streamstest.Stream{RadioID: 4, Running: true})
 	start(t, h.recorder(RecorderOptions{ForwardTo: recv.URL}))
 	waitFor(t, "poll", func() bool { return h.srv.Count("longpoll") >= 1 })
-	h.srv.PushMatch(4, "2026-10-08 14:07:00", "C", "Three", 150)
+	h.srv.PushMatch(4, "2026-10-08 11:07:00", "C", "Three", 150)
 	h.srv.PushNotification(4, 651, "no music", true, 1791457320)
 	waitFor(t, "forwarded", func() bool { mu.Lock(); defer mu.Unlock(); return len(bodies) == 2 })
 	m, _, err := audd.ParseCallback([]byte(bodies[0]))
@@ -426,7 +483,7 @@ func TestCallbackBodyGoldens(t *testing.T) {
 	testutil.Golden(t, "forward_health", append(HealthCallbackBody(h), '\n'))
 	// What we build parses back with the SDK's callback parser.
 	m, _, err := audd.ParseCallback(PlayCallbackBody(p))
-	if err != nil || m.Song.Title != "Title" || m.Timestamp != "2026-10-08 14:02:00" {
+	if err != nil || m.Song.Title != "Title" || m.Timestamp != "2026-10-08 11:02:00" {
 		t.Fatalf("%+v %v", m, err)
 	}
 }
@@ -454,15 +511,15 @@ func (r *Recorder) isDown(id int) bool {
 }
 
 // outage runs a recorder on stream 1, cuts AudD off for ten minutes, then
-// restores it with recent results starting at recoveredFrom (local time,
-// UTC+3). It returns the gaps since an hour before the outage.
+// restores it with recent results starting at recoveredFrom (UTC, as AudD
+// sends it). It returns the gaps since an hour before the outage.
 func outage(t *testing.T, recoveredFrom string) []streamstore.Gap {
 	h := newHarness(t)
 	t0 := time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)
 	clk := h.useClock(t0)
 	h.srv.SetStreams(streamstest.Stream{RadioID: 1, Running: true})
 	h.srv.SetRecent(1, streamstest.RecentBody(30,
-		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 13:30:00"}))
+		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 10:30:00"}))
 	r := h.recorder(RecorderOptions{})
 	stop := start(t, r)
 	waitFor(t, "first poll", func() bool { return h.srv.Count("longpoll") >= 1 })
@@ -498,7 +555,7 @@ func outage(t *testing.T, recoveredFrom string) []streamstore.Gap {
 
 func TestRecorderOutageLongerThanRecentWindowIsAGap(t *testing.T) {
 	// The reconnect backfill reaches back only to 11:08 UTC.
-	gaps := outage(t, "2026-10-08 14:08:00")
+	gaps := outage(t, "2026-10-08 11:08:00")
 	t0 := time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)
 	var found bool
 	for _, g := range gaps {
@@ -516,7 +573,7 @@ func TestRecorderOutageLongerThanRecentWindowIsAGap(t *testing.T) {
 
 func TestRecorderOutageFilledByBackfillIsNoGap(t *testing.T) {
 	// The reconnect backfill reaches back past the outage (to 10:40 UTC).
-	gaps := outage(t, "2026-10-08 13:40:00")
+	gaps := outage(t, "2026-10-08 10:40:00")
 	// The time before the first backfill is before recording started: not
 	// a gap either.
 	if len(gaps) != 0 {
@@ -537,7 +594,7 @@ func TestRecorderLongpollWorkingAgainEndsOutage(t *testing.T) {
 	// A longpoll connection that keeps working brings the stream back up.
 	waitFor(t, "stream up", func() bool { return !r.isDown(1) })
 	// The reconnect backfill is retried once recent results work again.
-	h.srv.SetRecent(1, streamstest.RecentBody(30, map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 14:00:00"}))
+	h.srv.SetRecent(1, streamstest.RecentBody(30, map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 11:00:00"}))
 	h.srv.FailNextRecent(0)
 	waitFor(t, "missed play", func() bool { return len(h.livePlays()) == 1 })
 }
@@ -559,19 +616,19 @@ func TestRecorderReportsPlaysAnotherRecorderStoredFirst(t *testing.T) {
 
 	// The background recorder, longpolling the same stream, stores the
 	// play before this recorder receives it.
-	ts, _ := ParseTimestamp("2026-10-08 14:07:00")
+	ts, _ := ParseTimestamp("2026-10-08 11:07:00")
 	if ok, err := h.store.AddPlay(streamstore.Play{RadioID: 1, Timestamp: ts, Artist: "C", Title: "Three"}); !ok || err != nil {
 		t.Fatalf("second writer: %v %v", ok, err)
 	}
-	h.srv.PushMatch(1, "2026-10-08 14:07:00", "C", "Three", 150)
+	h.srv.PushMatch(1, "2026-10-08 11:07:00", "C", "Three", 150)
 	waitFor(t, "reported", func() bool { return len(h.livePlays()) == 1 })
 	waitFor(t, "forwarded", func() bool { mu.Lock(); defer mu.Unlock(); return len(bodies) == 1 })
 	if p := h.livePlays()[0]; p.Title != "Three" || p.RadioID != 1 {
 		t.Fatalf("%+v", p)
 	}
 	// The same play arriving again is not reported twice.
-	h.srv.PushMatch(1, "2026-10-08 14:07:00", "C", "Three", 150)
-	h.srv.PushMatch(1, "2026-10-08 14:10:00", "D", "Four", 150)
+	h.srv.PushMatch(1, "2026-10-08 11:07:00", "C", "Three", 150)
+	h.srv.PushMatch(1, "2026-10-08 11:10:00", "D", "Four", 150)
 	waitFor(t, "next play", func() bool { return len(h.livePlays()) == 2 })
 	if p := h.livePlays()[1]; p.Title != "Four" {
 		t.Fatalf("%+v", h.livePlays())
@@ -584,17 +641,17 @@ func TestRecorderReconnectBackfillReportsPlaysStoredByAnotherRecorder(t *testing
 	h.useClock(t0)
 	h.srv.SetStreams(streamstest.Stream{RadioID: 1, Running: true})
 	h.srv.SetRecent(1, streamstest.RecentBody(30,
-		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 13:30:00"}))
+		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 10:30:00"}))
 	r := h.recorder(RecorderOptions{})
 	start(t, r)
 	waitFor(t, "first poll", func() bool { return h.srv.Count("longpoll") >= 1 })
 	// While this recorder is disconnected, another one stores a new play.
 	h.srv.FailNextPolls(1)
-	missed := map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 14:05:00"}
-	ts, _ := ParseTimestamp("2026-10-08 14:05:00")
+	missed := map[string]any{"artist": "M", "title": "Missed", "timestamp": "2026-10-08 11:05:00"}
+	ts, _ := ParseTimestamp("2026-10-08 11:05:00")
 	h.store.AddPlay(streamstore.Play{RadioID: 1, Timestamp: ts, Artist: "M", Title: "Missed"})
 	h.srv.SetRecent(1, streamstest.RecentBody(30,
-		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 13:30:00"}, missed))
+		map[string]any{"artist": "A", "title": "Before", "timestamp": "2026-10-08 10:30:00"}, missed))
 	waitFor(t, "missed play", func() bool { return len(h.livePlays()) == 1 })
 	time.Sleep(100 * time.Millisecond)
 	if live := h.livePlays(); len(live) != 1 || live[0].Title != "Missed" {
@@ -695,7 +752,7 @@ func TestRecorderPicksUpARotatedToken(t *testing.T) {
 		}
 		return false
 	})
-	h.srv.PushMatchFor(newToken, 1, "2026-10-08 15:00:00", "N", "New token", 100)
+	h.srv.PushMatchFor(newToken, 1, "2026-10-08 12:00:00", "N", "New token", 100)
 	waitFor(t, "play under the new token", func() bool { p, _ := h.store.Latest(1); return p != nil && p.Title == "New token" })
 	waitFor(t, "heartbeats resume", func() bool { last, _ := h.store.LastHeartbeat(1); return last.After(paused) })
 	if v, _ := h.store.Meta("last_error"); v != "" {

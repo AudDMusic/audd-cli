@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -363,7 +364,7 @@ func TestCobraErrorsAreOneLineWithANextStep(t *testing.T) {
 	}{
 		{[]string{"recognize"}, "audd recognize takes at least 1 argument and got 0", "audd recognize --help"},
 		{[]string{"jobs", "show", "a", "b"}, "audd jobs show takes 1 argument and got 2", "audd jobs show --help"},
-		{[]string{"recognise", "x"}, `unknown command \"recognise\" for \"audd\"`, "audd recognize"},
+		{[]string{"recognise", "x"}, `unknown command \"recognise\" for \"audd\"`, "audd recognize x --format json"},
 	}
 	for _, c := range cases {
 		r := run(t, append(c.args, "--format", "json")...)
@@ -372,6 +373,54 @@ func TestCobraErrorsAreOneLineWithANextStep(t *testing.T) {
 		}
 		if strings.Contains(r.Stderr, "(s)") || strings.Contains(r.Stderr, `\n`) {
 			t.Errorf("%v: %s", c.args, r.Stderr)
+		}
+	}
+}
+
+// audd <file> and audd <url> point at audd recognize with what was typed,
+// and a mistyped command is suggested with the rest of the command line
+// (never the token).
+func TestUnknownCommandHintsKeepTheArguments(t *testing.T) {
+	testutil.Isolate(t)
+	dir := t.TempDir()
+	song := filepath.Join(dir, "my song.mp3")
+	if err := os.WriteFile(song, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hint := func(r testutil.Result) string {
+		var doc struct {
+			Error struct{ Message, Hint string }
+		}
+		if err := json.Unmarshal([]byte(r.Stderr), &doc); err != nil {
+			t.Fatalf("not JSON: %s", r.Stderr)
+		}
+		return doc.Error.Message + "\n" + doc.Error.Hint
+	}
+	// Paths are quoted for a shell when they need it.
+	q := func(s string) string {
+		if regexp.MustCompile(`^[-_./:=,@+%a-zA-Z0-9]+$`).MatchString(s) {
+			return s
+		}
+		return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{song}, fmt.Sprintf("%q is a file, not a command; audd recognize identifies the music in it\naudd recognize %s", song, q(song))},
+		{[]string{"https://audd.tech/example.mp3", "--quiet"}, `"https://audd.tech/example.mp3" is a URL, not a command; audd recognize identifies the music in it` + "\naudd recognize https://audd.tech/example.mp3 --quiet"},
+		{[]string{dir}, fmt.Sprintf("%q is a folder, not a command; audd recognize identifies the music in it\naudd recognize %s --max-files N", dir, q(dir))},
+		{[]string{"recognise", "https://audd.tech/example.mp3", "--token", "secret-token-value"}, `unknown command "recognise" for "audd"` + "\naudd recognize https://audd.tech/example.mp3"},
+		{[]string{"streams", "histroy", "--since", "24h"}, `unknown command "histroy" for "audd streams"` + "\naudd streams history --since 24h"},
+		{[]string{"nosuchthing"}, `unknown command "nosuchthing" for "audd"` + "\naudd --help"},
+	} {
+		r := run(t, append(c.args, "--format", "json")...)
+		got := strings.ReplaceAll(hint(r), " --format json", "")
+		if r.Code != output.ExitUsage || got != c.want {
+			t.Errorf("%v: %d\n got: %s\nwant: %s", c.args, r.Code, got, c.want)
+		}
+		if strings.Contains(r.Stderr, "secret-token-value") {
+			t.Errorf("%v: the token is repeated: %s", c.args, r.Stderr)
 		}
 	}
 }

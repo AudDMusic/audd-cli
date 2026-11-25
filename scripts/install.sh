@@ -134,13 +134,40 @@ mv -f "$INSTALL_DIR/.audd.new" "$INSTALL_DIR/audd" || fail "could not write $INS
 say "Installed $INSTALL_DIR/audd"
 "$INSTALL_DIR/audd" version --format table || true
 
+# path_advice says how to put INSTALL_DIR on PATH for the user's shell: in
+# the file new terminals of that shell read, and for this terminal.
+path_advice() {
+	line="export PATH=\"$INSTALL_DIR:\$PATH\""
+	shell="${SHELL:-}"
+	case "${shell##*/}" in
+	fish)
+		say "$INSTALL_DIR is not on your PATH. Add it (for this and new terminals) with:"
+		say "  fish_add_path $INSTALL_DIR"
+		return
+		;;
+	zsh) rc="~/.zshrc" ;;
+	bash)
+		# Terminals on macOS start login shells, which read ~/.bash_profile;
+		# on Linux they start shells that read ~/.bashrc.
+		if [ "$os" = darwin ]; then
+			rc="~/.bash_profile"
+		else
+			rc="~/.bashrc"
+		fi
+		;;
+	*) rc="~/.profile" ;;
+	esac
+	say "$INSTALL_DIR is not on your PATH. Add it for new terminals with:"
+	say "  echo '$line' >> $rc"
+	say "and for this terminal with:"
+	say "  $line"
+}
+
 case ":$PATH:" in
 *":$INSTALL_DIR:"*) ;;
 *)
 	say ""
-	say "$INSTALL_DIR is not on your PATH. Add it with:"
-	say "  echo 'export PATH=\"$INSTALL_DIR:\$PATH\"' >> ~/.profile"
-	say "then open a new terminal."
+	path_advice
 	;;
 esac
 

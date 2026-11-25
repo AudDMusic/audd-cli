@@ -1,7 +1,9 @@
 // Package cache keeps recognition results (never audio) so the same file or
 // URL is not paid for twice. Files are keyed by a SHA-256 of their bytes, so
 // a renamed or copied file still hits; URLs are keyed by the URL and expire
-// after 24 hours.
+// after 24 hours, and no-matches after 7 days. Callers add the account to
+// the key parameters (see api.Request.CacheScope): what AudD returns
+// depends on the account.
 package cache
 
 import (
@@ -31,6 +33,10 @@ const (
 // URLTTL is how long a URL result stays valid: the audio behind a URL can change.
 const URLTTL = 24 * time.Hour
 
+// NoMatchTTL is how long a no-match stays valid: AudD's catalog grows, and a
+// custom catalog upload can match the file later.
+const NoMatchTTL = 7 * 24 * time.Hour
+
 var migrations = []string{
 	`CREATE TABLE results (
 		key      TEXT PRIMARY KEY,
@@ -41,6 +47,10 @@ var migrations = []string{
 		result   TEXT NOT NULL
 	);
 	CREATE INDEX results_at ON results(at);`,
+	// content is the input's ID (see InputID), so every result for some
+	// audio can be dropped at once.
+	`ALTER TABLE results ADD COLUMN content TEXT NOT NULL DEFAULT '';
+	CREATE INDEX results_content ON results(content);`,
 }
 
 // Cache is the results cache. It is safe for concurrent use.
@@ -51,9 +61,11 @@ type Cache struct {
 
 // Entry is one cached result. Result is the API's result object for the
 // standard endpoint ("null" for no match) or the array of enterprise matches.
+// Content is the input's ID (InputID), used by Forget.
 type Entry struct {
 	Key, Source string
 	Endpoint    string
+	Content     string
 	At          time.Time
 	Result      json.RawMessage
 }
@@ -78,8 +90,16 @@ func (c *Cache) SetClock(now func() time.Time) { c.now = now }
 // Close closes the database.
 func (c *Cache) Close() error { return c.db.Close() }
 
-// KeyForFile hashes the file's bytes with the endpoint and parameters.
-func KeyForFile(path string, endpoint string, params map[string]string) (string, error) {
+// InputID identifies an input's audio: a SHA-256 of a file's bytes (so a
+// renamed or copied file is the same input), or the URL.
+func InputID(in media.Input) (string, error) {
+	if in.URL != "" {
+		return urlID(in.URL), nil
+	}
+	return fileID(in.Path)
+}
+
+func fileID(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -89,30 +109,43 @@ func KeyForFile(path string, endpoint string, params map[string]string) (string,
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
 	}
-	return key("file", hex.EncodeToString(h.Sum(nil)), endpoint, params), nil
+	return "file\x00" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func urlID(u string) string { return "url\x00" + strings.TrimSpace(u) }
+
+// KeyForFile hashes the file's bytes with the endpoint and parameters.
+func KeyForFile(path string, endpoint string, params map[string]string) (string, error) {
+	id, err := fileID(path)
+	if err != nil {
+		return "", err
+	}
+	return Key(id, endpoint, params), nil
 }
 
 // KeyForURL keys a URL with the endpoint and parameters.
 func KeyForURL(u string, endpoint string, params map[string]string) string {
-	return key("url", strings.TrimSpace(u), endpoint, params)
+	return Key(urlID(u), endpoint, params)
 }
 
 // KeyForInput keys a media input (file, stdin audio, or URL).
 func KeyForInput(in media.Input, endpoint string, params map[string]string) (string, error) {
-	if in.URL != "" {
-		return KeyForURL(in.URL, endpoint, params), nil
+	id, err := InputID(in)
+	if err != nil {
+		return "", err
 	}
-	return KeyForFile(in.Path, endpoint, params)
+	return Key(id, endpoint, params), nil
 }
 
-func key(kind, id, endpoint string, params map[string]string) string {
+// Key keys an input ID (InputID) with the endpoint and parameters.
+func Key(id, endpoint string, params map[string]string) string {
 	names := make([]string, 0, len(params))
 	for k := range params {
 		names = append(names, k)
 	}
 	sort.Strings(names)
 	var b strings.Builder
-	b.WriteString(kind + "\x00" + id + "\x00" + endpoint)
+	b.WriteString(id + "\x00" + endpoint)
 	for _, k := range names {
 		if params[k] == "" {
 			continue
@@ -123,7 +156,8 @@ func key(kind, id, endpoint string, params map[string]string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Get returns a cached result. URL entries older than URLTTL are misses.
+// Get returns a cached result. URL entries older than URLTTL and no-matches
+// older than NoMatchTTL are misses.
 func (c *Cache) Get(key string) (json.RawMessage, bool) {
 	var (
 		res   string
@@ -134,10 +168,32 @@ func (c *Cache) Get(key string) (json.RawMessage, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if isURL && c.now().Sub(time.UnixMilli(at)) > URLTTL {
+	age := c.now().Sub(time.UnixMilli(at))
+	if isURL && age > URLTTL || noMatch(res) && age > NoMatchTTL {
 		return nil, false
 	}
 	return json.RawMessage(res), true
+}
+
+// noMatch reports a result without a match: null from the standard
+// endpoint, [] from the enterprise endpoint.
+func noMatch(res string) bool {
+	res = strings.TrimSpace(res)
+	return res == "null" || res == "[]" || res == ""
+}
+
+// Forget deletes every cached result for an input ID (InputID), on every
+// endpoint and account, and returns how many there were.
+func (c *Cache) Forget(id string) (int, error) {
+	if id == "" {
+		return 0, nil
+	}
+	res, err := c.db.Exec(`DELETE FROM results WHERE content = ?`, id)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
 }
 
 // Put stores a result.
@@ -158,10 +214,10 @@ func (c *Cache) PutEntry(e Entry, isURL bool) error {
 	if at.IsZero() {
 		at = c.now()
 	}
-	_, err := c.db.Exec(`INSERT INTO results (key, source, endpoint, is_url, at, result) VALUES (?, ?, ?, ?, ?, ?)
+	_, err := c.db.Exec(`INSERT INTO results (key, source, endpoint, content, is_url, at, result) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET source = excluded.source, endpoint = excluded.endpoint,
-		is_url = excluded.is_url, at = excluded.at, result = excluded.result`,
-		e.Key, e.Source, e.Endpoint, isURL, at.UnixMilli(), string(e.Result))
+		content = excluded.content, is_url = excluded.is_url, at = excluded.at, result = excluded.result`,
+		e.Key, e.Source, e.Endpoint, e.Content, isURL, at.UnixMilli(), string(e.Result))
 	return err
 }
 

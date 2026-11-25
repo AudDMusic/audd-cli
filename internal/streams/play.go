@@ -16,19 +16,17 @@ import (
 )
 
 // audDZone is the time zone of the timestamps in AudD stream results
-// ("2026-10-08 14:03:12" is UTC+3). The AudD docs do not state it; the
-// widget at widget.audd.tech reads the same getChannelById and longpoll data
-// and converts these timestamps from UTC+3 ("the callbacks from AudD API
-// are at UTC+3"). The contract test against the live API should confirm it
-// on a recorded response. Live and backfilled plays are parsed the same
+// (callbacks, longpoll events, and the recent-results endpoint):
+// "2026-11-24 19:10:11" is UTC. A longpoll event's own millisecond
+// timestamp agrees with it. Live and backfilled plays are parsed the same
 // way, so deduplication does not depend on it.
-var audDZone = time.FixedZone("UTC+3", 3*60*60)
+var audDZone = time.UTC
 
 const audDTimeLayout = "2006-01-02 15:04:05"
 
 // ParseTimestamp reads a stream-result timestamp: "YYYY-MM-DD hh:mm:ss" in
-// AudD's UTC+3, RFC 3339, or Unix seconds/milliseconds. ok is false when the
-// value is not a time.
+// UTC, RFC 3339, or Unix seconds/milliseconds. ok is false when the value is
+// not a time.
 func ParseTimestamp(s string) (t time.Time, ok bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {

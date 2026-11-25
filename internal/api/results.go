@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net"
@@ -69,6 +71,20 @@ type Request struct {
 	// Offset is added to enterprise match positions: the start of a clip
 	// (--at) within the original file, in seconds.
 	Offset float64
+	// CacheScope keeps cached results per account (see CacheScope): custom
+	// catalog matches and enterprise fields differ between accounts.
+	CacheScope string
+}
+
+// CacheScope is the account part of a cache key: a hash of the API token in
+// use, or "" without one.
+func CacheScope(a *app.App) string {
+	tok, _, err := resolve(a)
+	if err != nil || tok == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("audd-cli cache\x00" + tok))
+	return hex.EncodeToString(sum[:16])
 }
 
 // Endpoint is the cache endpoint name.
@@ -82,6 +98,9 @@ func (r Request) Endpoint() string {
 // CacheParams are the parameters that make a cached result reusable.
 func (r Request) CacheParams() map[string]string {
 	p := map[string]string{}
+	if r.CacheScope != "" {
+		p["account"] = r.CacheScope
+	}
 	if !r.Enterprise {
 		if r.Return != "" {
 			p["return"] = r.Return

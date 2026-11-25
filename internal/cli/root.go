@@ -411,12 +411,22 @@ func cobraUsageError(root *cobra.Command, args []string, err error) error {
 	}
 	hint := c.CommandPath() + " --help"
 	if m := unknownCmdRe.FindStringSubmatch(msg); m != nil {
+		if m[2] == root.CommandPath() {
+			// audd song.mp3, audd https://...: recognize what was given.
+			if what := inputKind(m[1]); what != "" {
+				hint = "audd " + retyped(args, m[1], "recognize", m[1])
+				if what == "folder" {
+					hint += " --max-files N"
+				}
+				return output.Errf(output.ExitUsage, "invalid_argument", hint, "%q is a %s, not a command; audd recognize identifies the music in it", m[1], what)
+			}
+		}
 		if root.SuggestionsMinimumDistance <= 0 {
 			root.SuggestionsMinimumDistance = 2
 		}
 		hint = "audd --help"
 		if s := root.SuggestionsFor(m[1]); len(s) > 0 {
-			hint = "audd " + s[0]
+			hint = "audd " + retyped(args, m[1], s[0])
 		}
 		return output.Errf(output.ExitUsage, "invalid_argument", hint, "unknown command %q for %q", m[1], m[2])
 	}
@@ -503,9 +513,64 @@ func unknownSubcommand(root *cobra.Command, args []string) error {
 		c.SuggestionsMinimumDistance = 2
 	}
 	if s := c.SuggestionsFor(name); len(s) > 0 {
-		hint = c.CommandPath() + " " + s[0]
+		hint = root.CommandPath() + " " + retyped(args, name, s[0])
 	}
 	return output.Errf(output.ExitUsage, "invalid_argument", hint, "unknown command %q for %q", name, c.CommandPath())
+}
+
+// inputKind says what an argument that is not a command is, when it is
+// something audd recognize takes: "URL", "file", or "folder" ("" otherwise).
+func inputKind(arg string) string {
+	lower := strings.ToLower(arg)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return "URL"
+	}
+	fi, err := os.Stat(arg)
+	switch {
+	case err != nil:
+		return ""
+	case fi.IsDir():
+		return "folder"
+	}
+	return "file"
+}
+
+// retyped is the command line args with the first old replaced by with,
+// shell-quoted for a hint, and without a --token value.
+func retyped(args []string, old string, with ...string) string {
+	var out []string
+	replaced := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--token":
+			i++ // and its value
+			continue
+		case strings.HasPrefix(arg, "--token="):
+			continue
+		case arg == old && !replaced:
+			replaced = true
+			for _, w := range with {
+				out = append(out, shellQuote(w))
+			}
+			continue
+		}
+		out = append(out, shellQuote(arg))
+	}
+	return strings.Join(out, " ")
+}
+
+// shellQuote quotes s for a POSIX shell when it needs it.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=,@+%", r))
+	}) < 0 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // firstPositional returns the first argument that is not a flag or a

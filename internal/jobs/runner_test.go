@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -583,6 +584,59 @@ func TestCacheHitsAreFreeAndMarked(t *testing.T) {
 	RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs([]string{b}), MaxFiles: intp(1), NoCache: true})
 	if _, ok := cache[key(inputs([]string{b})[0])]; !ok {
 		t.Fatal("--no-cache results are recorded in the cache")
+	}
+}
+
+// A job started with --no-cache does not read the cache when it is resumed;
+// --no-cache on the resume asks for that for any job. --no-cache does not
+// make it a different command for resume offers.
+func TestResumeKeepsNoCache(t *testing.T) {
+	f := newFakeAPI(t)
+	ta := newTestApp(t, f, output.FormatJSONL)
+	paths := mkfiles(t, "match-1.mp3", "match-2.mp3", "match-3.mp3", "match-4.mp3")
+	var reads atomic.Int64
+	oldGet, oldPut := CacheGet, CachePut
+	// Everything is "cached": only a run that skips the cache sends anything.
+	CacheGet = func(*app.App, media.Input, Params) (json.RawMessage, bool) {
+		reads.Add(1)
+		return json.RawMessage(`null`), true
+	}
+	CachePut = func(*app.App, media.Input, Params, json.RawMessage) {}
+	t.Cleanup(func() { CacheGet, CachePut = oldGet, oldPut })
+
+	ta.Flags.MaxRequests = 1
+	sum, err := RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(paths), MaxFiles: intp(4), Concurrency: 1, NoCache: true})
+	if output.AsError(err).Code != "max_requests_reached" || f.totalRequests() != 1 || reads.Load() != 0 {
+		t.Fatalf("%v, %d requests, %d cache reads", err, f.totalRequests(), reads.Load())
+	}
+	st, _ := Open()
+	job, err := st.Get(sum.JobID)
+	st.Close()
+	if err != nil || job.Params[NoCacheKey] != "true" {
+		t.Fatalf("job params %v %v", job, err)
+	}
+	// An identical run without --no-cache is the same job.
+	ta.Flags.MaxRequests = 0
+	if _, err := RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(paths), MaxFiles: intp(4)}); output.AsError(err).Code != "resume_available" {
+		t.Fatalf("want resume_available, got %v", err)
+	}
+
+	ta.Flags.MaxRequests = 1
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, Concurrency: 1})
+	if f.totalRequests() != 2 || reads.Load() != 0 {
+		t.Fatalf("resume read the cache: %d requests, %d cache reads", f.totalRequests(), reads.Load())
+	}
+
+	// A job started without --no-cache reads it, unless the resume says so.
+	other := mkfiles(t, "match-5.mp3", "match-6.mp3")
+	CacheGet = func(*app.App, media.Input, Params) (json.RawMessage, bool) { reads.Add(1); return nil, false }
+	ta.Flags.MaxRequests = 1
+	sum, _ = RunBatch(context.Background(), ta.App, app.BatchOptions{Inputs: inputs(other), MaxFiles: intp(2), Concurrency: 1})
+	before := reads.Load()
+	ta.Flags.MaxRequests = 0
+	RunBatch(context.Background(), ta.App, app.BatchOptions{ResumeID: sum.JobID, Concurrency: 1, NoCache: true})
+	if reads.Load() != before {
+		t.Fatalf("resume --no-cache read the cache %d times", reads.Load()-before)
 	}
 }
 

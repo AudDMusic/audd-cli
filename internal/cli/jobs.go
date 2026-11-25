@@ -216,7 +216,7 @@ job as audd jobs show does.`,
 }
 
 func newJobsResumeCmd(a *app.App) *cobra.Command {
-	var retryFailed, retryAll, dryRun bool
+	var retryFailed, retryAll, dryRun, noCache bool
 	var concurrency int
 	cmd := &cobra.Command{
 		Use:   "resume <id>",
@@ -229,6 +229,9 @@ the failures a retry can fix (connection, server, rate limit, quota),
 including files whose request may have reached AudD. Files that would fail
 the same way again (audio that cannot be decoded, an unsupported format)
 are sent again only with --retry-all-failed.
+
+A job started with --no-cache does not read the cache when it is resumed
+either; --no-cache asks for that when resuming any job.
 
 Results stream as each file finishes: with --format json or jsonl (the
 default when piped) the output is JSON lines: one "result" line per file and
@@ -244,7 +247,7 @@ a final "summary" line. For the whole job as one document, use audd jobs show.`,
 			}
 			_, err := app.RunBatch(cmd.Context(), a, app.BatchOptions{
 				ResumeID: args[0], RetryFailed: retryFailed, RetryAllFailed: retryAll, DryRun: dryRun,
-				Concurrency: concurrency, Yes: a.Flags.Yes,
+				NoCache: noCache, Concurrency: concurrency, Yes: a.Flags.Yes,
 			})
 			return err
 		},
@@ -253,6 +256,7 @@ a final "summary" line. For the whole job as one document, use audd jobs show.`,
 	f.BoolVar(&retryFailed, "retry-failed", false, "also retry the failures a retry can fix (connection, server, rate limit, quota), including files whose earlier request may have reached AudD")
 	f.BoolVar(&retryAll, "retry-all-failed", false, "retry every failed file, also those that fail the same way again (undecodable audio, an unsupported format)")
 	f.BoolVar(&dryRun, "dry-run", false, "show what resuming would send, and stop")
+	f.BoolVar(&noCache, "no-cache", false, "send the audio even if the result is cached (a job started with --no-cache does this anyway)")
 	f.IntVar(&concurrency, "concurrency", 0, "parallel requests (default: the concurrency setting, else 4)")
 	return cmd
 }

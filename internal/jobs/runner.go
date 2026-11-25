@@ -98,6 +98,9 @@ func RunBatch(ctx context.Context, a *app.App, opts app.BatchOptions) (app.Batch
 			return app.BatchSummary{}, err
 		}
 		p = ParamsFromMap(job.Params)
+		if job.Params[NoCacheKey] == "true" {
+			opts.NoCache = true
+		}
 	} else {
 		if len(opts.Inputs) == 0 {
 			return app.BatchSummary{}, output.Errf(output.ExitUsage, "invalid_argument", "", "nothing to recognize")
@@ -233,6 +236,9 @@ func (r *runner) run(ctx context.Context) (app.BatchSummary, error) {
 		if len(r.opts.CommandLine) > 0 {
 			b, _ := json.Marshal(r.opts.CommandLine)
 			params[CommandLineKey] = string(b)
+		}
+		if r.opts.NoCache {
+			params[NoCacheKey] = "true"
 		}
 		job, err := r.st.Create(commandKey(inputs), inputs, params)
 		if err != nil {

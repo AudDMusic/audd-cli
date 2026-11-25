@@ -122,3 +122,79 @@ func TestRecentAndClear(t *testing.T) {
 		t.Fatalf("after clear %d", n)
 	}
 }
+
+// A no-match (null from the standard endpoint, [] from the enterprise one)
+// is asked again after NoMatchTTL; a match stays.
+func TestNoMatchesExpire(t *testing.T) {
+	c := openTemp(t)
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	c.SetClock(func() time.Time { return now })
+	for key, res := range map[string]string{"none": `null`, "none-enterprise": `[]`, "match": `{"artist":"A"}`} {
+		if err := c.Put(key, false, json.RawMessage(res)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now = now.Add(NoMatchTTL - time.Hour)
+	for _, key := range []string{"none", "none-enterprise", "match"} {
+		if _, ok := c.Get(key); !ok {
+			t.Fatalf("%s: valid within %v", key, NoMatchTTL)
+		}
+	}
+	now = now.Add(2 * time.Hour)
+	for _, key := range []string{"none", "none-enterprise"} {
+		if _, ok := c.Get(key); ok {
+			t.Fatalf("%s: a no-match expires after %v", key, NoMatchTTL)
+		}
+	}
+	if _, ok := c.Get("match"); !ok {
+		t.Fatal("a match does not expire")
+	}
+}
+
+// Forget drops every result for an input, whatever the endpoint and the
+// parameters, and nothing else.
+func TestForgetAnInput(t *testing.T) {
+	c := openTemp(t)
+	dir := t.TempDir()
+	song := media.Input{Path: write(t, dir, "song.mp3", "song bytes")}
+	copyOf := media.Input{Path: write(t, dir, "copy.mp3", "song bytes")}
+	other := media.Input{Path: write(t, dir, "other.mp3", "other bytes")}
+	id, err := InputID(song)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cid, _ := InputID(copyOf); cid != id {
+		t.Fatal("a copy is the same input")
+	}
+	if k, _ := KeyForInput(song, EndpointStandard, map[string]string{"account": "x"}); k != Key(id, EndpointStandard, map[string]string{"account": "x"}) {
+		t.Fatal("KeyForInput is Key of the InputID")
+	}
+	otherID, _ := InputID(other)
+	put := func(content, endpoint string, params map[string]string) string {
+		k := Key(content, endpoint, params)
+		if err := c.PutEntry(Entry{Key: k, Endpoint: endpoint, Content: content, Result: json.RawMessage(`null`)}, false); err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	gone := []string{
+		put(id, EndpointStandard, map[string]string{"account": "a"}),
+		put(id, EndpointStandard, map[string]string{"account": "b", "return": "spotify"}),
+		put(id, EndpointEnterprise, map[string]string{"account": "a", "limit": "3"}),
+	}
+	kept := put(otherID, EndpointStandard, map[string]string{"account": "a"})
+	if n, err := c.Forget(id); err != nil || n != 3 {
+		t.Fatalf("forget: %d %v", n, err)
+	}
+	for _, k := range gone {
+		if _, ok := c.Get(k); ok {
+			t.Fatal("still cached")
+		}
+	}
+	if _, ok := c.Get(kept); !ok {
+		t.Fatal("another input was forgotten")
+	}
+	if uid, _ := InputID(media.Input{URL: " https://example.com/a.mp3 "}); uid != "url\x00https://example.com/a.mp3" {
+		t.Fatalf("URL id %q", uid)
+	}
+}

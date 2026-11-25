@@ -163,4 +163,20 @@ func TestMCPMaxRequestsCoversTheSession(t *testing.T) {
 	if !res.IsError || !strings.Contains(toolText(res), "max_requests_reached") || len(f.Requests()) != 2 {
 		t.Fatalf("third billed call: %s (%d requests)", toolText(res), len(f.Requests()))
 	}
+	// Custom catalog uploads are not counted as requests: one still goes
+	// through with the session's requests used up, and leaves them as they
+	// were.
+	f.Reply(testutil.EndpointUpload, map[string]any{"status": "success", "result": nil})
+	for _, id := range []int{1, 2} {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "catalog_add", Arguments: map[string]any{"path": c, "audio_id": id}})
+		if err != nil || res.IsError {
+			t.Fatalf("catalog_add %d: %v %s", id, err, toolText(res))
+		}
+	}
+	if n := f.Count(testutil.EndpointUpload); n != 2 {
+		t.Fatalf("uploads: %d", n)
+	}
+	if res := call(c); !res.IsError || !strings.Contains(toolText(res), "max_requests_reached") {
+		t.Fatalf("after the uploads: %s", toolText(res))
+	}
 }

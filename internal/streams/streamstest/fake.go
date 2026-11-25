@@ -36,14 +36,23 @@ type Server struct {
 	streams     []Stream
 	callbackURL string
 	noCallback  bool
-	events      map[string][]json.RawMessage // category → queued longpoll bodies
+	events      map[string][]event // category → queued longpoll events
+	lastEvent   int64              // the newest event timestamp, ms
+	pollError   json.RawMessage    // the longpoll answer, when set
 	wake        chan struct{}
 	recent      map[string]json.RawMessage // category → getChannelById body
 	failPolls   int                        // next N longpoll requests fail with HTTP 500
+	addError    json.RawMessage            // the addStream answer, when set
 	failRecent  int
 	calls       []Call
 	lpTimeout   time.Duration
 	token       string // the API token the fake accepts
+}
+
+// event is one queued longpoll event: a callback body and when it was sent.
+type event struct {
+	timestamp int64 // ms
+	data      json.RawMessage
 }
 
 // Call is one request the fake received.
@@ -55,7 +64,7 @@ type Call struct {
 // New starts a fake server. Longpoll requests wait at most lpTimeout
 // (instead of the requested timeout) before answering with a keepalive.
 func New(t testing.TB) *Server {
-	s := &Server{t: t, events: map[string][]json.RawMessage{}, recent: map[string]json.RawMessage{},
+	s := &Server{t: t, events: map[string][]event{}, recent: map[string]json.RawMessage{},
 		wake: make(chan struct{}), lpTimeout: 200 * time.Millisecond, callbackURL: "https://example.com/callback", token: Token}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(s.Close)
@@ -154,17 +163,37 @@ func (s *Server) PushNotification(radioID, code int, message string, running boo
 	s.Push(radioID, json.RawMessage(body))
 }
 
-// Push queues a raw longpoll body for a stream.
+// Push queues a callback body for a stream's longpoll. Longpoll delivers it
+// the way AudD does: as the data of an event in
+// {"events":[{"timestamp","category","data"}]}.
 func (s *Server) Push(radioID int, body json.RawMessage) {
 	s.pushCategory(Category(radioID), body)
 }
 
 func (s *Server) pushCategory(cat string, body json.RawMessage) {
 	s.mu.Lock()
-	s.events[cat] = append(s.events[cat], body)
+	ts := max(time.Now().UnixMilli(), s.lastEvent+1)
+	s.lastEvent = ts
+	s.events[cat] = append(s.events[cat], event{timestamp: ts, data: body})
 	close(s.wake)
 	s.wake = make(chan struct{})
 	s.mu.Unlock()
+}
+
+// LastEventTimestamp is the timestamp (ms) of the newest event pushed.
+func (s *Server) LastEventTimestamp() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastEvent
+}
+
+// SetPollError makes every longpoll request get body (with HTTP 200, as
+// AudD sends {"error":"Invalid timeout arg.  Must be 1-120."}) until it is
+// called with nil.
+func (s *Server) SetPollError(body json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pollError = body
 }
 
 // SetRecent sets the getChannelById response for a stream.
@@ -179,6 +208,14 @@ func (s *Server) FailNextPolls(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failPolls = n
+}
+
+// FailAddStream makes addStream answer with body (an AudD error response)
+// instead of adding the stream.
+func (s *Server) FailAddStream(body json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.addError = body
 }
 
 // FailNextRecent makes the next n recent-results requests return HTTP 500.
@@ -246,6 +283,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "addStream":
 		id, _ := strconv.Atoi(params.Get("radio_id"))
 		s.mu.Lock()
+		if s.addError != nil {
+			body := s.addError
+			s.mu.Unlock()
+			w.Write(body)
+			return
+		}
 		s.streams = append(s.streams, Stream{RadioID: id, URL: params.Get("url"), Running: true})
 		s.mu.Unlock()
 		writeJSON(w, map[string]any{"status": "success"})
@@ -324,15 +367,29 @@ func (s *Server) longpoll(w http.ResponseWriter, r *http.Request, cat string) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	if body := s.pollError; body != nil {
+		s.mu.Unlock()
+		w.Write(body)
+		return
+	}
 	s.mu.Unlock()
 	deadline := time.After(s.lpTimeout)
 	for {
 		s.mu.Lock()
 		if q := s.events[cat]; len(q) > 0 {
-			body := q[0]
-			s.events[cat] = q[1:]
+			// Everything queued goes out in one response, oldest first.
+			delete(s.events, cat)
 			s.mu.Unlock()
-			w.Write(body)
+			type wireEvent struct {
+				Timestamp int64           `json:"timestamp"`
+				Category  string          `json:"category"`
+				Data      json.RawMessage `json:"data"`
+			}
+			out := make([]wireEvent, len(q))
+			for i, ev := range q {
+				out[i] = wireEvent{ev.timestamp, cat, ev.data}
+			}
+			writeJSON(w, map[string]any{"events": out})
 			return
 		}
 		wake := s.wake

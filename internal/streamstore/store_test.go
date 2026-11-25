@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/AudDMusic/audd-cli/internal/store"
 )
 
 var t0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
@@ -409,5 +411,46 @@ func TestNoGapBeforeAStreamWasKnown(t *testing.T) {
 	gaps, err := s.Gaps(t0)
 	if err != nil || len(gaps) != 0 {
 		t.Fatalf("gaps before the stream existed: %+v %v", gaps, err)
+	}
+}
+
+// Plays a store holds from before the timestamp migration were read from
+// AudD's UTC times as UTC+3: from 2026-10-12 on they move three hours later,
+// earlier ones stay, and two plays of a stream exactly three hours apart
+// both move.
+func TestMigrationMovesPlaysToUTC(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "streams.db")
+	db, err := store.Open(path, migrations[:2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Date(2026, 10, 11, 20, 0, 0, 0, time.UTC)
+	after := time.Date(2026, 11, 24, 16, 10, 11, 0, time.UTC)
+	for _, ts := range []time.Time{before, after, after.Add(3 * time.Hour)} {
+		if _, err := db.Exec(`INSERT INTO plays (radio_id, ts, artist, title, recorded_at) VALUES (1, ?, 'A', 'T', 0)`, ts.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := OpenPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	plays, err := s.History(nil, time.Time{}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range plays {
+		got = append(got, p.Timestamp.Format(time.RFC3339))
+	}
+	if strings.Join(got, " ") != "2026-11-24T22:10:11Z 2026-11-24T19:10:11Z 2026-10-11T20:00:00Z" {
+		t.Fatalf("plays after the migration: %v", got)
+	}
+	// A play AudD sends again (a backfill) is the same play.
+	if ins, err := s.AddPlay(play(1, time.Date(2026, 11, 24, 19, 10, 11, 0, time.UTC), "A", "T", "", 0)); err != nil || ins {
+		t.Fatalf("backfilled again: %v %v", ins, err)
 	}
 }

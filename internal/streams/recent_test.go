@@ -17,7 +17,7 @@ import (
 
 func TestParseTimestamp(t *testing.T) {
 	want := time.Date(2026, 10, 8, 11, 2, 0, 0, time.UTC)
-	for _, s := range []string{"2026-10-08 14:02:00", "2026-10-08T11:02:00Z", "1791457320", "1791457320000"} {
+	for _, s := range []string{"2026-10-08 11:02:00", "2026-10-08T11:02:00Z", "2026-10-08T14:02:00+03:00", "1791457320", "1791457320000"} {
 		got, ok := ParseTimestamp(s)
 		if !ok || !got.Equal(want) {
 			t.Errorf("%q: %v %v", s, got, ok)
@@ -28,18 +28,52 @@ func TestParseTimestamp(t *testing.T) {
 			t.Errorf("%q should not parse", s)
 		}
 	}
-	if FormatTimestamp(want) != "2026-10-08 14:02:00" {
+	if FormatTimestamp(want) != "2026-10-08 11:02:00" {
 		t.Fatal(FormatTimestamp(want))
+	}
+	// A time in another zone is written in UTC, as AudD writes it.
+	if got := FormatTimestamp(want.In(time.FixedZone("UTC+3", 3*3600))); got != "2026-10-08 11:02:00" {
+		t.Fatal(got)
+	}
+}
+
+// The timestamps in a longpoll event agree: the event's millisecond
+// timestamp (testdata/longpoll_events.json, the shape AudD sends) and the
+// result's "YYYY-MM-DD hh:mm:ss" are both UTC, seconds apart.
+func TestStreamTimestampsAreUTC(t *testing.T) {
+	body, err := os.ReadFile("testdata/longpoll_events.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Events []struct {
+			Timestamp int64           `json:"timestamp"`
+			Data      json.RawMessage `json:"data"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil || len(doc.Events) == 0 {
+		t.Fatalf("%v %d", err, len(doc.Events))
+	}
+	for _, ev := range doc.Events {
+		m, _, err := audd.ParseCallback(ev.Data)
+		if err != nil || m == nil {
+			t.Fatalf("%v %s", err, ev.Data)
+		}
+		p := PlayFromMatch(*m, time.Time{})
+		sent := time.UnixMilli(ev.Timestamp)
+		if d := sent.Sub(p.Timestamp); d < 0 || d > time.Minute {
+			t.Fatalf("play at %v, event sent at %v", p.Timestamp, sent.UTC())
+		}
 	}
 }
 
 // testdata/getchannelbyid.json is built by hand in the shape widget.audd.tech
 // reads (NumericalId, StringId, a History ring buffer whose newest entry is
 // Elements[(OldestElement-1) % len], times in "song_length" or "timestamp"
-// at UTC+3), with wrong-typed and unknown values mixed in. It is not a
+// in UTC), with wrong-typed and unknown values mixed in. It is not a
 // recording: recording one needs a live category, which tests never use.
-// The contract test should replace it with a recorded response (placeholder
-// token and category) and confirm the UTC+3 timestamps.
+// The contract test reads the live endpoint and checks that no play lands
+// in the future.
 func TestParseRecentResultsFixture(t *testing.T) {
 	body, err := os.ReadFile("testdata/getchannelbyid.json")
 	if err != nil {
@@ -58,13 +92,13 @@ func TestParseRecentResultsFixture(t *testing.T) {
 	}
 	third := plays[2]
 	if third.Score != 97 || third.PlayLength != 201 || third.Label != "Label C" || third.ISRC != "USAAA2400003" || third.RadioID != 7 ||
-		!third.Timestamp.Equal(time.Date(2026, 10, 8, 10, 58, 10, 0, time.UTC)) {
+		!third.Timestamp.Equal(time.Date(2026, 10, 8, 13, 58, 10, 0, time.UTC)) {
 		t.Fatalf("third %+v", third)
 	}
 	if plays[1].Score != 0 || plays[3].PlayLength != 180 {
 		t.Fatalf("lenient numbers: %+v %+v", plays[1], plays[3])
 	}
-	if !plays[0].Timestamp.Equal(time.Date(2026, 10, 8, 10, 50, 0, 0, time.UTC)) {
+	if !plays[0].Timestamp.Equal(time.Date(2026, 10, 8, 13, 50, 0, 0, time.UTC)) {
 		t.Fatalf("song_length holds the time in the widget format: %v", plays[0].Timestamp)
 	}
 	var raw map[string]any
@@ -136,7 +170,7 @@ func TestPlayFromMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := PlayFromMatch(*m, time.Now())
-	if p.RadioID != 3 || p.PlayLength != 111 || p.Artist != "A" || p.ISRC != "X" || !p.Timestamp.Equal(time.Date(2026, 10, 8, 11, 2, 0, 0, time.UTC)) {
+	if p.RadioID != 3 || p.PlayLength != 111 || p.Artist != "A" || p.ISRC != "X" || !p.Timestamp.Equal(time.Date(2026, 10, 8, 14, 2, 0, 0, time.UTC)) {
 		t.Fatalf("%+v", p)
 	}
 	if !strings.Contains(string(p.Raw), `"apple_music"`) {

@@ -142,7 +142,7 @@ A plain resume sends only the files that are left. Files that failed after their
 
 Running the same batch again while its job is unfinished offers to resume it. Without a terminal it stops with exit 6: pass `--resume` to continue that job, or `--new` to recognize every file again.
 
-Results are cached by file contents, so the same audio under another name is free (`"cached": true`). `--no-cache` sends it anyway.
+Results are cached for each account by file contents, so the same audio under another name is free (`"cached": true`). Audio with no match is sent again after 7 days, and `audd catalog add` drops the cached results of the song it adds. `--no-cache` sends it anyway.
 
 ## Limits and confirmations
 
@@ -150,7 +150,7 @@ Results are cached by file contents, so the same audio under another name is fre
 - `--limit` (enterprise) and `--max-files` (batches) are required, except with `--dry-run`, which shows the uncapped plan. There is no unbounded default.
 - `--max-requests N` stops before spending more than N requests; `audd config set max_requests N` makes it the default. A stopped batch can be resumed.
 - Anything that can cost more than one request shows a plan and asks first. Without a terminal it needs `--yes`.
-- Custom catalog uploads (`audd catalog add`) are never retried automatically.
+- Custom catalog uploads (`audd catalog add`) are not counted as requests and are never retried automatically.
 - Payment commands never charge: `audd billing subscribe`, `renew`, and `buy` print a Stripe link that you open and approve yourself.
 
 ## Streams
@@ -174,7 +174,7 @@ audd streams record                             # the same recorder in the foreg
 audd config set streams.background_recorder false
 ```
 
-The recorder runs until you stop it or restart the computer; `--install-service` adds a systemd user unit, a launchd agent, or a Windows scheduled task.
+The recorder runs until you stop it or restart the computer; `--install-service` adds a systemd user unit, a launchd agent, or a Windows scheduled task. It does not start by itself while the account has no streams, or in CI (when `CI` or another CI variable is set). `AUDD_NO_BACKGROUND_RECORDER=1` keeps it from starting by itself in one shell or container, as `streams.background_recorder false` does for a profile; `audd streams recorder start` still starts it.
 
 Receiving results needs a callback URL on the account. When there is none, `audd` offers to set the placeholder `https://audd.tech/empty/`; without a terminal to ask in, as in a container, `--yes` sets it. To use your own, run `audd streams callback set <url>` first.
 
@@ -247,7 +247,7 @@ audd docs api                     # the AudD API docs as markdown
 
 `audd mcp` is a local MCP server over stdio with tools for recognition, enterprise scans (with a required `limit`), streams, now-playing, custom catalog uploads, usage, account status, and docs. It uses the same token, profile, and limits as the CLI.
 
-The full command reference is [docs/cli.md](docs/cli.md) (also `audd docs cli`).
+The CLI guide is [docs/cli.md](docs/cli.md) (also `audd docs cli`). Every command and flag is in `audd <command> --help` and `audd commands --json`.
 
 ## Exit codes
 

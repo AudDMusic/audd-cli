@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AudDMusic/audd-cli/internal/media"
+	"github.com/AudDMusic/audd-cli/internal/output"
 	"github.com/AudDMusic/audd-cli/internal/testutil"
 )
 
@@ -137,6 +138,12 @@ func TestListenOpensRecognizeMic(t *testing.T) {
 	useListenTools(t, media.Tools{FFmpeg: "/usr/bin/ffmpeg"})
 	if i, err := sectionIndex("listen"); err != nil || HomeSections[i] != "recognize" {
 		t.Fatalf("--section listen: %d %v", i, err)
+	}
+	if i, err := sectionIndex("history"); err != nil || HomeSections[i] != "recognitions" {
+		t.Fatalf("--section history: %d %v", i, err)
+	}
+	if _, err := sectionIndex("nonsense"); output.AsError(err).Code != "invalid_argument" || !strings.Contains(output.AsError(err).Hint, "recognize|listen|now-playing") {
+		t.Fatalf("unknown section: %v", err)
 	}
 	for _, n := range HomeSections {
 		if n == "listen" {

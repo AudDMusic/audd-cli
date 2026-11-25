@@ -9,8 +9,8 @@ import (
 
 	"github.com/AudDMusic/audd-cli/internal/api"
 	"github.com/AudDMusic/audd-cli/internal/app"
+	"github.com/AudDMusic/audd-cli/internal/cache"
 	"github.com/AudDMusic/audd-cli/internal/media"
-	"github.com/AudDMusic/audd-cli/internal/safety"
 )
 
 func init() {
@@ -43,9 +43,9 @@ Custom catalog access is enabled per account; write to api@audd.io for it.`,
 		Short: "Fingerprint a song into your custom catalog",
 		Long: `Fingerprint a song into your custom catalog under audio_id N.
 
-If N already holds a song, it is replaced. Each upload is billed, so it is
-sent exactly once and never retried automatically; if it fails, check the
-error before running it again.`,
+If N already holds a song, it is replaced. Uploads are not counted as
+requests. Each upload is sent exactly once and never retried
+automatically; if it fails, check the error before running it again.`,
 		Example: `  audd catalog add song.mp3 --id 42
   audd catalog add https://example.com/song.mp3 --id 43 --yes`,
 		Args: cobra.ExactArgs(1),
@@ -75,9 +75,6 @@ error before running it again.`,
 					return err
 				}
 			}
-			if err := safety.BudgetFor(a).Take(1); err != nil {
-				return err
-			}
 			src := in.URL
 			if src == "" {
 				src = in.Path
@@ -87,6 +84,7 @@ error before running it again.`,
 			}); err != nil {
 				return err
 			}
+			forgetCached(a, in)
 			return a.Out.Result(catalogAdded{AudioID: id, Input: in.Name(), Added: true}, func(w io.Writer) {
 				fmt.Fprintf(w, "Added %s to your custom catalog as audio_id %d.\n", in.Name(), id)
 				if !a.Out.Quiet() {
@@ -99,4 +97,21 @@ error before running it again.`,
 	_ = add.MarkFlagRequired("id")
 	cmd.AddCommand(add)
 	return cmd
+}
+
+// forgetCached drops the cached results for an input added to the custom
+// catalog, so recognizing it again asks AudD, which can now match it.
+func forgetCached(a *app.App, in media.Input) {
+	id, err := cache.InputID(in)
+	if err != nil {
+		return
+	}
+	c, err := cache.Open()
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	if _, err := c.Forget(id); err != nil {
+		a.Out.Info("Could not remove the cached results for %s: %v", in.Name(), err)
+	}
 }

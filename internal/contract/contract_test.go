@@ -62,8 +62,8 @@ func TestRecognizeExample(t *testing.T) {
 }
 
 // The recent-results endpoint (undocumented) still has the shape the parser
-// reads, and its timestamps are AudD's UTC+3: a play read from it must not
-// land in the future.
+// reads, and its timestamps are UTC: a play read from it must not land in
+// the future, as it would if they were in a zone ahead of UTC.
 func TestRecentResultsShape(t *testing.T) {
 	v := need(t, "AUDD_CONTRACT_API_TOKEN", "AUDD_CONTRACT_RADIO_ID")
 	id, err := strconv.Atoi(v[1])

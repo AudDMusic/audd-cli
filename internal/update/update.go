@@ -213,12 +213,24 @@ func NoticeAllowed(env NoticeEnv) bool {
 	if v := get("AUDD_NO_UPDATE_CHECK"); v != "" && v != "0" && !strings.EqualFold(v, "false") {
 		return false
 	}
-	for _, k := range []string{"CI", "BUILD_NUMBER", "RUN_ID", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TF_BUILD", "JENKINS_URL", "TEAMCITY_VERSION"} {
-		if v := get(k); v != "" && v != "0" && !strings.EqualFold(v, "false") {
-			return false
+	return !InCI(get)
+}
+
+// CIVariables are the environment variables that mark a CI run.
+var CIVariables = []string{"CI", "BUILD_NUMBER", "RUN_ID", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TF_BUILD", "JENKINS_URL", "TEAMCITY_VERSION"}
+
+// InCI reports whether getenv (os.Getenv when nil) shows a CI run: one of
+// CIVariables set to something other than "0" or "false".
+func InCI(getenv func(string) string) bool {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	for _, k := range CIVariables {
+		if v := getenv(k); v != "" && v != "0" && !strings.EqualFold(v, "false") {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // Notice is the line shown when a newer release is cached, or "".
