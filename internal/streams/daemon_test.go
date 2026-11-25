@@ -222,6 +222,7 @@ func notInCI(t *testing.T) {
 
 func TestEnsureBackgroundPassesFlagTokenInEnvironment(t *testing.T) {
 	testutil.Isolate(t)
+	notInCI(t)
 	calls := fakeSpawn(t)
 	a := testApp(t)
 	a.Flags.Token = testutil.PlaceholderToken

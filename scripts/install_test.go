@@ -185,11 +185,9 @@ func TestInstallPathAdviceFollowsTheShell(t *testing.T) {
 		"/bin/sh":            "~/.profile",
 		"":                   "~/.profile",
 	} {
-		env := []string{}
-		if shell != "" {
-			env = append(env, "SHELL="+shell)
-		}
-		res := runInstall(t, srv, env...)
+		// SHELL is always set, empty included: a bash that runs the script
+		// with SHELL unset fills in the login shell of whoever runs the test.
+		res := runInstall(t, srv, "SHELL="+shell)
 		if res.err != nil {
 			t.Fatalf("%q: install failed: %v\n%s", shell, res.err, res.stderr)
 		}

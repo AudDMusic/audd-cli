@@ -394,9 +394,9 @@ func setup(a *app.App, cmd *cobra.Command, stdio IO) error {
 // exit 0. A group run with no arguments, or with only flags, still prints
 // its help.
 var (
-	unknownCmdRe = regexp.MustCompile(`^unknown command "([^"]*)" for "([^"]*)"`)
+	unknownCmdRe = regexp.MustCompile(`^unknown command ("(?:[^"\\]|\\.)*") for ("(?:[^"\\]|\\.)*")`)
 	requiredRe   = regexp.MustCompile(`^required flag\(s\) (.+) not set$`)
-	badValueRe   = regexp.MustCompile(`^invalid argument "(.*)" for "(?:-[^,"]*, )?(--?[^"]+)" flag: (.*)$`)
+	badValueRe   = regexp.MustCompile(`^invalid argument ("(?:[^"\\]|\\.)*") for "(?:-[^,"]*, )?(--?[^"]+)" flag: (.*)$`)
 	argCountRe   = regexp.MustCompile(`^(?:requires at least (\d+) arg\(s\), only received (\d+)|accepts at most (\d+) arg\(s\), received (\d+)|accepts (\d+) arg\(s\), received (\d+)|accepts between (\d+) and (\d+) arg\(s\), received (\d+))$`)
 )
 
@@ -411,24 +411,25 @@ func cobraUsageError(root *cobra.Command, args []string, err error) error {
 	}
 	hint := c.CommandPath() + " --help"
 	if m := unknownCmdRe.FindStringSubmatch(msg); m != nil {
-		if m[2] == root.CommandPath() {
+		name, parent := unquoted(m[1]), unquoted(m[2])
+		if parent == root.CommandPath() {
 			// audd song.mp3, audd https://...: recognize what was given.
-			if what := inputKind(m[1]); what != "" {
-				hint = "audd " + retyped(args, m[1], "recognize", m[1])
+			if what := inputKind(name); what != "" {
+				hint = "audd " + retyped(args, name, "recognize", name)
 				if what == "folder" {
 					hint += " --max-files N"
 				}
-				return output.Errf(output.ExitUsage, "invalid_argument", hint, "%q is a %s, not a command; audd recognize identifies the music in it", m[1], what)
+				return output.Errf(output.ExitUsage, "invalid_argument", hint, "%q is a %s, not a command; audd recognize identifies the music in it", name, what)
 			}
 		}
 		if root.SuggestionsMinimumDistance <= 0 {
 			root.SuggestionsMinimumDistance = 2
 		}
 		hint = "audd --help"
-		if s := root.SuggestionsFor(m[1]); len(s) > 0 {
-			hint = "audd " + retyped(args, m[1], s[0])
+		if s := root.SuggestionsFor(name); len(s) > 0 {
+			hint = "audd " + retyped(args, name, s[0])
 		}
-		return output.Errf(output.ExitUsage, "invalid_argument", hint, "unknown command %q for %q", m[1], m[2])
+		return output.Errf(output.ExitUsage, "invalid_argument", hint, "unknown command %q for %q", name, parent)
 	}
 	if m := requiredRe.FindStringSubmatch(msg); m != nil {
 		var need []string
@@ -478,6 +479,16 @@ func cobraUsageError(root *cobra.Command, args []string, err error) error {
 	return output.Errf(output.ExitUsage, "invalid_argument", hint, "%s", msg)
 }
 
+// unquoted is the text cobra and pflag put in an error message with %q: a
+// name or a value with a backslash or a quote in it (a Windows path) comes
+// back as it was typed.
+func unquoted(quoted string) string {
+	if s, err := strconv.Unquote(quoted); err == nil {
+		return s
+	}
+	return strings.Trim(quoted, `"`)
+}
+
 // flagErrorMessage rewrites pflag's message for a flag value it could not
 // parse: "--id must be a whole number, got \"abc\"".
 func flagErrorMessage(msg string) string {
@@ -485,7 +496,7 @@ func flagErrorMessage(msg string) string {
 	if m == nil {
 		return msg
 	}
-	val, name, why := m[1], m[2], m[3]
+	val, name, why := unquoted(m[1]), m[2], m[3]
 	switch {
 	case strings.Contains(why, "strconv.ParseInt"), strings.Contains(why, "strconv.ParseUint"), strings.Contains(why, "strconv.Atoi"):
 		return fmt.Sprintf("%s must be a whole number, got %q", name, val)

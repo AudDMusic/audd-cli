@@ -120,9 +120,9 @@ homebrew_casks:
     commit_msg_template: "audd {{ .Tag }}"
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/audd"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/audd"]
           end
 
 scoops:

@@ -413,6 +413,7 @@ func TestUnknownCommandHintsKeepTheArguments(t *testing.T) {
 		{[]string{"recognise", "https://audd.tech/example.mp3", "--token", "secret-token-value"}, `unknown command "recognise" for "audd"` + "\naudd recognize https://audd.tech/example.mp3"},
 		{[]string{"streams", "histroy", "--since", "24h"}, `unknown command "histroy" for "audd streams"` + "\naudd streams history --since 24h"},
 		{[]string{"nosuchthing"}, `unknown command "nosuchthing" for "audd"` + "\naudd --help"},
+		{[]string{`no\such "thing"`}, `unknown command "no\\such \"thing\"" for "audd"` + "\naudd --help"},
 	} {
 		r := run(t, append(c.args, "--format", "json")...)
 		got := strings.ReplaceAll(hint(r), " --format json", "")
@@ -422,6 +423,36 @@ func TestUnknownCommandHintsKeepTheArguments(t *testing.T) {
 		if strings.Contains(r.Stderr, "secret-token-value") {
 			t.Errorf("%v: the token is repeated: %s", c.args, r.Stderr)
 		}
+	}
+}
+
+// A name or a value with a backslash or a quote in it (a Windows path) is
+// repeated in the message as it was typed.
+func TestUsageErrorsRepeatBackslashesAndQuotesAsTyped(t *testing.T) {
+	testutil.Isolate(t)
+	message := func(args ...string) string {
+		r := run(t, append(args, "--format", "json")...)
+		var doc struct {
+			Error struct{ Message, Hint string }
+		}
+		if err := json.Unmarshal([]byte(r.Stderr), &doc); err != nil || r.Code != output.ExitUsage {
+			t.Fatalf("%v: %d %s", args, r.Code, r.Stderr)
+		}
+		return doc.Error.Message + "\n" + strings.ReplaceAll(doc.Error.Hint, " --format json", "")
+	}
+	if got, want := message("streams", "add", "https://radio.example/s.mp3", "--id", `C:\radio "1"`), `--id must be a whole number, got "C:\\radio \"1\""`; !strings.HasPrefix(got, want+"\n") {
+		t.Errorf("flag value:\n got: %s\nwant: %s", got, want)
+	}
+	if runtime.GOOS == "windows" {
+		return // a file name cannot hold a backslash or a quote there
+	}
+	song := filepath.Join(t.TempDir(), `my\"song".mp3`)
+	if err := os.WriteFile(song, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("%q is a file, not a command; audd recognize identifies the music in it\naudd recognize '%s'", song, song)
+	if got := message(song); got != want {
+		t.Errorf("file name:\n got: %s\nwant: %s", got, want)
 	}
 }
 
